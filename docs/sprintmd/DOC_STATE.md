@@ -1,0 +1,20 @@
+# sprint.md Documentation State
+
+Part of the sprint.md documentation system, not source code for the host project.
+Managed by scripts in `docs/sprintmd/scripts/` and by `setup.sh`. Safe to edit by hand
+if you need to fix a counter — the field lines below are what scripts parse.
+
+Fields:
+- `sprint_VERSION`   — installed file-structure version; `setup.sh` reads this on upgrade to decide which migrations to run
+- `sprint_TASK_ID`   — highest task ID used; next task = this + 1
+- `sprint_BUG_ID`    — highest bug ID used; next bug = this + 1
+- `sprint_EPIC_ID`   — highest epic ID used; next epic = this + 1
+- `Last Updated`   — ISO date; bump when you change a field
+
+---
+
+**Last Updated**: 2026-07-28
+**sprint_VERSION**: 0.0.3
+**sprint_TASK_ID**: 233
+**sprint_BUG_ID**: 2
+**sprint_EPIC_ID**: 1

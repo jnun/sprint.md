@@ -1,0 +1,38 @@
+# Sync tasks from docs/tasks/ to GitHub Issues
+# Powered by sprint.md: https://github.com/jnun/sprint.md
+#
+# Thin caller wrapper — triggers on push/dispatch and delegates to the reusable
+# workflow in the sprint.md repo where all sync logic lives. Updates to the sync
+# engine are picked up automatically without re-copying this file.
+
+name: Sync Tasks to Issues
+
+on:
+  push:
+    paths:
+      - 'docs/tasks/**/*.md'
+      - 'docs/docs/tasks/**/*.md'
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      force_sync_all:
+        description: 'Force sync all tasks'
+        type: boolean
+        default: false
+
+jobs:
+  sync:
+    permissions:
+      issues: write
+      contents: read
+    uses: jnun/sprint.md/.github/workflows/sync-tasks-reusable.yml@main
+    with:
+      force_sync_all: ${{ github.event.inputs.force_sync_all == 'true' }}
+      # Optional: customize paths (defaults shown)
+      # tasks_path: 'docs/tasks'
+      # state_file: 'docs/sprintmd/DOC_STATE.md'
+      # Optional: GitHub Projects integration
+      # project_number: '1'
+      # project_owner: 'your-username-or-org'
+    secrets: inherit

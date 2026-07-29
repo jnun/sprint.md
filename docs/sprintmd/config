@@ -1,0 +1,53 @@
+# sprint.md Configuration
+# Edit freely. Changes preserved across updates. Format: KEY=VALUE
+
+# AI CLI binary for exec mode (claude is verified; any other name falls back
+# to a generic prompt passthrough). Inside an AI session, MODE=emit is used
+# and this is ignored. See MODE below.
+CLI=claude
+
+# Capability tier for this install: claude-code | cursor | openai | generic.
+# Set by setup.sh from your provider choice. Scripts read it (via
+# fiveday_ai_tier) to use full orchestration on claude-code and degrade
+# gracefully elsewhere. Empty = inferred from CLI above. See the capability
+# matrix in docs/sprintmd/ai/provider-capabilities.md.
+PROVIDER=claude-code
+
+# How AI commands deliver their prompt:
+#   emit  — print the prompt for the agent you're already in (Claude Code,
+#           Cursor, etc.) to run — no nested CLI, works with any AI
+#   exec  — spawn the CLI binary above (for a plain terminal, loops, CI)
+#   (empty) — auto: emit inside an agent session, otherwise exec
+MODE=
+
+# Default model. Empty = let the CLI pick its own default.
+MODEL_DEFAULT=
+
+# Per-script models. Empty = fall back to MODEL_DEFAULT.
+# The two AI-assisted creation flows (newfeature Q&A, newidea protocol) are
+# interactive and reasoning-heavy: when left empty AND running on the
+# claude-code tier they default to the strongest model rather than the CLI's
+# cheaper default. Set a value here to pin a specific model instead.
+MODEL_FEATURE=
+MODEL_IDEA=
+MODEL_TALK=
+MODEL_DEFINE=
+MODEL_SPLIT=
+MODEL_SPRINT=
+MODEL_TASKS=
+MODEL_PROFILE=
+MODEL_CODE_AUDIT=
+MODEL_EXCELLENCE=
+MODEL_POLISH=
+MODEL_AUDIT=
+MODEL_DEPS=
+MODEL_TRIAGE=
+MODEL_REVIEW_SPRINT=
+MODEL_DRIFT=
+
+# Budget caps per invocation (USD). Empty = no cap.
+BUDGET_TASKS=5.00
+BUDGET_AUDIT=3.00
+
+# Code audit max iterative passes
+AUDIT_MAX_PASSES=2

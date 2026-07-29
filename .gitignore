@@ -1,0 +1,148 @@
+# OS Files
+.DS_Store
+Thumbs.db
+desktop.ini
+*.lnk
+
+# Temporary workspaces — scratch notes and AI logs, never committed.
+# The bare `tmp/` matches any dir named tmp at any depth (root tmp/,
+# docs/tmp/, docs/sprintmd/tmp/, …), so it already covers the scratch dirs.
+# (The distributed src/.gitignore.template keeps a docs/tmp/* + !.gitkeep
+# scheme instead, because it has no blanket tmp/ to shadow the negation.)
+tmp/
+
+# Editor Files
+.vscode/
+.idea/
+*.sublime-*
+.nova/
+*.swp
+*.swo
+*~
+\#*\#
+.\#*
+
+# Temporary Files
+*.tmp
+*.temp
+*.bak
+*.backup
+*.old
+*.orig
+*.log
+.~lock.*
+
+# Shell/Script artifacts
+*.pid
+*.seed
+*.pid.lock
+nohup.out
+# sprint.md ID-allocation mutex (auto-created and removed; never commit a stale one)
+docs/sprintmd/.sprint-alloc.lock/
+
+# Archive Files (if users zip up old work)
+*.zip
+*.tar
+*.tar.gz
+*.rar
+*.7z
+
+# Environment and secrets
+.env
+.env.*
+*.pem
+*.key
+secrets/
+
+# Local data examples (expand as needed)
+# NOTE: this repo (and the shipped layout) uses docs/, not work/.
+docs/data/*.csv
+docs/data/*.json
+docs/data/*.xml
+docs/data/*.sql
+docs/data/*.db
+docs/data/*.sqlite
+
+# Design files (binary/large files)
+docs/designs/*.psd
+docs/designs/*.ai
+docs/designs/*.sketch
+docs/designs/*.fig
+docs/designs/*.xd
+
+# AI Assistant Configuration (DEVELOPER-LOCAL ONLY)
+# These ignore *this* contributor's personal AI instruction files so one
+# developer's tool choice never lands in the repo. They are ANCHORED to the
+# repo root with a leading "/" on purpose: the distribution package under
+# src/ ships its own minimal AI pointer files (src/CLAUDE.md, src/.cursorrules,
+# src/.windsurfrules, src/.github/copilot-instructions.md), and an unanchored
+# pattern like "CLAUDE.md" would silently ignore those shipped files too.
+# Never un-anchor these.
+
+# Anthropic Claude
+/CLAUDE.md
+.claude/
+
+# Cursor
+/.cursorrules
+.cursor/
+
+# GitHub Copilot
+.copilot/
+/copilot-instructions.md
+/.github/copilot-instructions.md
+
+# Google Gemini
+/GEMINI.md
+.gemini/
+
+# OpenAI / ChatGPT
+/CHATGPT.md
+.openai/
+
+# Aider
+.aider*
+aider.conf.yml
+
+# Codeium / Windsurf
+.codeium/
+/.windsurfrules
+
+# Continue.dev
+.continue/
+
+# Amazon CodeWhisperer
+.codewhisperer/
+
+# Sourcegraph Cody
+.cody/
+
+# Tabnine
+.tabnine/
+
+# Generic AI instruction patterns (root-anchored — see note above)
+/AI.md
+/AI-INSTRUCTIONS.md
+.ai/
+/ai-config.*
+.ai-*
+/*-ai-rules.md
+.llm/
+/LLM.md
+
+# Documentation builds (if using doc generators)
+docs/_build/
+docs/.doctrees/
+site/
+
+# macOS Finder
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+.AppleDouble
+.LSOverride
+Icon?
+._*

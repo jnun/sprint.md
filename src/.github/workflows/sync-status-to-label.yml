@@ -1,0 +1,55 @@
+# Sync issue labels to GitHub Project status columns
+# Powered by sprint.md: https://github.com/jnun/sprint.md
+#
+# HOW IT WORKS:
+# When you (or the task sync workflow) apply a label to an issue that matches
+# a folder name in docs/tasks/ (e.g., "backlog", "next", "doing"), this
+# workflow automatically updates the issue's status column on your GitHub
+# Project board. If the status option doesn't exist on the board yet, it
+# creates one for you.
+#
+# Folder names are the single source of truth — no hardcoded mapping to
+# maintain. Add a docs/tasks/qa/ folder and "qa" becomes a valid status.
+#
+# NO WEBHOOK SETUP REQUIRED. GitHub Actions triggers on issue label events
+# natively. You just need:
+#   1. A GitHub Project board (see GITHUB-PROJECTS-SETUP.md or
+#      docs/guides/github-label-project-sync.md)
+#   2. A GH_PROJECT_TOKEN secret — Personal Access Token with "project" scope
+#      (Settings → Secrets → Actions → New repository secret)
+#   3. A PROJECT_NUMBER variable — your project's number from the URL
+#      (Settings → Variables → Actions → New repository variable)
+#
+# SETUP CHECKLIST:
+#   [ ] GitHub Project created (gh project create --owner @me --title "My Board")
+#   [ ] PAT created at https://github.com/settings/tokens?type=beta
+#       with Repository: Issues (read/write) and Account: Projects (read/write)
+#   [ ] GH_PROJECT_TOKEN secret added to repo
+#   [ ] PROJECT_NUMBER variable added to repo
+#
+# See: docs/guides/github-label-project-sync.md for full walkthrough.
+
+name: Sync Labels to Project Status
+
+on:
+  issues:
+    types: [labeled]
+
+jobs:
+  sync:
+    # Only fires when a label is applied — the reusable workflow checks
+    # whether the label matches a task folder name and skips if not.
+    if: github.event.label.name != ''
+    permissions:
+      issues: write
+      contents: read
+    uses: jnun/sprint.md/.github/workflows/sync-status-to-label-reusable.yml@main
+    with:
+      label_name: ${{ github.event.label.name }}
+      issue_number: ${{ github.event.issue.number }}
+      project_number: ${{ vars.PROJECT_NUMBER }}
+      project_owner: ${{ github.repository_owner }}
+      # Optional: customize if your tasks live elsewhere
+      # tasks_path: 'docs/tasks'
+    secrets:
+      project_token: ${{ secrets.GH_PROJECT_TOKEN }}

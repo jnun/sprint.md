@@ -1,0 +1,284 @@
+# sprint.md Reusable Workflow - Label to GitHub Project Status Sync
+# https://github.com/jnun/sprint.md
+#
+# When a label is applied to an issue, this workflow checks if it matches a
+# task folder name (docs/tasks/backlog/, docs/tasks/next/, etc.) and updates
+# the issue's status on the GitHub Project board to match. If the status
+# option doesn't exist on the board yet, it creates one automatically.
+#
+# This complements sync-tasks-reusable.yml:
+#   - sync-tasks-reusable: file push → issue creation → label + project status
+#   - this workflow:        label applied → project status update
+#
+# Folder names are the single source of truth. No hardcoded mapping.
+# Add docs/tasks/qa/ and "qa" becomes a valid label and project status.
+#
+# No webhook setup required — GitHub Actions triggers on issue label events
+# natively via `on: issues: types: [labeled]`.
+#
+# See also:
+#   - sync-status-to-label.yml (thin caller wrapper)
+#   - docs/guides/github-label-project-sync.md (end-user setup guide)
+
+name: sprint.md Label Sync (Reusable)
+
+on:
+  workflow_call:
+    inputs:
+      tasks_path:
+        description: 'Path to tasks directory (default: docs/tasks)'
+        type: string
+        default: 'docs/tasks'
+      project_number:
+        description: 'GitHub Project number (required)'
+        type: string
+        required: true
+      project_owner:
+        description: 'GitHub Project owner (defaults to repository owner)'
+        type: string
+        default: ''
+      label_name:
+        description: 'The label that was applied to the issue'
+        type: string
+        required: true
+      issue_number:
+        description: 'The issue number that was labeled'
+        type: string
+        required: true
+    secrets:
+      project_token:
+        description: 'GitHub token with project scope (PAT required for Projects v2)'
+        required: true
+
+concurrency:
+  group: sprint.md-label-sync-${{ github.repository }}-${{ inputs.issue_number }}
+  cancel-in-progress: true
+
+jobs:
+  sync-status:
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      contents: read
+    steps:
+      - name: Checkout (to read folder names)
+        uses: actions/checkout@v4
+        with:
+          sparse-checkout: ${{ inputs.tasks_path }}
+          sparse-checkout-cone-mode: true
+
+      - name: Discover valid status folders
+        id: folders
+        env:
+          TASKS_PATH: ${{ inputs.tasks_path }}
+          LABEL_NAME: ${{ inputs.label_name }}
+        run: |
+          set -euo pipefail
+
+          # List directory names under tasks_path — these are the valid statuses
+          if [ ! -d "$TASKS_PATH" ]; then
+            echo "::error::Tasks directory not found: $TASKS_PATH"
+            exit 1
+          fi
+
+          FOLDERS=$(find "$TASKS_PATH" -mindepth 1 -maxdepth 1 -type d -exec basename {} \; | sort)
+          echo "Valid status folders:"
+          echo "$FOLDERS"
+          echo "$FOLDERS" > /tmp/valid_statuses.txt
+
+          # Check if the applied label matches a folder name
+          if echo "$FOLDERS" | grep -qxF "$LABEL_NAME"; then
+            echo "match=true" >> "$GITHUB_OUTPUT"
+            echo "Label '$LABEL_NAME' matches a task status folder"
+          else
+            echo "match=false" >> "$GITHUB_OUTPUT"
+            echo "Label '$LABEL_NAME' does not match any task status folder — skipping"
+          fi
+
+      - name: Sync label to project status
+        if: steps.folders.outputs.match == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.project_token }}
+          PROJECT_NUM: ${{ inputs.project_number }}
+          PROJECT_OWNER: ${{ inputs.project_owner || github.repository_owner }}
+          LABEL_NAME: ${{ inputs.label_name }}
+          ISSUE_NUM: ${{ inputs.issue_number }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          echo "::group::Label → Project Status Sync"
+
+          # Guard: project_number must be set and numeric
+          if [ -z "$PROJECT_NUM" ]; then
+            echo "::error::PROJECT_NUMBER is not set. Add it as a repository variable (Settings → Variables → Actions)."
+            echo "::endgroup::"
+            exit 1
+          fi
+          if ! echo "$PROJECT_NUM" | grep -qE '^[0-9]+$'; then
+            echo "::error::PROJECT_NUMBER must be numeric, got: '$PROJECT_NUM'"
+            echo "::endgroup::"
+            exit 1
+          fi
+
+          # ----------------------------------------------------------------
+          # Step 1: Fetch project details and Status field options
+          # ----------------------------------------------------------------
+          GQL_ERR=""
+          DATA=$(gh api graphql -f query='
+            query($owner: String!, $num: Int!) {
+              user(login: $owner) {
+                projectV2(number: $num) {
+                  id
+                  field(name: "Status") {
+                    ... on ProjectV2SingleSelectField { id options { id name } }
+                  }
+                }
+              }
+              organization(login: $owner) {
+                projectV2(number: $num) {
+                  id
+                  field(name: "Status") {
+                    ... on ProjectV2SingleSelectField { id options { id name } }
+                  }
+                }
+              }
+            }
+          ' -f owner="$PROJECT_OWNER" -F num="$PROJECT_NUM" 2>/tmp/gql_err.txt || { GQL_ERR=$(cat /tmp/gql_err.txt); echo "{}"; })
+
+          PROJECT_ID=$(echo "$DATA" | jq -r '.data.user.projectV2.id // .data.organization.projectV2.id // empty' 2>/dev/null || true)
+          if [ -z "$PROJECT_ID" ]; then
+            echo "::error::Project not found (owner=$PROJECT_OWNER, number=$PROJECT_NUM)"
+            [ -n "$GQL_ERR" ] && echo "::error::GraphQL error: $GQL_ERR"
+            echo "::endgroup::"
+            exit 1
+          fi
+
+          FIELD_ID=$(echo "$DATA" | jq -r '(.data.user.projectV2.field.id // .data.organization.projectV2.field.id) // empty' 2>/dev/null || true)
+          if [ -z "$FIELD_ID" ]; then
+            echo "::error::Status field not found on project. Create a 'Status' single-select field in your project settings."
+            echo "::endgroup::"
+            exit 1
+          fi
+
+          # Build options map: name=id
+          echo "$DATA" | jq -r '(.data.user.projectV2.field.options // .data.organization.projectV2.field.options // [])[] | "\(.name)=\(.id)"' > /tmp/opts.txt 2>/dev/null || true
+
+          echo "Existing status options:"
+          cat /tmp/opts.txt || true
+
+          # ----------------------------------------------------------------
+          # Step 2: Ensure the status option exists (create if missing)
+          # ----------------------------------------------------------------
+          OPT_ID=$(awk -F= -v name="$LABEL_NAME" 'tolower($1) == tolower(name) { for(i=2;i<=NF;i++) printf "%s%s", (i>2?"=":""), $i; print ""; exit }' /tmp/opts.txt 2>/dev/null || true)
+
+          if [ -z "$OPT_ID" ]; then
+            echo "Status option '$LABEL_NAME' not found — attempting to create it..."
+            # createProjectV2FieldOption requires project admin access and may not
+            # be available on all GitHub plans (e.g., GitHub Enterprise Server).
+            # If this fails, the workflow exits cleanly and tells the user to
+            # create the option manually in the project's Status field settings.
+            CREATE_RESULT=$(gh api graphql -f query='
+              mutation($projectId: ID!, $fieldId: ID!, $name: String!) {
+                createProjectV2FieldOption(input: {projectId: $projectId, fieldId: $fieldId, name: $name}) {
+                  projectV2FieldOption { id name }
+                }
+              }
+            ' -f projectId="$PROJECT_ID" -f fieldId="$FIELD_ID" -f name="$LABEL_NAME" 2>&1 || echo "{}")
+
+            OPT_ID=$(echo "$CREATE_RESULT" | jq -r '.data.createProjectV2FieldOption.projectV2FieldOption.id // empty' 2>/dev/null || true)
+
+            if [ -z "$OPT_ID" ]; then
+              echo "::warning::Could not auto-create status option '$LABEL_NAME'."
+              echo "::warning::Add it manually: Project Settings → Custom fields → Status → add '$LABEL_NAME'"
+              echo "::warning::GraphQL response: $CREATE_RESULT"
+              echo "::endgroup::"
+              exit 0
+            fi
+            echo "Created status option '$LABEL_NAME' (id=$OPT_ID)"
+          else
+            echo "Status option '$LABEL_NAME' already exists (id=$OPT_ID)"
+          fi
+
+          # ----------------------------------------------------------------
+          # Step 3: Get the issue's node ID and add it to the project
+          # ----------------------------------------------------------------
+          NODE_ID=$(gh issue view "$ISSUE_NUM" --repo "$REPO" --json id --jq '.id' 2>/dev/null || echo "")
+          if [ -z "$NODE_ID" ]; then
+            echo "::error::Issue #$ISSUE_NUM not found"
+            echo "::endgroup::"
+            exit 1
+          fi
+
+          # addProjectV2ItemById is idempotent — safe to call even if already added
+          ITEM_ID=$(gh api graphql -f query='
+            mutation($pid: ID!, $cid: ID!) {
+              addProjectV2ItemById(input: {projectId: $pid, contentId: $cid}) { item { id } }
+            }
+          ' -f pid="$PROJECT_ID" -f cid="$NODE_ID" --jq '.data.addProjectV2ItemById.item.id' 2>/dev/null || echo "")
+
+          if [ -z "$ITEM_ID" ]; then
+            echo "::warning::Could not add issue #$ISSUE_NUM to project"
+            echo "::endgroup::"
+            exit 0
+          fi
+
+          # ----------------------------------------------------------------
+          # Step 4: Set the status field on the project item
+          # ----------------------------------------------------------------
+          gh api graphql -f query='
+            mutation($pid: ID!, $iid: ID!, $fid: ID!, $oid: String!) {
+              updateProjectV2ItemFieldValue(input: {projectId: $pid, itemId: $iid, fieldId: $fid, value: {singleSelectOptionId: $oid}}) {
+                projectV2Item { id }
+              }
+            }
+          ' -f pid="$PROJECT_ID" -f iid="$ITEM_ID" -f fid="$FIELD_ID" -f oid="$OPT_ID" 2>/dev/null || {
+            echo "::warning::Could not update project status for issue #$ISSUE_NUM"
+            echo "::endgroup::"
+            exit 0
+          }
+
+          echo "Updated issue #$ISSUE_NUM → project status '$LABEL_NAME'"
+
+          echo "::endgroup::"
+
+      # Label cleanup runs as a separate step with GITHUB_TOKEN instead of the
+      # PAT. Actions taken by GITHUB_TOKEN do NOT trigger further workflow
+      # events, preventing unnecessary workflow runs for users who have other
+      # workflows listening to label events.
+      - name: Remove conflicting status labels
+        if: steps.folders.outputs.match == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          LABEL_NAME: ${{ inputs.label_name }}
+          ISSUE_NUM: ${{ inputs.issue_number }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+
+          # Read the valid statuses discovered earlier
+          while IFS= read -r folder; do
+            [ -z "$folder" ] && continue
+            if [ "$folder" != "$LABEL_NAME" ]; then
+              # Remove silently — no error if label isn't on the issue
+              gh issue edit "$ISSUE_NUM" --repo "$REPO" --remove-label "$folder" 2>/dev/null || true
+            fi
+          done < /tmp/valid_statuses.txt
+
+          # Also remove the legacy "completed" and "unknown" labels if present
+          gh issue edit "$ISSUE_NUM" --repo "$REPO" --remove-label "completed" 2>/dev/null || true
+          gh issue edit "$ISSUE_NUM" --repo "$REPO" --remove-label "unknown" 2>/dev/null || true
+
+          echo "Cleaned up conflicting status labels"
+
+      - name: Summary
+        if: always()
+        env:
+          LABEL_NAME: ${{ inputs.label_name }}
+          ISSUE_NUM: ${{ inputs.issue_number }}
+          MATCH: ${{ steps.folders.outputs.match }}
+        run: |
+          if [ "$MATCH" = "true" ]; then
+            echo "### Label Sync: #$ISSUE_NUM → $LABEL_NAME" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "### Label Sync: skipped (label '$LABEL_NAME' is not a task status)" >> "$GITHUB_STEP_SUMMARY"
+          fi

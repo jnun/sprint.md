@@ -1,0 +1,84 @@
+# OS Files
+.DS_Store
+Thumbs.db
+desktop.ini
+*.lnk
+
+# Editor Files
+.vscode/
+.idea/
+*.sublime-*
+.nova/
+*.swp
+*.swo
+*~
+\#*\#
+.\#*
+
+# Scratch workspace — a place to think before committing
+docs/tmp/*
+!docs/tmp/.gitkeep
+
+# Temporary Files
+*.tmp
+*.temp
+*.bak
+*.backup
+*.old
+*.orig
+*.log
+.~lock.*
+
+# Shell/Script artifacts
+*.pid
+*.seed
+*.pid.lock
+nohup.out
+# sprint.md ID-allocation mutex (auto-created and removed; never commit a stale one)
+docs/sprintmd/.sprint-alloc.lock/
+
+# Archive Files (if users zip up old work)
+*.zip
+*.tar
+*.tar.gz
+*.rar
+*.7z
+
+# Environment and secrets
+.env
+.env.*
+*.pem
+*.key
+secrets/
+
+# Local data (expand as needed)
+docs/data/*.csv
+docs/data/*.json
+docs/data/*.xml
+docs/data/*.sql
+docs/data/*.db
+docs/data/*.sqlite
+
+# Design files (binary/large files)
+docs/designs/*.psd
+docs/designs/*.ai
+docs/designs/*.sketch
+docs/designs/*.fig
+docs/designs/*.xd
+
+# Documentation builds (if using doc generators)
+docs/_build/
+docs/.doctrees/
+site/
+
+# macOS Finder
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+.AppleDouble
+.LSOverride
+Icon?
+._*

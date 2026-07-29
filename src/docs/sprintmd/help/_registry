@@ -1,0 +1,48 @@
+# sprint.md command registry — THE source of truth for the command catalog.
+#
+# Every user-facing command has exactly one row here. The runtime index
+# (./sprint.sh help) is GENERATED from this file, and ./sprint.sh validate
+# --commands enforces that the dispatch table, the help/*.md pages, and
+# DOCUMENTATION.md all match it. Add a command = add a row here + a help page;
+# the index updates itself and the validator guards the rest.
+#
+# Format (pipe-delimited, 4 fields):
+#   command | group | usage-suffix | one-line summary
+# group is one of: create | pipeline | workflow | sync | maint
+# usage-suffix is the arg hint shown after the command (may be empty).
+# Lines starting with # and blank lines are ignored. Order within a group is
+# display order. A command may have a second row for a notable sub-form
+# (e.g. validate --docs); existence checks dedupe on the command field.
+
+newidea       | create   | <name>              | Create a new idea to refine
+newfeature    | create   | [name]              | Create a new feature (no name = AI Q&A)
+newtask       | create   | <description>       | Create a new task
+newepic       | create   | <name> [task-id...] | Create an epic — a named list of task IDs grouping related work
+newbug        | create   | <description>       | Report a new bug
+newtest       | create   | <name>              | Create a test loop to validate a deployed thing
+status        | create   |                     | Show project status
+checkfeatures | create   |                     | Analyze feature alignment
+ai-context    | create   |                     | Generate AI context summary
+
+plan          | pipeline | [count] [focus]     | 1. Plan    — pull tasks from backlog/ into next/
+define        | pipeline | [limit]             | 2. Define  — vet tasks in next/, mark them READY
+tasks         | pipeline | [limit] [--fast]    | 3. Execute — work READY tasks in next/ → review/
+loop          | pipeline | [--refill] [--retry]| Autopilot  — chain all three, drain the queue
+review-sprint | pipeline |                     | Review a queued sprint via dual-persona analysis
+
+profile       | workflow |                     | Create or update project profile
+search        | workflow | <keyword>           | Search tasks by keyword
+talk          | workflow | [target]            | id: define/refine/split one task · folder (blocked/next/backlog): sweep it · bugs: sweep inbox into fix tasks · nothing: walk the sprint's health
+split         | workflow | <path>              | Split a large task into subtasks
+audit         | workflow | [folder] [limit]    | Audit tasks in next/ (or specified folder)
+audit-deps    | workflow |                     | File a backlog task auditing outdated/vulnerable deps
+review-code   | workflow | <file> [passes]     | Run code audit on a task's changes
+excellence    | workflow | <file>              | Judge finished work against a higher bar; file enhancements
+polish        | workflow | [limit] [--rounds N] | Sweep review/: judge each task, reopen ones worth improving
+
+sync          | sync     | [--all]             | Push task changes to GitHub
+
+validate      | maint    | [--fix] [--dry-run] | Validate task files against template
+validate      | maint    | --docs              | Check help/*.md for flag drift vs scripts
+validate      | maint    | --commands          | Check every command is fully surfaced (this registry ↔ dispatch ↔ help ↔ manual)
+cleanup       | maint    | [--delete/--force/--all] | Clean stale scratch files
