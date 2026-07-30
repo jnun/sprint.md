@@ -5,9 +5,17 @@ with the user, and writes a flat profile to docs/sprintmd/project.md.
 All AI-powered commands include that profile in their context so
 tasks inherit project-specific conventions automatically.
 
-Usage:
-  ./sprint.sh profile           # create or update project profile
+On update, re-scans the project, diffs against the existing profile,
+and surfaces detected drift (new frameworks, test configs, etc.)
+instead of only asking what changed.
 
-After running:
+Usage:
+  ./sprint.sh profile           # create or update project profile (interactive)
+  ./sprint.sh profile show      # print current profile (no AI)
+
+profile show cats docs/sprintmd/project.md, or prints a short "no
+profile yet" message with the create command. No AI session is started.
+
+After running profile (create/update):
   - docs/sprintmd/project.md exists with project conventions
-  - talk, define, plan, and tasks pick it up automatically
+  - chat, define, plan, and tasks pick it up automatically

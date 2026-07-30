@@ -16,7 +16,7 @@ if [ -z "$NAME" ]; then
 fi
 
 # Convert to a filename-safe slug; reject names with no slug-able text.
-KEBAB=$(fiveday_slug "$NAME") || {
+KEBAB=$(sprintmd_slug "$NAME") || {
     echo -e "${RED}ERROR: Name has no letters or numbers to build a filename from.${NC}"
     exit 1
 }
@@ -24,7 +24,7 @@ KEBAB=$(fiveday_slug "$NAME") || {
 TEST_FILE="docs/tests/${KEBAB}.md"
 
 # Honest collision: name the resulting slug. If the name was truncated
-# (fiveday_slug printed a note above), the user sees the two together —
+# (sprintmd_slug printed a note above), the user sees the two together —
 # two long names can collapse to the same 50-char slug.
 if [ -f "$TEST_FILE" ]; then
     echo -e "${YELLOW}WARNING: Test '$KEBAB' already exists at $TEST_FILE${NC}"

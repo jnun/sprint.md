@@ -13,7 +13,7 @@ create_feature_file() {
     # so every diagnostic must go to stderr or it is swallowed by the caller's
     # command substitution.
     local kebab
-    kebab=$(fiveday_slug "$name") || {
+    kebab=$(sprintmd_slug "$name") || {
         echo -e "${RED}ERROR: Name has no letters or numbers to build a filename from.${NC}" >&2
         exit 1
     }
@@ -21,7 +21,7 @@ create_feature_file() {
     local feature_file="docs/features/${kebab}.md"
 
     # Honest collision: name the resulting slug. If the name was truncated
-    # (fiveday_slug printed a note above), the user sees the two together —
+    # (sprintmd_slug printed a note above), the user sees the two together —
     # two long names can collapse to the same 50-char slug.
     if [ -f "$feature_file" ]; then
         echo -e "${YELLOW}WARNING: Feature '$kebab' already exists at $feature_file${NC}" >&2
@@ -56,13 +56,11 @@ fi
 echo "▸ Starting feature definition Q&A..."
 echo ""
 
-_MODEL="$(fiveday_tier_model FEATURE)"
+_MODEL="$(sprintmd_tier_model FEATURE)"
 _model_args=()
 [ -n "$_MODEL" ] && _model_args=(--model "$_MODEL")
 
-_PROFILE_LINE=""
-[ -f "docs/sprintmd/project.md" ] && _PROFILE_LINE="
-Also read docs/sprintmd/project.md for project-specific stack and conventions."
+_PROFILE_LINE="$(sprintmd_profile_line)"
 
 TEMPLATE_FILE="docs/features/.TEMPLATE-feature.md"
 APPEND_PROMPT="You are a product-minded developer helping a colleague define a new feature through conversation.${_PROFILE_LINE}
@@ -107,7 +105,7 @@ RULES:
 - You may only create files under docs/features/. Do not modify any other files.
 - Do not write code or design the implementation — only define the feature."
 
-fiveday_run \
+sprintmd_run \
   --append-system-prompt "$APPEND_PROMPT" \
   ${_model_args[@]+"${_model_args[@]}"} \
   --tools "Read,Edit,Write,Bash" \

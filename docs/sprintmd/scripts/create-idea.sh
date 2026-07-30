@@ -13,7 +13,7 @@ create_idea_file() {
     # so every diagnostic must go to stderr or it is swallowed by the caller's
     # command substitution.
     local kebab
-    kebab=$(fiveday_slug "$name") || {
+    kebab=$(sprintmd_slug "$name") || {
         echo -e "${RED}ERROR: Name has no letters or numbers to build a filename from.${NC}" >&2
         exit 1
     }
@@ -21,7 +21,7 @@ create_idea_file() {
     local idea_file="docs/ideas/${kebab}.md"
 
     # Honest collision: name the resulting slug. If the name was truncated
-    # (fiveday_slug printed a note above), the user sees the two together —
+    # (sprintmd_slug printed a note above), the user sees the two together —
     # two long names can collapse to the same 50-char slug.
     if [ -f "$idea_file" ]; then
         echo -e "${YELLOW}WARNING: Idea '$kebab' already exists at $idea_file${NC}" >&2
@@ -52,7 +52,7 @@ if [ -n "${1:-}" ]; then
 fi
 
 # ── Without argument: AI-assisted Q&A ──────────────────────────────
-# No CLI-presence check: fiveday_run falls back to emit mode when no binary is
+# No CLI-presence check: sprintmd_run falls back to emit mode when no binary is
 # installed (or when already inside an agent session), printing the prompt for
 # the surrounding agent to run. Bailing here would break that path — the same
 # reason create-feature.sh has no such check.
@@ -60,13 +60,11 @@ fi
 echo "▸ Starting idea refinement session..."
 echo ""
 
-_MODEL="$(fiveday_tier_model IDEA)"
+_MODEL="$(sprintmd_tier_model IDEA)"
 _model_args=()
 [ -n "$_MODEL" ] && _model_args=(--model "$_MODEL")
 
-_PROFILE_LINE=""
-[ -f "docs/sprintmd/project.md" ] && _PROFILE_LINE="
-Also read docs/sprintmd/project.md for project-specific stack and conventions."
+_PROFILE_LINE="$(sprintmd_profile_line)"
 
 TEMPLATE_FILE="docs/ideas/.TEMPLATE-idea.md"
 APPEND_PROMPT="You are a thinking partner helping a colleague develop a raw idea into features ready to build. You guide them through eight phases — divergent first (open up), convergent second (close down).${_PROFILE_LINE}
@@ -137,7 +135,7 @@ RULES:
 - Write in plain English throughout. No jargon.
 - You may only create files under docs/ideas/. Do not modify any other files."
 
-fiveday_run \
+sprintmd_run \
   --append-system-prompt "$APPEND_PROMPT" \
   ${_model_args[@]+"${_model_args[@]}"} \
   --tools "Read,Edit,Write,Bash" \

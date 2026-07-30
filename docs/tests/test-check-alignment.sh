@@ -22,7 +22,7 @@ setup() {
     mkdir -p "$TMPDIR/docs/tasks/review"
     mkdir -p "$TMPDIR/docs/tasks/done"
 
-    # The script sources lib.sh (FIVEDAY_STAGES/task_id/task_title/task_feature
+    # The script sources lib.sh (SPRINTMD_STAGES/task_id/task_title/task_feature
     # live there, and lib.sh loads a cli/ provider profile). It also reads its
     # data (features, tasks) relative to CWD, so keep the copy under the tree.
     cp "$SCRIPT_UNDER_TEST" "$TMPDIR/docs/sprintmd/scripts/check-alignment.sh"

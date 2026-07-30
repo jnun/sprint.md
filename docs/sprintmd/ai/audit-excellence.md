@@ -1,7 +1,7 @@
 # Excellence Audit Protocol
 
 Judge finished work against a higher bar than "it runs." The code audit
-(`review-code`) already checked correctness, conventions, and safety. Your
+(`polish --code`) already checked correctness, conventions, and safety. Your
 job is altitude: is this well-engineered, does it fully solve the problem,
 and what would make it genuinely better?
 
@@ -16,7 +16,7 @@ minimum, not the standard. You are auditing for the second kind.
 
 - **The work is presumed correct.** Do not re-litigate bugs, style, or
   conventions — that audit already ran. If you stumble on a genuine defect,
-  record it as a DEFECT finding and recommend a `review-code` pass. Do not
+  record it as a DEFECT finding and recommend a `polish --code` pass. Do not
   fix it.
 - **You never edit code. Not one line.** An excellence finding is never a
   license to build — "let me build that" mid-audit is the exact failure mode
@@ -86,7 +86,7 @@ minimum, not the standard. You are auditing for the second kind.
   **Why** (the finding, with file references) and **Scope** (what done looks
   like) so the task stands alone without this audit's context.
 - **DEFECT** — a correctness bug. Note it in the report, recommend
-  `./sprint.sh review-code`, and move on.
+  `./sprint.sh polish --code`, and move on.
 - **NIT** — mention in the report only if worth a sentence. Never file.
 
 The bar for filing: would a senior engineer, told about this, act on it?

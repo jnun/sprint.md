@@ -83,7 +83,7 @@ assert_contains "Created date" "$content" "**Created:** $today"
 echo "Test 5: Empty name launches Q&A"
 setup
 rc=0
-output=$(cd "$TMPDIR" && FIVEDAY_MODE=emit bash docs/sprintmd/scripts/create-feature.sh "" 2>&1) || rc=$?
+output=$(cd "$TMPDIR" && SPRINTMD_MODE=emit bash docs/sprintmd/scripts/create-feature.sh "" 2>&1) || rc=$?
 if [ "$rc" -eq 0 ]; then
     echo "  PASS: Q&A path exits 0"; PASS=$((PASS + 1))
 else

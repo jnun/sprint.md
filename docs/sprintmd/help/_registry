@@ -8,7 +8,7 @@
 #
 # Format (pipe-delimited, 4 fields):
 #   command | group | usage-suffix | one-line summary
-# group is one of: create | pipeline | workflow | sync | maint
+# group is one of: create | chat | plan | work | look | keep
 # usage-suffix is the arg hint shown after the command (may be empty).
 # Lines starting with # and blank lines are ignored. Order within a group is
 # display order. A command may have a second row for a notable sub-form
@@ -17,32 +17,30 @@
 newidea       | create   | <name>              | Create a new idea to refine
 newfeature    | create   | [name]              | Create a new feature (no name = AI Q&A)
 newtask       | create   | <description>       | Create a new task
-newepic       | create   | <name> [task-id...] | Create an epic — a named list of task IDs grouping related work
+newplan       | create   | <name> [task-id...] | Create a plan — a named list of task IDs grouping related work
 newbug        | create   | <description>       | Report a new bug
 newtest       | create   | <name>              | Create a test loop to validate a deployed thing
-status        | create   |                     | Show project status
-checkfeatures | create   |                     | Analyze feature alignment
-ai-context    | create   |                     | Generate AI context summary
 
-plan          | pipeline | [count] [focus]     | 1. Plan    — pull tasks from backlog/ into next/
-define        | pipeline | [limit]             | 2. Define  — vet tasks in next/, mark them READY
-tasks         | pipeline | [limit] [--fast]    | 3. Execute — work READY tasks in next/ → review/
-loop          | pipeline | [--refill] [--retry]| Autopilot  — chain all three, drain the queue
-review-sprint | pipeline |                     | Review a queued sprint via dual-persona analysis
+chat          | chat     | [target]            | id: define/refine/split one task · folder (blocked/next/backlog): sweep · plan [id]: author a plan · bugs: sweep inbox · nothing: walk sprint health (spine: chat → plan start → work)
 
-profile       | workflow |                     | Create or update project profile
-search        | workflow | <keyword>           | Search tasks by keyword
-talk          | workflow | [target]            | id: define/refine/split one task · folder (blocked/next/backlog): sweep it · bugs: sweep inbox into fix tasks · nothing: walk the sprint's health
-split         | workflow | <path>              | Split a large task into subtasks
-audit         | workflow | [folder] [limit]    | Audit tasks in next/ (or specified folder)
-audit-deps    | workflow |                     | File a backlog task auditing outdated/vulnerable deps
-review-code   | workflow | <file> [passes]     | Run code audit on a task's changes
-excellence    | workflow | <file>              | Judge finished work against a higher bar; file enhancements
-polish        | workflow | [limit] [--rounds N] | Sweep review/: judge each task, reopen ones worth improving
+plan          | plan     | think|start [id]    | think: dual-persona plan critique · start: gate + commit members to next/ (the sprint) — heads the spine → work
 
-sync          | sync     | [--all]             | Push task changes to GitHub
+work          | work     | [limit] [--fast]    | Execute — happy path: run READY tasks in next/ → review/ (after plan start)
+loop          | work     | [--refill] [--retry]| Autopilot spine — plan start refill (gates as it commits) then work drain
+gate          | work     | [folder] [limit]    | Off-spine quality gate — re-gate next/ (--force) or report on backlog/doing/blocked (not the happy path)
+split         | work     | <path>              | Off-spine — one-shot split of a large task into subtasks (no conversation)
+polish        | work     | [limit|file] [--code] [--rounds N] | After work — quality sweep review/, deep-judge a file, or --code audit
 
-validate      | maint    | [--fix] [--dry-run] | Validate task files against template
-validate      | maint    | --docs              | Check help/*.md for flag drift vs scripts
-validate      | maint    | --commands          | Check every command is fully surfaced (this registry ↔ dispatch ↔ help ↔ manual)
-cleanup       | maint    | [--delete/--force/--all] | Clean stale scratch files
+status        | look     |                     | Show project status
+search        | look     | <keyword>           | Search tasks by keyword
+align         | look     |                     | Analyze feature alignment
+context       | look     |                     | Generate AI context summary
+
+profile       | keep     |                     | Create or update project profile (interactive)
+profile       | keep     | show                | Print current project profile (no AI)
+sync          | keep     | [--all]             | Push task changes to GitHub
+validate      | keep     | [--fix] [--dry-run] | Integrity-check task IDs and Depends on / Blocks
+validate      | keep     | --docs              | Check help/*.md for flag drift vs scripts
+validate      | keep     | --commands          | Check every command is fully surfaced (this registry ↔ dispatch ↔ help ↔ manual)
+cleanup       | keep     | [--delete/--force/--all] | Clean stale scratch files
+deps          | keep     |                     | File a backlog task auditing outdated/vulnerable deps

@@ -6,7 +6,7 @@ set -euo pipefail
 # ── Config ───────────────────────────────────────────────────────────
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/lib.sh"
 
-MODEL="$(fiveday_resolve_model SPLIT)"
+MODEL="$(sprintmd_resolve_model SPLIT)"
 TOOLS="Read,Bash,Grep,Glob,Edit,Write"
 PERMISSIONS="auto"
 MAX_TURNS=60
@@ -14,7 +14,7 @@ LOG_DIR="docs/tmp"
 
 # ── Preflight ───────────────────────────────────────────────────────
 
-AI_MODE="$(fiveday_ai_mode)"
+AI_MODE="$(sprintmd_ai_mode)"
 
 TASK_FILE="${1:-}"
 
@@ -94,19 +94,19 @@ _model_args=()
 
 # Emit mode: the agent creates the sub-tasks and deletes the original itself.
 if [ "$AI_MODE" = "emit" ]; then
-  fiveday_run -p "$PROMPT" \
+  sprintmd_run -p "$PROMPT" \
     ${_model_args[@]+"${_model_args[@]}"} \
     --tools "$TOOLS" --permissions "$PERMISSIONS"
   exit 0
 fi
 
-LOG_FILE="$(fiveday_log_path split "$TASK_NAME")"
+LOG_FILE="$(sprintmd_log_path split "$TASK_NAME")"
 
 # Timestamp marker created before the run so -newer has no same-second race
 SPLIT_MARKER=$(mktemp)
 trap 'rm -f "$SPLIT_MARKER"' EXIT
 
-if fiveday_run -p "$PROMPT" \
+if sprintmd_run -p "$PROMPT" \
   ${_model_args[@]+"${_model_args[@]}"} \
   --tools "$TOOLS" \
   --permissions "$PERMISSIONS" \

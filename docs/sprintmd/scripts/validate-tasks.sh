@@ -1,5 +1,14 @@
 #!/usr/bin/env bash
-# validate-tasks.sh — Validate task files. See: ./sprint.sh help validate
+# validate-tasks.sh — Task-file integrity (IDs + dependency refs).
+# See: ./sprint.sh help validate
+#
+# Default path checks what the runtime actually needs — numeric filename IDs,
+# title/filename ID match, unique IDs across stages, and well-formed
+# **Depends on** / **Blocks** tokens. Template-stamped presence checks
+# (**Feature**, ## Problem, ## Success criteria) are not re-checked; those are
+# guaranteed by create-task.sh from .TEMPLATE-task.md.
+#
+# Cycle detection among Depends-on edges is intentionally out of scope (v1).
 
 set -euo pipefail
 
@@ -8,11 +17,6 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/lib.sh"
-
-TASK_DIRS=()
-for _stage in "${FIVEDAY_STAGES[@]}"; do
-    TASK_DIRS+=("$PROJECT_ROOT/docs/tasks/$_stage")
-done
 
 # Options
 FIX_MODE=false
@@ -39,9 +43,15 @@ for arg in "$@"; do
         --help|-h)
             echo "Usage: $0 [--fix] [--dry-run] [--docs] [--commands]"
             echo ""
+            echo "Default: integrity checks on every task file under docs/tasks/*/"
+            echo "  — numeric filename ID"
+            echo "  — title ID matches filename"
+            echo "  — no duplicate task IDs across stages"
+            echo "  — **Depends on** / **Blocks** token shape (no cycle detection)"
+            echo ""
             echo "Options:"
-            echo "  --fix       Automatically fix issues in task files"
-            echo "  --dry-run   Show what would be fixed without making changes"
+            echo "  --fix       Auto-fix safe issues (title-line ID mismatch only)"
+            echo "  --dry-run   Show what --fix would change without writing"
             echo "  --docs      Check help/*.md for flag drift against scripts"
             echo "  --commands  Check every command is fully surfaced (registry/dispatch/help/manual)"
             echo "  --help      Show this help message"
@@ -55,210 +65,214 @@ TOTAL_FILES=0
 VALID_FILES=0
 INVALID_FILES=0
 FIXED_FILES=0
-
-echo "🔍 Validating task files..."
+REMAINING_INVALID=0
+echo "🔍 Validating task integrity..."
 echo ""
 
-validate_and_fix_task() {
-    local file="$1"
-    local task_id
-    local filename
-    local issues=()
+# ── Collect every task file (skip templates) ─────────────────────────
+# Build a flat list of paths and an "id path" index for duplicate detection.
+# Bash 3.2 has no associative arrays, so the index is a temp file.
+TASK_FILES=()
+ID_INDEX=$(mktemp)
+trap 'rm -f "$ID_INDEX"' EXIT
 
-    filename=$(basename "$file")
-
-    # Skip template files
-    if [[ "$filename" == ".TEMPLATE"* ]] || [[ "$filename" == "TEMPLATE"* ]]; then
-        return 0
-    fi
-
-    TOTAL_FILES=$((TOTAL_FILES + 1))
-
-    # Extract task ID from filename
-    task_id=$(task_id "$filename")
-
-    # Validate task ID is numeric
-    if ! [[ "$task_id" =~ ^[0-9]+$ ]]; then
-        issues+=("Invalid task ID in filename (must be numeric): $filename")
-        INVALID_FILES=$((INVALID_FILES + 1))
-        printf "${RED}✗${NC} %s\n" "$file"
-        for issue in "${issues[@]}"; do
-            printf "  ${YELLOW}⚠${NC}  %s\n" "$issue"
-        done
-        return 1
-    fi
-
-    # Read file content
-    if [ ! -f "$file" ]; then
-        issues+=("File does not exist")
-        INVALID_FILES=$((INVALID_FILES + 1))
-        printf "${RED}✗${NC} %s\n" "$file"
-        for issue in "${issues[@]}"; do
-            printf "  ${YELLOW}⚠${NC}  %s\n" "$issue"
-        done
-        return 1
-    fi
-
-    # Check 1: Title format (# Task ID: Title)
-    local title_line
-    title_line=$(head -n1 "$file")
-
-    if ! echo "$title_line" | grep -qE "^# Task [0-9]+:"; then
-        issues+=("Title must start with '# Task $task_id: ' (found: $title_line)")
-    fi
-
-    # Check 2: Required fields
-    if ! grep -q '^\*\*Feature\*\*:' "$file"; then
-        issues+=("Missing required field: **Feature**:")
-    fi
-
-    if ! grep -qE '^## (Problem|Description|What|Overview)' "$file"; then
-        issues+=("Missing required section: ## Problem (or equivalent)")
-    fi
-
-    if ! grep -qE '^## (Success criteria|Success Criteria|Testing Criteria|Desired Outcome|Acceptance Criteria)' "$file"; then
-        issues+=("Missing required section: ## Success criteria (or equivalent)")
-    fi
-
-    # If no issues found, file is valid
-    if [ ${#issues[@]} -eq 0 ]; then
-        VALID_FILES=$((VALID_FILES + 1))
-        printf "${GREEN}✓${NC} %s\n" "$file"
-        return 0
-    fi
-
-    # File has issues
-    INVALID_FILES=$((INVALID_FILES + 1))
-    printf "${RED}✗${NC} %s\n" "$file"
-    for issue in "${issues[@]}"; do
-        printf "  ${YELLOW}⚠${NC}  %s\n" "$issue"
-    done
-
-    # Attempt to fix if requested
-    if [ "$FIX_MODE" = true ]; then
-        printf "  ${BLUE}🔧 Attempting to fix...${NC}\n"
-
-        if fix_task_file "$file" "$task_id"; then
-            FIXED_FILES=$((FIXED_FILES + 1))
-            printf "  ${GREEN}✓${NC} Fixed\n"
-        else
-            printf "  ${RED}✗${NC} Could not auto-fix (manual intervention required)\n"
+for _stage in "${SPRINTMD_STAGES[@]}"; do
+    task_dir="$PROJECT_ROOT/docs/tasks/$_stage"
+    [ -d "$task_dir" ] || continue
+    for file in "$task_dir"/*.md; do
+        [ -e "$file" ] || continue
+        filename=$(basename "$file")
+        if [[ "$filename" == .TEMPLATE* ]] || [[ "$filename" == TEMPLATE* ]]; then
+            continue
         fi
-    fi
+        TASK_FILES+=("$file")
+        tid=$(task_id "$filename")
+        # Index every file, even non-numeric IDs (those fail the per-file check)
+        printf '%s\t%s\n' "$tid" "$file" >> "$ID_INDEX"
+    done
+done
 
+# Duplicate numeric IDs across any stage (same N- prefix in two places, or
+# two files sharing N). Non-numeric ids are ignored here — per-file check covers them.
+DUP_IDS=$(awk '$1 ~ /^[0-9]+$/ {print $1}' "$ID_INDEX" | sort | uniq -d || true)
+
+# id_is_duplicate N -> 0 if N is a known duplicate
+id_is_duplicate() {
+    local id="$1" d
+    [ -z "$DUP_IDS" ] && return 1
+    for d in $DUP_IDS; do
+        [ "$d" = "$id" ] && return 0
+    done
     return 1
 }
 
-fix_task_file() {
+# paths_for_id N -> newline-separated paths from the index
+paths_for_id() {
+    local id="$1"
+    awk -F'\t' -v id="$id" '$1 == id { print $2 }' "$ID_INDEX"
+}
+
+# Check one dependency-style field (Depends on / Blocks). Prints one issue
+# line per problem (caller collects into its local issues array — bash 3.2
+# locals are not visible to callees). Numeric IDs that resolve to zero files
+# are treated as archived/gone (OK). Malformed tokens are reported. Cycle
+# detection is out of scope.
+check_id_list_field() {
+    local file="$1" field="$2"
+    local raw kind tok
+    raw=$(sprintmd_meta_value "$file" "$field")
+    [ -z "$raw" ] && return 0
+    while read -r kind tok; do
+        [ -n "$kind" ] || continue
+        if [ "$kind" = "bad" ]; then
+            printf 'Malformed **%s** token (not a task ID or none): %s\n' "$field" "$tok"
+        fi
+        # kind=id: bare number, present or archived — always OK for integrity
+    done <<EOF
+$(sprintmd_iter_id_list "$raw")
+EOF
+}
+
+# Rewrite first-line title to match filename ID. Only safe auto-fix remaining.
+fix_title_line() {
     local file="$1"
     local task_id="$2"
-    local temp_file="${file}.tmp"
-    local has_problem=false
-    local has_success_criteria=false
+    local title_text temp_file
 
-    # Check what sections exist
-    if grep -qE '^## (Problem|Description|What|Overview)' "$file"; then
-        has_problem=true
-    fi
-
-    if grep -qE '^## (Success criteria|Success Criteria|Testing Criteria|Desired Outcome|Acceptance Criteria)' "$file"; then
-        has_success_criteria=true
-    fi
-
-    # Extract title text (strips "# " and any "Task X: " prefix).
-    # A heading-less file yields an empty title; fall back to a readable slug
-    # from the filename (e.g. "12-fix-auth.md" -> "fix auth") so --fix never
-    # writes a bare "# Task N: " with no title.
-    local title_text
     title_text=$(task_title "$file" || true)
     if [ -z "$title_text" ]; then
         title_text=$(basename "$file" .md | sed -E 's/^[0-9]+-?//; s/-/ /g')
         [ -z "$title_text" ] && title_text="untitled"
     fi
 
-    # Start building corrected file
-    {
-        # Fix title
-        echo "# Task ${task_id}: ${title_text}"
-        echo ""
-
-        # Add Feature field if missing (insert after title, before first ## section)
-        if ! grep -q '^\*\*Feature\*\*:' "$file"; then
-            echo "**Feature**: none"
-            echo "**Created**: $(date +%Y-%m-%d)"
-            echo ""
-        fi
-
-        # Process rest of file (skip first line)
-        local line_num=0
-
-        while IFS= read -r line; do
-            line_num=$((line_num + 1))
-
-            # Skip the first line (title) - already handled
-            if [ "$line_num" -eq 1 ]; then
-                continue
-            fi
-
-            # Rename section variations to the canonical name. Normalize each
-            # matching heading in place — do NOT dedup. Suppressing a second
-            # success-criteria-style heading would leave its body orphaned,
-            # silently merging it into the previous section (data loss).
-            # Only exact ($-anchored) variant names are normalized; a heading
-            # with extra words (e.g. "## Success Criteria and tests") is
-            # preserved verbatim below rather than force-stripped.
-            if echo "$line" | grep -qE '^## (Success criteria|Success Criteria|Testing Criteria|Acceptance Criteria|Desired Outcome)$'; then
-                echo "## Success criteria"
-            elif echo "$line" | grep -qE '^## (Description|What|Overview)$'; then
-                echo "## Problem"
-            elif echo "$line" | grep -qE '^## '; then
-                # Other section - reset flags
-                echo "$line"
-            else
-                # Regular content line
-                echo "$line"
-            fi
-        done < "$file"
-
-        # Add missing Problem section if needed
-        if [ "$has_problem" = false ]; then
-            echo ""
-            echo "## Problem"
-            echo "[Description of what needs to be done]"
-        fi
-
-        # Add missing Success criteria section if needed
-        if [ "$has_success_criteria" = false ]; then
-            echo ""
-            echo "## Success criteria"
-            echo "- [ ] [Add success criteria here]"
-        fi
-
-    } > "$temp_file"
-
-    # Write fixed content
     if [ "$DRY_RUN" = true ]; then
-        echo "  [DRY RUN] Would update file"
-        rm "$temp_file"
-        return 0
-    else
-        move_file "$temp_file" "$file"
+        echo "  [DRY RUN] Would set title to: # Task ${task_id}: ${title_text}"
         return 0
     fi
+
+    temp_file="${file}.tmp"
+    {
+        echo "# Task ${task_id}: ${title_text}"
+        tail -n +2 "$file"
+    } > "$temp_file"
+    move_file "$temp_file" "$file"
+    return 0
 }
 
-# Process all task directories
-for task_dir in "${TASK_DIRS[@]}"; do
-    if [ ! -d "$task_dir" ]; then
-        continue
+validate_task() {
+    local file="$1"
+    local task_id
+    local filename
+    local issues=()
+    local title_line title_id
+    local can_fix_title=false
+
+    filename=$(basename "$file")
+    TOTAL_FILES=$((TOTAL_FILES + 1))
+    task_id=$(task_id "$filename")
+
+    # 1. Numeric filename ID
+    if ! [[ "$task_id" =~ ^[0-9]+$ ]]; then
+        issues+=("Invalid task ID in filename (must be numeric): $filename")
+        INVALID_FILES=$((INVALID_FILES + 1))
+        REMAINING_INVALID=$((REMAINING_INVALID + 1))
+        printf "${RED}✗${NC} %s\n" "$file"
+        for issue in "${issues[@]}"; do
+            printf "  ${YELLOW}⚠${NC}  %s\n" "$issue"
+        done
+        return 1
     fi
 
-    # Find all .md files in the directory
-    for file in "$task_dir"/*.md; do
-        # Skip if glob didn't match any files
-        [ -e "$file" ] || continue
-        validate_and_fix_task "$file" || true  # Don't exit on validation failure
+    if [ ! -f "$file" ]; then
+        issues+=("File does not exist")
+        INVALID_FILES=$((INVALID_FILES + 1))
+        REMAINING_INVALID=$((REMAINING_INVALID + 1))
+        printf "${RED}✗${NC} %s\n" "$file"
+        for issue in "${issues[@]}"; do
+            printf "  ${YELLOW}⚠${NC}  %s\n" "$issue"
+        done
+        return 1
+    fi
+
+    # 2. Title ID matches filename
+    title_line=$(head -n1 "$file")
+    if [[ "$title_line" =~ ^#\ Task\ ([0-9]+): ]]; then
+        title_id="${BASH_REMATCH[1]}"
+        if [ "$title_id" != "$task_id" ]; then
+            issues+=("Title ID ($title_id) does not match filename ID ($task_id)")
+            can_fix_title=true
+        fi
+    else
+        issues+=("Title must start with '# Task $task_id: ' (found: $title_line)")
+        can_fix_title=true
+    fi
+
+    # 3. Duplicate ID across stages
+    if id_is_duplicate "$task_id"; then
+        local others="" p
+        while IFS= read -r p; do
+            [ -z "$p" ] && continue
+            [ "$p" = "$file" ] && continue
+            others="${others}${others:+, }${p}"
+        done <<EOF
+$(paths_for_id "$task_id")
+EOF
+        issues+=("Duplicate task ID $task_id (also at: ${others:-?})")
+    fi
+
+    # 4–5. Depends on / Blocks token integrity (no cycle detection)
+    local _dep_issue
+    while IFS= read -r _dep_issue; do
+        [ -n "$_dep_issue" ] && issues+=("$_dep_issue")
+    done <<EOF
+$(check_id_list_field "$file" "Depends on")
+$(check_id_list_field "$file" "Blocks")
+EOF
+
+    if [ ${#issues[@]} -eq 0 ]; then
+        VALID_FILES=$((VALID_FILES + 1))
+        printf "${GREEN}✓${NC} %s\n" "$file"
+        return 0
+    fi
+
+    INVALID_FILES=$((INVALID_FILES + 1))
+    printf "${RED}✗${NC} %s\n" "$file"
+    for issue in "${issues[@]}"; do
+        printf "  ${YELLOW}⚠${NC}  %s\n" "$issue"
     done
+
+    # --fix: only title-line ID mismatch / missing Task N prefix is safe.
+    # A file is "fully repaired" only when the title was its *sole* issue and
+    # the fix succeeded; any other issue (duplicate ID, bad dependency token)
+    # leaves the file invalid regardless of the title fix.
+    local fully_repaired=false
+    if [ "$FIX_MODE" = true ] && [ "$can_fix_title" = true ]; then
+        printf "  ${BLUE}🔧 Attempting to fix title...${NC}\n"
+        if fix_title_line "$file" "$task_id"; then
+            FIXED_FILES=$((FIXED_FILES + 1))
+            printf "  ${GREEN}✓${NC} Title fixed\n"
+            [ ${#issues[@]} -eq 1 ] && fully_repaired=true
+        else
+            printf "  ${RED}✗${NC} Could not auto-fix title\n"
+        fi
+    fi
+
+    if [ "$fully_repaired" = false ]; then
+        REMAINING_INVALID=$((REMAINING_INVALID + 1))
+    fi
+
+    return 1
+}
+
+# Report global duplicate summary once (per-file lines already detail each hit)
+if [ -n "$DUP_IDS" ]; then
+    echo "Duplicate task IDs detected: $DUP_IDS"
+    echo ""
+fi
+
+# Validate every collected file
+for file in "${TASK_FILES[@]+"${TASK_FILES[@]}"}"; do
+    validate_task "$file" || true
 done
 
 # Print summary
@@ -276,20 +290,16 @@ fi
 
 echo ""
 
-# Exit with error code if there are invalid files
-if [ "$INVALID_FILES" -gt 0 ]; then
+# Exit with error code if any file is still invalid after fixes are applied.
+# REMAINING_INVALID (not FIXED_FILES < INVALID_FILES) is the source of truth:
+# a file with both a fixed title and an unfixable issue stays counted here.
+if [ "$REMAINING_INVALID" -gt 0 ]; then
     if [ "$FIX_MODE" = false ]; then
-        echo "💡 Tip: Run with --fix to automatically correct issues"
+        echo "💡 Tip: Run with --fix to auto-correct title-line ID mismatches"
+    else
+        echo "⚠️  Some files could not be auto-fixed (duplicates / bad dependency tokens need a human)"
     fi
-
-    if [ "$FIX_MODE" = true ] && [ "$FIXED_FILES" -lt "$INVALID_FILES" ]; then
-        echo "⚠️  Some files could not be auto-fixed and require manual intervention"
-        exit 1
-    fi
-
-    if [ "$FIX_MODE" = false ]; then
-        exit 1
-    fi
+    exit 1
 fi
 
 echo "✅ All task files are valid!"

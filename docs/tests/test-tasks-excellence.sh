@@ -1,17 +1,17 @@
 #!/usr/bin/env bash
-# Test: tasks.sh --excellence chain
+# Test: work.sh --excellence chain
 # Exercises the exec-mode quality chain (task run → excellence audit) with a
 # stub CLI — no real AI provider is invoked. Covers three things the flag
 # promises: the excellence pass runs after a task lands in review/, a BLOCKER
 # verdict does NOT halt the queue (it is only counted in the summary), and the
 # enhancement task the pass files into backlog/ never joins the current run
-# (tasks.sh snapshots its task list up front).
+# (work.sh snapshots its task list up front).
 
 set -euo pipefail
 
 PASS=0
 FAIL=0
-SCRIPT_UNDER_TEST="$(cd "$(dirname "$0")/../sprintmd/scripts" && pwd)/tasks.sh"
+SCRIPT_UNDER_TEST="$(cd "$(dirname "$0")/../sprintmd/scripts" && pwd)/work.sh"
 
 # Stub CLI: two personalities selected by the prompt it receives.
 #   - Excellence audit prompt  → emit a JSON verdict (FILED or BLOCKER via
@@ -138,13 +138,13 @@ assert_exit_code() {
     fi
 }
 
-echo "=== test-tasks-excellence.sh ==="
+echo "=== test-work-excellence.sh ==="
 
 # Test 1: --audit --excellence chain, FILED verdict, snapshot holds.
 echo "Test 1: excellence runs after the task lands in review/, snapshot holds"
 setup 1
 rc=0
-output=$(cd "$TMPDIR" && FIVEDAY_MODE=exec FIVEDAY_CLI="$STUB" NO_COLOR=1 \
+output=$(cd "$TMPDIR" && SPRINTMD_MODE=exec SPRINTMD_CLI="$STUB" NO_COLOR=1 \
     bash "$SCRIPT_UNDER_TEST" --excellence 2>&1) || rc=$?
 assert_exit_code "Exits 0" "0" "$rc"
 assert_contains "Runs the excellence audit" "$output" "Running excellence audit"
@@ -169,7 +169,7 @@ assert_missing "A FILED verdict is not counted as a blocker" \
 echo "Test 2: BLOCKER verdict does not halt the queue, blockers are counted"
 setup 2
 rc=0
-output=$(cd "$TMPDIR" && FIVEDAY_MODE=exec FIVEDAY_CLI="$STUB" NO_COLOR=1 \
+output=$(cd "$TMPDIR" && SPRINTMD_MODE=exec SPRINTMD_CLI="$STUB" NO_COLOR=1 \
     STUB_VERDICT=BLOCKER bash "$SCRIPT_UNDER_TEST" --excellence 2>&1) || rc=$?
 assert_exit_code "Queue does not fail on a blocker (exits 0)" "0" "$rc"
 assert_contains "Both tasks completed" "$output" "2 completed"
@@ -185,7 +185,7 @@ assert_contains "Records the BLOCKER verdict" \
 echo "Test 3: excellence audit is opt-in"
 setup 1
 rc=0
-output=$(cd "$TMPDIR" && FIVEDAY_MODE=exec FIVEDAY_CLI="$STUB" NO_COLOR=1 \
+output=$(cd "$TMPDIR" && SPRINTMD_MODE=exec SPRINTMD_CLI="$STUB" NO_COLOR=1 \
     bash "$SCRIPT_UNDER_TEST" 2>&1) || rc=$?
 assert_exit_code "Exits 0" "0" "$rc"
 assert_missing "Excellence audit did not run" "$output" "Running excellence audit"

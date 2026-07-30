@@ -64,10 +64,10 @@ and check.
 workable task:
 
 ```bash
-./sprint.sh talk 12          # use the task's number
+./sprint.sh chat 12          # use the task's number
 ```
 
-`talk` reads the task, then asks one focused question at a time — sharpening the
+`chat` reads the task, then asks one focused question at a time — sharpening the
 problem, the success criteria, and the technical notes until any developer could
 pick it up. It edits the file as you answer, so progress shows up right in the
 task. And if the task turns out to be several jobs in a trench coat, it splits
@@ -86,11 +86,14 @@ file.
 | `review/` | Done, awaiting a check |
 | `done/` | Complete |
 
+Always move with `git mv SRC DEST || mv SRC DEST` — `git mv` first; when it
+fails (usual for new uncommitted tasks), finish with plain `mv` and continue.
+
 ```bash
-git mv docs/tasks/backlog/12-add-share-button.md docs/tasks/next/
-git mv docs/tasks/next/12-add-share-button.md docs/tasks/doing/
-git mv docs/tasks/doing/12-add-share-button.md docs/tasks/review/
-git mv docs/tasks/review/12-add-share-button.md docs/tasks/done/
+git mv docs/tasks/backlog/12-add-share-button.md docs/tasks/next/    || mv docs/tasks/backlog/12-add-share-button.md docs/tasks/next/
+git mv docs/tasks/next/12-add-share-button.md docs/tasks/doing/      || mv docs/tasks/next/12-add-share-button.md docs/tasks/doing/
+git mv docs/tasks/doing/12-add-share-button.md docs/tasks/review/    || mv docs/tasks/doing/12-add-share-button.md docs/tasks/review/
+git mv docs/tasks/review/12-add-share-button.md docs/tasks/done/     || mv docs/tasks/review/12-add-share-button.md docs/tasks/done/
 ```
 
 **Do this:** Pull a task into `next/`, build it, then move it toward `done/`.
@@ -119,20 +122,30 @@ closes the loop and starts the next one.
 A **sprint is just the group of tasks sitting in `docs/tasks/next/`.** There's no
 special file, label, or ID — whatever is in `next/` right now *is* the sprint.
 
+The happy path (spine) is:
+
+```
+chat  →  plan start  →  work  →  polish
+```
+
+`gate` and `split` are off-spine tools (re-gate or split when you need them).
+`loop` runs the spine on autopilot.
+
+
 Three separate commands take a sprint from backlog to finished. They're separate on
 purpose: each one stops so you can fix whatever it reveals before moving on.
 
 | Step | Command | What it does | You stop to… |
 |------|---------|--------------|--------------|
-| **1. Plan** | `./sprint.sh plan [count]` | picks tasks from `backlog/` into `next/` | review the plan before files move |
-| **2. Define** | `./sprint.sh define` | vets each task in `next/`, marks it `READY` | answer questions, fix blocked tasks |
-| **3. Execute** | `./sprint.sh tasks` | works the `READY` tasks, each in a fresh AI context → `review/` | review the diffs before you commit |
+| **1. Author** | `./sprint.sh newplan` · `chat plan` · `plan start` | group work into a plan, then commit members into `next/` | review the plan before start |
+| **2. Gate** | `./sprint.sh gate` | vets each task in `next/`, marks it `READY` | answer questions, fix blocked tasks |
+| **3. Work** | `./sprint.sh work` | works the `READY` tasks, each in a fresh AI context → `review/` | review the diffs before you commit |
 
-`plan` **plans** a sprint; `tasks` **executes** the one already in `next/`. Keeping
-them apart lets you catch problems each step surfaces instead of running blind.
+`plan start` **commits** a human-authored plan into `next/`; `work` **executes**
+that queue. Keeping the steps apart lets you catch problems each surface.
 
-Want it unattended? `./sprint.sh loop --refill --retry` chains all three and drains the
-backlog on its own — you trade the stop-points for hands-off.
+Want it unattended? `./sprint.sh loop --refill --retry` starts the next READY
+plan when the queue empties, then gate + work — only authored intent refills.
 
 ---
 
@@ -146,7 +159,7 @@ in the sections, then commit.
 | **Idea** | `newidea "..."` | Refine a rough concept into a clear bet and a list of features |
 | **Feature** | `newfeature "..."` | Describe a capability in plain language |
 | **Task** | `newtask "..."` | Write one specific, buildable work item |
-| **Bug** | `newbug "..."` | Report something that needs fixing |
+| **Bug** | `newbug "..."` · `chat bugs` | Report to the inbox; convert with chat bugs [w] (task + delete report) |
 | **Test** | `newtest "..."` | Validate a deployed thing, then route learnings into new work |
 
 **Folders you own** — create and edit freely:
@@ -154,13 +167,14 @@ in the sections, then commit.
 - `docs/ideas/` — rough concepts being refined
 - `docs/features/` — defined capabilities
 - `docs/tasks/` — work items, organized by status folder
-- `docs/bugs/` — bug reports
+- `docs/bugs/` — open bug reports (inbox; convert/close deletes the file)
 - `docs/tests/` — your test loops
 - `docs/guides/` — your documentation
 
 **Handy commands:**
 
-- `./sprint.sh talk <task-id>` — discuss a task with an AI to make it well-defined and workable
+- `./sprint.sh chat <task-id>` — discuss a task with an AI to make it well-defined and workable
+- `./sprint.sh chat bugs` — sweep the bug inbox (convert → task, or close/kill)
 - `./sprint.sh status` — see counts and what's in progress
 - `./sprint.sh help` — list every command
 - `./sprint.sh help <command>` — details for one command

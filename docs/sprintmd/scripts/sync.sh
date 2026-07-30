@@ -54,7 +54,7 @@ echo ""
 # Stage task files from all pipeline folders
 STAGED=0
 
-for folder in "${FIVEDAY_STAGES[@]}"; do
+for folder in "${SPRINTMD_STAGES[@]}"; do
     DIR="docs/tasks/$folder"
     [ -d "$DIR" ] || continue
     if [ -n "$(git status --porcelain "$DIR" 2>/dev/null || true)" ]; then

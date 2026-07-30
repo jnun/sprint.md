@@ -40,7 +40,7 @@ fi
 
 # Get the sprint.md source directory (where this script lives)
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-FIVEDAY_SOURCE_DIR="$SCRIPT_DIR"
+SPRINTMD_SOURCE_DIR="$SCRIPT_DIR"
 
 # ============================================================================
 # MESSAGE SYSTEM - Consistent, color-coded output
@@ -145,8 +145,8 @@ safe_mkdir() {
 }
 
 # Read current version from source
-if [ -f "$FIVEDAY_SOURCE_DIR/src/VERSION" ]; then
-    CURRENT_VERSION=$(cat "$FIVEDAY_SOURCE_DIR/src/VERSION")
+if [ -f "$SPRINTMD_SOURCE_DIR/src/VERSION" ]; then
+    CURRENT_VERSION=$(cat "$SPRINTMD_SOURCE_DIR/src/VERSION")
 else
     echo "Warning: VERSION file not found, defaulting to 1.0.0"
     CURRENT_VERSION="1.0.0"
@@ -190,7 +190,7 @@ echo ""
 cd "$TARGET_PATH" || exit 1
 
 # Self-targeting detection
-if [ "$TARGET_PATH" = "$FIVEDAY_SOURCE_DIR" ]; then
+if [ "$TARGET_PATH" = "$SPRINTMD_SOURCE_DIR" ]; then
     echo "Note: Target is the sprint.md source directory."
     echo "   This will sync src/ to docs/ for development/testing."
     echo ""
@@ -346,7 +346,6 @@ if $UPDATE_MODE; then
 
         ensure_task_folders
         safe_mkdir "docs/bugs"
-        safe_mkdir "docs/bugs/archived"
         safe_mkdir "docs/sprintmd/scripts"
         safe_mkdir "docs/sprintmd/ai"
         safe_mkdir "docs/designs"
@@ -594,19 +593,19 @@ if $UPDATE_MODE; then
 # sprint.md Configuration (migrated from config.sh)
 # Edit freely. Changes preserved across updates. Format: KEY=VALUE
 
-CLI=${FIVEDAY_CLI:-claude}
-MODEL_DEFAULT=${FIVEDAY_MODEL_DEFAULT-}
-MODEL_TALK=${FIVEDAY_MODEL_TALK-${FIVEDAY_MODEL_PLAN-}}
-MODEL_DEFINE=${FIVEDAY_MODEL_DEFINE-}
-MODEL_SPLIT=${FIVEDAY_MODEL_SPLIT-}
-MODEL_SPRINT=${FIVEDAY_MODEL_SPRINT-}
-MODEL_TASKS=${FIVEDAY_MODEL_TASKS-}
-MODEL_CODE_AUDIT=${FIVEDAY_MODEL_CODE_AUDIT-}
-MODEL_AUDIT=${FIVEDAY_MODEL_AUDIT-}
-MODEL_DRIFT=${FIVEDAY_MODEL_DRIFT-}
-BUDGET_TASKS=${FIVEDAY_BUDGET_TASKS:-5.00}
-BUDGET_AUDIT=${FIVEDAY_BUDGET_AUDIT:-3.00}
-AUDIT_MAX_PASSES=${FIVEDAY_AUDIT_MAX_PASSES:-2}
+CLI=${SPRINTMD_CLI:-claude}
+MODEL_DEFAULT=${SPRINTMD_MODEL_DEFAULT-}
+MODEL_CHAT=${SPRINTMD_MODEL_CHAT-${SPRINTMD_MODEL_PLAN-}}
+MODEL_GATE=${SPRINTMD_MODEL_GATE-}
+MODEL_SPLIT=${SPRINTMD_MODEL_SPLIT-}
+MODEL_SPRINT=${SPRINTMD_MODEL_SPRINT-}
+MODEL_WORK=${SPRINTMD_MODEL_WORK-}
+MODEL_CODE_AUDIT=${SPRINTMD_MODEL_CODE_AUDIT-}
+MODEL_AUDIT=${SPRINTMD_MODEL_AUDIT-}
+MODEL_DRIFT=${SPRINTMD_MODEL_DRIFT-}
+BUDGET_WORK=${SPRINTMD_BUDGET_WORK:-5.00}
+BUDGET_AUDIT=${SPRINTMD_BUDGET_AUDIT:-3.00}
+AUDIT_MAX_PASSES=${SPRINTMD_AUDIT_MAX_PASSES:-2}
 CONF
         )
         mv "docs/sprintmd/config.sh" "docs/sprintmd/config.sh.bak"
@@ -677,14 +676,14 @@ msg_header "Creating directory structure..."
 # Task pipeline
 ensure_task_folders
 
-# Epics — a relational grouping over tasks (docs/epics/N-name.md lists task
+# Plans — a relational grouping over tasks (docs/plans/N-name.md lists task
 # IDs). A sibling of docs/tasks/, NOT a lifecycle stage. Created empty here; the
-# .TEMPLATE-epic.md lands via the src/ walk below.
-safe_mkdir "docs/epics"
+# .TEMPLATE-plan.md lands via the src/ walk below.
+safe_mkdir "docs/plans"
 
 # Other directories
 safe_mkdir "docs/ideas"
-safe_mkdir "docs/bugs/archived"
+safe_mkdir "docs/bugs"
 safe_mkdir "docs/designs"
 safe_mkdir "docs/examples"
 safe_mkdir "docs/data"
@@ -726,7 +725,7 @@ Fields:
 - \`sprint_VERSION\`   — installed file-structure version; \`setup.sh\` reads this on upgrade to decide which migrations to run
 - \`sprint_TASK_ID\`   — highest task ID used; next task = this + 1
 - \`sprint_BUG_ID\`    — highest bug ID used; next bug = this + 1
-- \`sprint_EPIC_ID\`   — highest epic ID used; next epic = this + 1
+- \`sprint_PLAN_ID\`   — highest plan ID used; next plan = this + 1
 - \`Last Updated\`   — ISO date; bump when you change a field
 
 ---
@@ -735,7 +734,7 @@ Fields:
 **sprint_VERSION**: $CURRENT_VERSION
 **sprint_TASK_ID**: 0
 **sprint_BUG_ID**: 0
-**sprint_EPIC_ID**: 0
+**sprint_PLAN_ID**: 0
 STATE_EOF
     then
         msg_step "Created docs/sprintmd/DOC_STATE.md"
@@ -746,12 +745,16 @@ else
     # Reconcile DOC_STATE.md - preserve user data, update version
     EXISTING_TASK_ID=$(grep '^\*\*sprint_TASK_ID\*\*:' docs/sprintmd/DOC_STATE.md 2>/dev/null | sed 's/.*:[[:space:]]*//' | grep -o '^[0-9]*' | head -1)
     EXISTING_BUG_ID=$(grep '^\*\*sprint_BUG_ID\*\*:' docs/sprintmd/DOC_STATE.md 2>/dev/null | sed 's/.*:[[:space:]]*//' | grep -o '^[0-9]*' | head -1)
-    EXISTING_EPIC_ID=$(grep '^\*\*sprint_EPIC_ID\*\*:' docs/sprintmd/DOC_STATE.md 2>/dev/null | sed 's/.*:[[:space:]]*//' | grep -o '^[0-9]*' | head -1)
+    # Prefer sprint_PLAN_ID; fall back to legacy sprint_EPIC_ID after epic→plan rebrand.
+    EXISTING_PLAN_ID=$(grep '^\*\*sprint_PLAN_ID\*\*:' docs/sprintmd/DOC_STATE.md 2>/dev/null | sed 's/.*:[[:space:]]*//' | grep -o '^[0-9]*' | head -1)
+    if [ -z "$EXISTING_PLAN_ID" ]; then
+        EXISTING_PLAN_ID=$(grep '^\*\*sprint_EPIC_ID\*\*:' docs/sprintmd/DOC_STATE.md 2>/dev/null | sed 's/.*:[[:space:]]*//' | grep -o '^[0-9]*' | head -1)
+    fi
 
     # Validate and set defaults
     [[ "$EXISTING_TASK_ID" =~ ^[0-9]+$ ]] || EXISTING_TASK_ID=0
     [[ "$EXISTING_BUG_ID" =~ ^[0-9]+$ ]] || EXISTING_BUG_ID=0
-    [[ "$EXISTING_EPIC_ID" =~ ^[0-9]+$ ]] || EXISTING_EPIC_ID=0
+    [[ "$EXISTING_PLAN_ID" =~ ^[0-9]+$ ]] || EXISTING_PLAN_ID=0
 
     if cat > docs/sprintmd/DOC_STATE.md << STATE_EOF
 # sprint.md Documentation State
@@ -764,7 +767,7 @@ Fields:
 - \`sprint_VERSION\`   — installed file-structure version; \`setup.sh\` reads this on upgrade to decide which migrations to run
 - \`sprint_TASK_ID\`   — highest task ID used; next task = this + 1
 - \`sprint_BUG_ID\`    — highest bug ID used; next bug = this + 1
-- \`sprint_EPIC_ID\`   — highest epic ID used; next epic = this + 1
+- \`sprint_PLAN_ID\`   — highest plan ID used; next plan = this + 1
 - \`Last Updated\`   — ISO date; bump when you change a field
 
 ---
@@ -773,10 +776,10 @@ Fields:
 **sprint_VERSION**: $CURRENT_VERSION
 **sprint_TASK_ID**: $EXISTING_TASK_ID
 **sprint_BUG_ID**: $EXISTING_BUG_ID
-**sprint_EPIC_ID**: $EXISTING_EPIC_ID
+**sprint_PLAN_ID**: $EXISTING_PLAN_ID
 STATE_EOF
     then
-        msg_step "Updated docs/sprintmd/DOC_STATE.md (preserved IDs: task=$EXISTING_TASK_ID, bug=$EXISTING_BUG_ID, epic=$EXISTING_EPIC_ID)"
+        msg_step "Updated docs/sprintmd/DOC_STATE.md (preserved IDs: task=$EXISTING_TASK_ID, bug=$EXISTING_BUG_ID, plan=$EXISTING_PLAN_ID)"
     else
         msg_error "Failed to update docs/sprintmd/DOC_STATE.md"
     fi
@@ -1083,7 +1086,7 @@ fi
 # Uses a FIFO on fd 3 for find output so stdin stays available for interactive
 # prompts inside setup_ai_file. (A plain pipe would steal stdin.)
 PENDING_PREPEND=()
-SRC_DIR="$FIVEDAY_SOURCE_DIR/src"
+SRC_DIR="$SPRINTMD_SOURCE_DIR/src"
 _find_fifo="$(mktemp -d)/find_fifo"
 mkfifo "$_find_fifo"
 find "$SRC_DIR" -type f -print0 > "$_find_fifo" &
@@ -1112,7 +1115,7 @@ while IFS= read -r -d '' src_file <&3; do
     if _in_list "$rel_path" "${USER_TERRITORY[@]}"; then
         if [ -f "$rel_path" ]; then
             if [ "$rel_path" = "docs/sprintmd/config" ]; then
-                if merge_config "$FIVEDAY_SOURCE_DIR/src/docs/sprintmd/config" "docs/sprintmd/config"; then
+                if merge_config "$SPRINTMD_SOURCE_DIR/src/docs/sprintmd/config" "docs/sprintmd/config"; then
                     msg_success "Updated docs/sprintmd/config (added new configuration options)"
                 else
                     msg_step "Preserved docs/sprintmd/config (up to date)"
@@ -1127,7 +1130,7 @@ while IFS= read -r -d '' src_file <&3; do
     # Standard copy
     safe_mkdir "$(dirname "$rel_path")"
     if safe_copy "$src_file" "$rel_path" "$rel_path"; then
-        if [[ "$rel_path" == *.sh ]]; then
+        if [[ "$rel_path" == *.sh || "$rel_path" == *.py ]]; then
             chmod +x "$rel_path" 2>/dev/null || msg_warning "Could not make $rel_path executable"
         fi
         ((FILES_COPIED++))
@@ -1242,7 +1245,7 @@ fi
 msg_header "Checking .gitignore..."
 
 # Load gitignore content from template or use inline fallback
-GITIGNORE_TEMPLATE="$FIVEDAY_SOURCE_DIR/src/.gitignore.template"
+GITIGNORE_TEMPLATE="$SPRINTMD_SOURCE_DIR/src/.gitignore.template"
 if [ -f "$GITIGNORE_TEMPLATE" ]; then
     GITIGNORE_CONTENT=$(cat "$GITIGNORE_TEMPLATE")
 else
@@ -1470,7 +1473,7 @@ msg_header "AI CLI configuration..."
 
 CONFIG_FILE="docs/sprintmd/config"
 
-# Source lib.sh if available (provides fiveday_cfg / fiveday_cfg_set)
+# Source lib.sh if available (provides sprintmd_cfg / sprintmd_cfg_set)
 _LIB_FILE="docs/sprintmd/lib.sh"
 if [ -f "$_LIB_FILE" ]; then
     # shellcheck source=/dev/null
@@ -1480,8 +1483,8 @@ fi
 # Detect current CLI on upgrade
 CURRENT_CLI=""
 if $UPDATE_MODE && [ -f "$CONFIG_FILE" ]; then
-    if declare -F fiveday_cfg >/dev/null 2>&1; then
-        CURRENT_CLI=$(fiveday_cfg CLI)
+    if declare -F sprintmd_cfg >/dev/null 2>&1; then
+        CURRENT_CLI=$(sprintmd_cfg CLI)
     else
         CURRENT_CLI=$(awk -F= '/^CLI=/ { print $2 }' "$CONFIG_FILE" | tail -1)
     fi
@@ -1537,7 +1540,7 @@ case "$CLI_CHOICE" in
 esac
 
 # Derive the capability tier from the chosen CLI binary. This mirrors the
-# inference in lib.sh:fiveday_ai_tier exactly, so config and library agree.
+# inference in lib.sh:sprintmd_ai_tier exactly, so config and library agree.
 case "$SELECTED_CLI" in
     claude)              SELECTED_PROVIDER="claude-code" ;;
     cursor-agent|cursor) SELECTED_PROVIDER="cursor"      ;;
@@ -1547,9 +1550,9 @@ esac
 
 # Write CLI and provider tier into the config file
 if [ -f "$CONFIG_FILE" ]; then
-    if declare -F fiveday_cfg_set >/dev/null 2>&1; then
-        fiveday_cfg_set CLI "$SELECTED_CLI"
-        fiveday_cfg_set PROVIDER "$SELECTED_PROVIDER"
+    if declare -F sprintmd_cfg_set >/dev/null 2>&1; then
+        sprintmd_cfg_set CLI "$SELECTED_CLI"
+        sprintmd_cfg_set PROVIDER "$SELECTED_PROVIDER"
     else
         for _kv in "CLI=${SELECTED_CLI}" "PROVIDER=${SELECTED_PROVIDER}"; do
             _k="${_kv%%=*}"

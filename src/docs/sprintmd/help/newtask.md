@@ -9,5 +9,5 @@ Pass an optional feature name as the second argument to set the task's
 
 Tasks get an auto-assigned ID and are built from a battle-tested
 template. The file is created ready to edit — fill in the problem and
-success criteria yourself, or run `./sprint.sh talk <id>` to develop the
+success criteria yourself, or run `./sprint.sh chat <id>` to develop the
 scope, criteria, and dependencies conversationally.

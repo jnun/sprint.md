@@ -1,27 +1,28 @@
-Continuous task runner — executes tasks from next/ in a resilient loop.
+Continuous task runner — **autopilot spine**: plan start refill + work drain.
 
-Wraps tasks to run one task at a time, each in a fresh CLI context.
+Wraps `work` to run one task at a time, each in a fresh CLI context.
 Failures don't halt the run — blocked tasks are skipped and the loop
 continues to the next task.
 
 Usage:
-  ./sprint.sh loop                       # drain next/
+  ./sprint.sh loop                       # drain next/ via work
   ./sprint.sh loop --hours 2             # stop after 2 hours
   ./sprint.sh loop --max 10              # stop after 10 tasks
   ./sprint.sh loop --cooldown 30         # 30s pause between tasks
-  ./sprint.sh loop --refill              # auto-sprint when next/ empties
-  ./sprint.sh loop --refill 3            # refill with 3 tasks at a time
+  ./sprint.sh loop --refill              # plan start next READY plan, then work, when next/ empties
   ./sprint.sh loop --retry               # retry newly-blocked tasks once
   ./sprint.sh loop --refill --retry      # full autopilot
 
-Other flags (--audit, --drift, --fast, etc.) are forwarded to tasks.
+Other flags (--audit, --drift, --fast, etc.) are forwarded to work.
 
-How it improves on tasks:
+How it improves on a single `work` pass:
   - Fresh context window per task (no context pollution)
   - Failures don't stop the run
   - Recovers orphaned tasks from doing/ (interrupted runs)
   - Smart retry: re-queues tasks blocked during THIS run (once)
-  - Auto-refill: plan + define from backlog when queue empties
+  - Auto-refill: plan start on the next READY plan, then work (no auto-planner) —
+    plan start gates members as it promotes them, so no separate gate step on the spine
+  - Active plan goal exported as SPRINTMD_ACTIVE_PLAN_GOAL for run context
   - Time-boxed execution with --hours
   - Cooldown between tasks to pace API usage
 

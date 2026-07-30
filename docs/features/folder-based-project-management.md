@@ -27,7 +27,7 @@ Folder names and feature statuses use identical terminology for consistency:
 ## Git-Based History
 **Status**: DONE
 All task movements are tracked through git commits:
-- `git mv` preserves complete task history
+- Always move with `git mv SRC DEST || mv SRC DEST` — git mv first (history when tracked); plain mv finishes when the file is new/uncommitted
 - Changes are atomic and reversible
 - Audit trail maintained automatically
 

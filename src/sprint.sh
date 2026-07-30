@@ -1,4 +1,13 @@
 #!/usr/bin/env bash
+# Guard: requires bash (arrays, [[ ]], BASH_SOURCE, etc.).
+# Running with sh/dash/zsh produces cryptic failures; refuse early.
+# Place before set -u so an unset BASH_VERSION cannot trip nounset.
+if [ -z "${BASH_VERSION:-}" ]; then
+    echo "Error: sprint.sh must be run with bash, not sh/zsh." >&2
+    echo "Run it as:  ./sprint.sh  or  bash sprint.sh" >&2
+    exit 1
+fi
+
 set -euo pipefail
 
 # sprint.md CLI
@@ -84,23 +93,26 @@ show_help() {
     echo ""
     echo "Usage: ./sprint.sh <command> [options]"
     echo ""
-    echo -e "${BLUE}Commands:${NC}"
+    echo -e "${BLUE}Create:${NC}"
     print_command_group create
     echo ""
-    echo -e "${BLUE}Sprint pipeline:${NC}  (a sprint = the tasks currently in docs/tasks/next/)"
-    print_command_group pipeline
+    echo -e "${BLUE}Chat:${NC}  (human in the loop)"
+    print_command_group chat
     echo ""
-    echo -e "${BLUE}Workflow:${NC}"
-    print_command_group workflow
+    echo -e "${BLUE}Plan:${NC}  (compose the sprint — next/ IS the sprint)"
+    print_command_group plan
     echo ""
-    echo -e "${BLUE}Sync:${NC}"
-    print_command_group sync
+    echo -e "${BLUE}Work:${NC}  (autonomous transform — spine: plan start → work)"
+    print_command_group work
     echo ""
-    echo -e "${BLUE}Maintenance:${NC}"
-    print_command_group maint
+    echo -e "${BLUE}Look:${NC}  (read-only)"
+    print_command_group look
+    echo ""
+    echo -e "${BLUE}Keep:${NC}  (housekeeping)"
+    print_command_group keep
     echo ""
     echo "  help                             Show this message"
-    echo "  help <command>                   Show details for a command (e.g. help tasks)"
+    echo "  help <command>                   Show details for a command (e.g. help work)"
     echo ""
 }
 
@@ -131,9 +143,9 @@ cmd_newfeature() {
     run_script "create-feature.sh" "$@"
 }
 
-cmd_newepic() {
-    [ -z "${1:-}" ] && { echo -e "${RED}ERROR: Epic name required${NC}"; echo "Usage: ./sprint.sh newepic \"<name>\" [task-id ...]"; exit 1; }
-    run_script "create-epic.sh" "$@"
+cmd_newplan() {
+    [ -z "${1:-}" ] && { echo -e "${RED}ERROR: Plan name required${NC}"; echo "Usage: ./sprint.sh newplan \"<name>\" [task-id ...]"; exit 1; }
+    run_script "create-plan.sh" "$@"
 }
 
 cmd_status() {
@@ -192,7 +204,7 @@ cmd_status() {
         echo "  Done:     $(grep -l "Status:.*DONE" "$root"/docs/features/*.md 2>/dev/null | wc -l | tr -d ' ')"
     fi
 
-    status_epics "$root"
+    status_plans "$root"
 }
 
 # Resolve a member task ID to its current lifecycle folder name, or "" if no
@@ -207,13 +219,13 @@ _task_folder() {
     return 1
 }
 
-# Roll up docs/epics/*.md as GROUPINGS, never as tasks: for each epic file,
+# Roll up docs/plans/*.md as GROUPINGS, never as tasks: for each plan file,
 # resolve its "- #ID" member lines to their current folders and report progress
-# (review+done counted complete). The epic file is a relational index — it is
+# (review+done counted complete). The plan file is a relational index — it is
 # listed here and never added to the task tallies above.
-status_epics() {
+status_plans() {
     local root="$1"
-    local sdir="$root/docs/epics"
+    local sdir="$root/docs/plans"
     [ -d "$sdir" ] || return 0
 
     local printed=0 sf
@@ -223,12 +235,12 @@ status_epics() {
 
         if [ "$printed" -eq 0 ]; then
             echo ""
-            echo -e "${BLUE}Epics:${NC}  (relational groupings — not a lifecycle stage)"
+            echo -e "${BLUE}Plans:${NC}  (relational groupings — not a lifecycle stage)"
             printed=1
         fi
 
         local title id folder total=0 done=0 ids
-        title="$(grep -m1 '^# ' "$sf" | sed 's/^# *//; s/^Epic [0-9]*: *//')"
+        title="$(grep -m1 '^# ' "$sf" | sed 's/^# *//; s/^Plan [0-9]*: *//')"
         echo -e "  ${CYAN}$(basename "$sf" .md)${NC}  ${title}"
 
         ids=$(grep -oE '^- (\[[ xX]\] )?#[0-9]+' "$sf" 2>/dev/null | grep -oE '[0-9]+')
@@ -269,30 +281,27 @@ cmd_profile() {
     run_script "profile.sh" "$@"
 }
 
-# With a task id: talk that one task through (talk.sh). With NO id: walk the
-# whole sprint — talk.sh routes the empty arg to the sprint walkthrough. An empty
+# With a task id: chat that one task through (chat.sh). With NO id: walk the
+# whole sprint — chat.sh routes the empty arg to the sprint walkthrough. An empty
 # arg is valid here, so there is no required-arg guard.
-cmd_talk() {
-    run_script "talk.sh" "$@"
+cmd_chat() {
+    run_script "chat.sh" "$@"
 }
 
+# plan is a namespace for decisive plan verbs (think, start). Authoring is
+# chat plan. plan.sh dispatches subcommands; the old auto-planner is retired.
 cmd_plan() {
     run_script "plan.sh" "$@"
 }
 
-# Deprecated: the Plan step is now `plan` (the CLI's own name made `sprint` stutter).
-# Thin shim keeps muscle memory working — warns, then forwards to cmd_plan.
-cmd_sprint() {
-    echo -e "${YELLOW}sprint is now plan — running plan${NC}"
-    cmd_plan "$@"
+# gate: standalone READY-gate / folder quality report (off-spine).
+cmd_gate() {
+    run_script "gate.sh" "$@"
 }
 
-cmd_define() {
-    run_script "define.sh" "$@"
-}
-
-cmd_tasks() {
-    run_script "tasks.sh" "$@"
+# work: execute the READY queue.
+cmd_work() {
+    run_script "work.sh" "$@"
 }
 
 cmd_loop() {
@@ -304,35 +313,9 @@ cmd_split() {
     run_script "split.sh" "$@"
 }
 
-cmd_review_sprint() {
-    run_script "review-sprint.sh" "$@"
-}
-
-# Deprecated: triage folded into talk. `talk <folder>` (blocked/next/backlog) is
-# the per-folder sweep; bare `talk` walks the whole sprint. This shim forwards to
-# the no-arg sprint walk so muscle memory survives. triage's old numeric [limit]
-# arg is GUARDED — never forwarded, or bare `talk N` would read it as a task id.
-cmd_triage() {
-    echo -e "${YELLOW}triage is now part of talk — running the sprint walk. Use 'talk <folder>' (blocked/next/backlog) to sweep one folder, or 'talk <id>' for one task.${NC}"
-    cmd_talk
-}
-
-cmd_audit() {
-    run_script "audit-tasks.sh" "$@"
-}
-
-cmd_audit_deps() {
-    run_script "audit-deps.sh" "$@"
-}
-
-cmd_review_code() {
-    [ -z "${1:-}" ] && { echo -e "${RED}ERROR: File path(s) required${NC}"; echo "Usage: ./sprint.sh review-code <task.md> [max-passes]"; echo "       ./sprint.sh review-code <file1> <file2> ... [-- max-passes]"; exit 1; }
-    run_script "audit-code.sh" "$@"
-}
-
-cmd_excellence() {
-    [ -z "${1:-}" ] && { echo -e "${RED}ERROR: File path(s) required${NC}"; echo "Usage: ./sprint.sh excellence <task.md>"; echo "       ./sprint.sh excellence <file1> <file2> ..."; exit 1; }
-    run_script "audit-excellence.sh" "$@"
+# deps: dependency scan (keep family).
+cmd_deps() {
+    run_script "deps.sh" "$@"
 }
 
 cmd_polish() {
@@ -351,15 +334,17 @@ cmd_sync() {
     run_script "sync.sh" "$@"
 }
 
-cmd_checkfeatures() {
+# align: feature↔task alignment (impl file may stay check-alignment.sh).
+cmd_align() {
     run_script "check-alignment.sh"
 }
 
-cmd_ai_context() {
-    run_script "ai-context.sh"
+# context: AI context summary.
+cmd_context() {
+    run_script "context.sh"
 }
 
-# Intercept --help/-h on any command: ./sprint.sh tasks --help → help tasks
+# Intercept --help/-h on any command: ./sprint.sh work --help → help work
 CMD="${1:-}"
 if [ -n "$CMD" ] && [ "$CMD" != "help" ] && [ "$CMD" != "--help" ] && [ "$CMD" != "-h" ]; then
     for arg in "$@"; do
@@ -375,32 +360,25 @@ case "$CMD" in
     newidea)       shift; cmd_newidea "$@" ;;
     newtask)       shift; cmd_newtask "$@" ;;
     newfeature)    shift; cmd_newfeature "$@" ;;
-    newepic)       shift; cmd_newepic "$@" ;;
+    newplan)       shift; cmd_newplan "$@" ;;
     newbug)        shift; cmd_newbug "$@" ;;
     newtest)       shift; cmd_newtest "$@" ;;
     status)        cmd_status ;;
     profile)       shift; cmd_profile "$@" ;;
     search)        shift; cmd_search "$@" ;;
-    find)          echo -e "${YELLOW}find has been retired — use 'talk <id>' to refine a task or 'tasks' to execute the sprint.${NC}" ;;
+    chat)          shift; cmd_chat "$@" ;;
     plan)          shift; cmd_plan "$@" ;;
-    talk)          shift; cmd_talk "$@" ;;
-    sprint)        shift; cmd_sprint "$@" ;;
-    define)        shift; cmd_define "$@" ;;
-    tasks)         shift; cmd_tasks "$@" ;;
+    gate)          shift; cmd_gate "$@" ;;
+    work)          shift; cmd_work "$@" ;;
     loop)          shift; cmd_loop "$@" ;;
     split)         shift; cmd_split "$@" ;;
-    review-sprint) shift; cmd_review_sprint "$@" ;;
-    triage)        shift; cmd_triage "$@" ;;
-    audit)         shift; cmd_audit "$@" ;;
-    audit-deps)    shift; cmd_audit_deps "$@" ;;
-    review-code)   shift; cmd_review_code "$@" ;;
-    excellence)    shift; cmd_excellence "$@" ;;
+    deps)          shift; cmd_deps "$@" ;;
     polish)        shift; cmd_polish "$@" ;;
     sync)          shift; cmd_sync "$@" ;;
     validate)      shift; cmd_validate "$@" ;;
     cleanup)       shift; cmd_cleanup "$@" ;;
-    checkfeatures) cmd_checkfeatures ;;
-    ai-context)    cmd_ai_context ;;
+    align)         cmd_align ;;
+    context)       cmd_context ;;
     help|--help|-h) shift; if [ -n "${1:-}" ]; then show_command_help "$1"; else show_help; fi ;;
     "") show_help ;;
     *)

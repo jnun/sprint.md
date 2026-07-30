@@ -21,9 +21,9 @@ HELP_DIR="$PROJECT_ROOT/docs/sprintmd/help"
 MANUAL="$PROJECT_ROOT/DOCUMENTATION.md"
 
 # Commands that intentionally live in dispatch but are NOT catalogued —
-# deprecated shims and the help command itself. Keep this list tiny; every
-# entry is a command deliberately hidden from the registry.
-HIDDEN=" sprint find triage help "
+# only the help command itself. Keep this list tiny; every entry is a
+# command deliberately hidden from the registry.
+HIDDEN=" help "
 
 for f in "$REGISTRY" "$DISPATCH" "$MANUAL"; do
     [ -f "$f" ] || { echo -e "${RED}✗ Missing: $f${NC}"; exit 1; }
@@ -38,9 +38,8 @@ echo ""
 REG_CMDS=$(grep -vE '^[[:space:]]*#' "$REGISTRY" | grep -E '\|' \
     | cut -d'|' -f1 | tr -d ' \t' | grep -E '.' | sort -u)
 
-# Dispatch: case arms that route to a cmd_* function (find/help/*/"" have no
-# cmd_ call and are skipped; deprecated cmd_sprint is caught, then filtered by
-# the HIDDEN list below).
+# Dispatch: case arms that route to a cmd_* function (help/*/"" have no
+# cmd_ call and are skipped; HIDDEN filters intentional non-registry entries).
 DISPATCH_CMDS=$(awk '/^[[:space:]]*[a-z][a-z-]*\)[[:space:]]/ && /cmd_/ {
         sub(/\).*/, "", $1); gsub(/[[:space:]]/, "", $1); print $1
     }' "$DISPATCH" | sort -u)
@@ -94,6 +93,27 @@ if [ -n "$_missing" ]; then
     fail=1
     echo -e "${RED}✗ Registered but absent from DOCUMENTATION.md §Commands:${NC}"
     for c in $_missing; do echo "    $c   — add a line to the Commands block in $MANUAL"; done
+    echo ""
+fi
+
+# ── Check 5: every registry group is one of the six families ─────────
+#            (guards the "no parallel taxonomy" rule — the matrix demands
+#            create · chat · plan · work · look · keep and nothing else).
+ALLOWED_GROUPS=" create chat plan work look keep "
+_badgroups=""
+while IFS='|' read -r _c _g _rest; do
+    _c="${_c//[[:space:]]/}"
+    case "$_c" in ''|'#'*) continue ;; esac
+    _g="${_g//[[:space:]]/}"
+    case "$ALLOWED_GROUPS" in
+        *" $_g "*) ;;
+        *) _badgroups="$_badgroups ${_c}:${_g}" ;;
+    esac
+done < "$REGISTRY"
+if [ -n "$_badgroups" ]; then
+    fail=1
+    echo -e "${RED}✗ Registry rows with a group outside create|chat|plan|work|look|keep:${NC}"
+    for bg in $_badgroups; do echo "    $bg   — use one of the six family groups"; done
     echo ""
 fi
 

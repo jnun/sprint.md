@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# check-alignment.sh — Feature/task alignment. See: ./sprint.sh help checkfeatures
+# check-alignment.sh — Feature/task alignment. See: ./sprint.sh help align
 
 set -euo pipefail
 
@@ -86,7 +86,7 @@ for feature_file in docs/features/*.md; do
     task_found=0
 
     # Search for tasks that reference this feature
-    for stage in "${FIVEDAY_STAGES[@]}"; do
+    for stage in "${SPRINTMD_STAGES[@]}"; do
         task_dir="docs/tasks/$stage"
         if [ -d "$task_dir" ]; then
             for task_file in "$task_dir"/*.md; do
@@ -117,7 +117,7 @@ done
 echo -e "${CYAN}${BOLD}Checking for Broken Feature References:${NC}\n"
 
 broken_found=0
-for stage in "${FIVEDAY_STAGES[@]}"; do
+for stage in "${SPRINTMD_STAGES[@]}"; do
     task_dir="docs/tasks/$stage"
     if [ -d "$task_dir" ]; then
         for task_file in "$task_dir"/*.md; do

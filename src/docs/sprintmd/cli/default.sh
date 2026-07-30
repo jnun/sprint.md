@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # docs/sprintmd/cli/default.sh — Bare-minimum CLI profile for sprint.md
 #
-# Fallback profile used when FIVEDAY_CLI is set to an unsupported provider
+# Fallback profile used when SPRINTMD_CLI is set to an unsupported provider
 # or when no provider-specific profile exists.  Passes only the prompt via
 # -p and any extra arguments.  All richer flags (model, tools, budget, turn
 # and output-format caps) are dropped — but no longer silently: the first
@@ -10,7 +10,7 @@
 #
 # Sourced automatically by config.sh when no matching profile is found.
 
-fiveday_provider_exec() {
+sprintmd_provider_exec() {
   local prompt=""
   local -a extra_args=()
   local -a dropped=()
@@ -34,15 +34,15 @@ fiveday_provider_exec() {
   done
 
   # Warn once per session, only when a dropped flag actually carried a value.
-  if [ ${#dropped[@]} -gt 0 ] && [ -z "${_FIVEDAY_DROP_WARNED:-}" ]; then
+  if [ ${#dropped[@]} -gt 0 ] && [ -z "${_SPRINTMD_DROP_WARNED:-}" ]; then
     local list
     list=$(printf '%s, ' "${dropped[@]}"); list="${list%, }"
     printf 'sprint.md: %s has no profile — %s unsupported, running without them.\n' \
-      "$FIVEDAY_CLI" "$list" >&2
-    _FIVEDAY_DROP_WARNED=1
+      "$SPRINTMD_CLI" "$list" >&2
+    _SPRINTMD_DROP_WARNED=1
   fi
 
-  local -a cmd=("$FIVEDAY_CLI")
+  local -a cmd=("$SPRINTMD_CLI")
   [ -n "$prompt" ] && cmd+=(-p "$prompt")
 
   if [ ${#extra_args[@]} -gt 0 ]; then
@@ -52,8 +52,8 @@ fiveday_provider_exec() {
   "${cmd[@]}"
 }
 
-# No fiveday_provider_interactive here on purpose: a generic CLI can't be
+# No sprintmd_provider_interactive here on purpose: a generic CLI can't be
 # trusted to host a live REPL, so this profile does not set
-# FIVEDAY_PROVIDER_INTERACTIVE. fiveday_interactive_ok then returns false and
-# fiveday_run_interactive routes talk to the one-shot fiveday_provider_exec
-# above — while talk.sh points the user at the guide for the full experience.
+# SPRINTMD_PROVIDER_INTERACTIVE. sprintmd_interactive_ok then returns false and
+# sprintmd_run_interactive routes chat to the one-shot sprintmd_provider_exec
+# above — while chat.sh points the user at the guide for the full experience.

@@ -6,6 +6,24 @@
 
 Work flows **Feature → Task → Audit**: a task usually builds toward a feature, and it will later be audited against the problem and success criteria you write here. Write both so a future auditor can judge "done" without asking you.
 
+## Instruct positively
+
+**State the desired path as the rule.** Success criteria and notes say what
+should be true when the work is done — not a checklist of things to avoid.
+
+- Prefer: "User can log in with email and password"
+- Prefer: "Always edit `docs/`, then commit"
+- A lone, concrete "never" is fine when it anchors a genuine invariant
+  ("Never create task files by hand — run `./sprint.sh newtask`") where
+  the wrong action is costly.
+- Do **not** write prohibition-shaped rule *lists* ("Don't X. Don't Y. Avoid
+  Z."). Those hand the implementer (and any agent) a map of forbidden
+  behavior and no map of the work — under ambiguity they fall into exactly
+  what was described.
+
+Check before saving: success criteria state the desired path. If a criterion
+is phrased only as "don't do X", rewrite it as the positive outcome.
+
 ## Where Content Belongs
 
 | Content Type | Location |
@@ -16,6 +34,20 @@ Work flows **Feature → Task → Audit**: a task usually builds toward a featur
 | System specifications | `docs/features/` |
 
 The task links out to these — it does not inline them. The task says WHAT; guides, examples, and features say HOW.
+
+## Moving tasks (lifecycle)
+
+Folder location **is** status. When you move a task between `backlog/`,
+`next/`, `doing/`, `blocked/`, `review/`, and `done/`, always run:
+
+```bash
+git mv SRC DEST || mv SRC DEST
+```
+
+`git mv` first (preserves history when tracked). When it fails — usual for
+new tasks not yet committed — finish that same move with plain `mv`, then
+continue. Leave commits to the developer unless they asked you to commit.
+Full table: `DOCUMENTATION.md` → Moving Tasks.
 
 ## The Q&A Process
 
@@ -80,7 +112,7 @@ Write the problem as a short user story — who is affected, what they can't do 
 
 ### Success Criteria Section
 
-Write observable behaviors that anyone can verify. This is the yardstick the audit measures against, so make "done" unambiguous.
+Write observable behaviors that anyone can verify. This is the yardstick the audit measures against, so make "done" unambiguous. Phrase each criterion as the desired path (see **Instruct positively** above) — what a user can do or what the system does — not a list of things to avoid.
 
 Patterns that work:
 - "User can [do what]"
@@ -115,5 +147,6 @@ docs/features/task-automation.md — spec this serves
 
 1. Someone unfamiliar with the codebase can understand the problem
 2. Success criteria describe observable behaviors an auditor could check
-3. Header fields set what applies (Feature, Docs, Depends on, Blocks)
-4. References name existing files to reuse; technical HOW lives in `docs/guides/`, `docs/examples/`, or `docs/features/`, not inlined here
+3. Success criteria and notes state the desired path — no prohibition-shaped rule list
+4. Header fields set what applies (Feature, Docs, Depends on, Blocks)
+5. References name existing files to reuse; technical HOW lives in `docs/guides/`, `docs/examples/`, or `docs/features/`, not inlined here

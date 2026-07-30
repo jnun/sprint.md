@@ -42,6 +42,6 @@ The `docs/tasks/done/` folder marks sprint deliverables:
 ## Git-Based Planning
 **Status**: DONE
 All sprint planning tracked through git:
-- `git mv` for moving tasks between sprints
-- Complete history of sprint decisions
+- Lifecycle moves use `git mv SRC DEST || mv SRC DEST` (git mv first; plain mv finishes when untracked)
+- Complete history of sprint decisions when files are tracked
 - Reversible sprint planning changes

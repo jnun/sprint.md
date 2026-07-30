@@ -62,7 +62,7 @@ TEMPLATE_FILES=(
     "docs/features/.TEMPLATE-feature.md"
     "docs/ideas/.TEMPLATE-idea.md"
     "docs/tests/.TEMPLATE-test.md"
-    "docs/epics/.TEMPLATE-epic.md"
+    "docs/plans/.TEMPLATE-plan.md"
 )
 
 # Whole directory trees mirrored live -> distributable, "LIVE_DIR:SRC_DIR".
@@ -117,25 +117,27 @@ scan_legacy() {
     done
 }
 
-# find_orphan_frameworks — print any directory that looks like a framework home
-# (has lib.sh or a scripts/ dir) sitting alongside a mirror target but produced
-# by NO manifest entry. This is the class rsync --delete cannot catch: it prunes
-# INSIDE the target, never a renamed sibling like src/docs/5day left behind by a
-# docs/5day -> docs/sprintmd move. Name-agnostic, so it also guards future renames.
+# find_orphan_frameworks — print any src/ subtree sitting under a mirror target's
+# parent that has NO live docs/ counterpart by name. This is the class rsync
+# --delete cannot catch: it prunes INSIDE a target, never a renamed sibling like
+# src/docs/5day (left by a docs/5day -> docs/sprintmd move) or src/docs/epics
+# (left by a docs/epics -> docs/plans rename). The check is purely STRUCTURAL —
+# "src/docs/<name>/ with no docs/<name>/" — so it is brand-agnostic and catches
+# the whole class of "renamed live dir, stale src/ sibling," including
+# template-only dirs a lib.sh/scripts heuristic would miss.
 find_orphan_frameworks() {
-    local pair dist parent keep d name
+    local pair live dist src_parent live_parent d name
     for pair in "${TREE_MIRRORS[@]}"; do
-        dist="${pair#*:}"; parent="$(dirname "$dist")"; keep="$(basename "$dist")"
-        [ -d "$parent" ] || continue
-        for d in "$parent"/*/; do
+        live="${pair%%:*}"; dist="${pair#*:}"
+        src_parent="$(dirname "$dist")"; live_parent="$(dirname "$live")"
+        [ -d "$src_parent" ] || continue
+        for d in "$src_parent"/*/; do
             [ -d "$d" ] || continue
             d="${d%/}"; name="$(basename "$d")"
-            [ "$name" = "$keep" ] && continue
-            if [ -f "$d/lib.sh" ] || [ -d "$d/scripts" ]; then
-                echo "$d"
-            fi
+            [ -d "$live_parent/$name" ] && continue
+            echo "$d"
         done
-    done
+    done | sort -u
 }
 
 # ── Usage ────────────────────────────────────────────────────────────

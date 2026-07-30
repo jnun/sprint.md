@@ -64,22 +64,30 @@ Without a name, `newfeature` starts an interactive session that asks about users
 
 Tasks land in `docs/tasks/backlog/` with an auto-assigned ID, each built from a battle-tested template with prompts for success criteria, dependencies, and scope. Also: `./sprint.sh newbug "description"` and `./sprint.sh newidea "description"`.
 
+Bug reports live in `docs/bugs/` as a triage inbox. `./sprint.sh chat bugs` sorts them: **[w] work it** converts a report into a filled fix task and deletes the bug file; close/kill also remove the report. Prefer `newtask` when the fix is already clear work.
+
 ### 5. Work the board
 
 Move tasks through folders as you work. The folder a task is in *is* its status.
+Always: `git mv SRC DEST || mv SRC DEST` — try `git mv` first; when it fails
+(usual for new tasks not yet committed), finish with plain `mv` and continue.
 
 ```bash
 # Queue a task for your current sprint
-git mv docs/tasks/backlog/1-add-login-endpoint.md docs/tasks/next/
+git mv docs/tasks/backlog/1-add-login-endpoint.md docs/tasks/next/ \
+  || mv docs/tasks/backlog/1-add-login-endpoint.md docs/tasks/next/
 
 # Start working on it
-git mv docs/tasks/next/1-add-login-endpoint.md docs/tasks/doing/
+git mv docs/tasks/next/1-add-login-endpoint.md docs/tasks/doing/ \
+  || mv docs/tasks/next/1-add-login-endpoint.md docs/tasks/doing/
 
 # Finished — send to review
-git mv docs/tasks/doing/1-add-login-endpoint.md docs/tasks/review/
+git mv docs/tasks/doing/1-add-login-endpoint.md docs/tasks/review/ \
+  || mv docs/tasks/doing/1-add-login-endpoint.md docs/tasks/review/
 
 # Approved — done
-git mv docs/tasks/review/1-add-login-endpoint.md docs/tasks/done/
+git mv docs/tasks/review/1-add-login-endpoint.md docs/tasks/done/ \
+  || mv docs/tasks/review/1-add-login-endpoint.md docs/tasks/done/
 ```
 
 Check where things stand at any time:
@@ -96,37 +104,41 @@ For the full workflow reference — task format, feature specs, bug reports, and
 
 Once you have tasks in your backlog, AI can help plan, validate, and execute them.
 
+Happy path (spine): `chat → plan start → work → polish`. `loop` is that spine on autopilot; `gate` / `split` are off-spine. Help groups: **create · chat · plan · work · look · keep** (`./sprint.sh help`).
+
 ```bash
-# Plan a sprint — pick tasks from backlog into next/
-./sprint.sh plan 5
+# Author a plan, then commit its members into next/
+./sprint.sh newplan "Theme" 12 13
+./sprint.sh chat plan <id>       # author / mark READY
+./sprint.sh plan start <id>      # members → next/
 
 # Validate — catch done, underspecified, or blocked tasks before execution
-./sprint.sh define
+./sprint.sh gate
 
 # Execute — one fresh AI context per task
-./sprint.sh tasks
+./sprint.sh work
 ```
 
 ### Task runner
 
-`./sprint.sh tasks` runs everything in `next/`. Start with `--assist` to choose a mode interactively, or pick your own:
+`./sprint.sh work` runs everything in `next/`. Start with `--assist` to choose a mode interactively, or pick your own:
 
 ```bash
-./sprint.sh tasks --assist               # interactive mode picker
-./sprint.sh tasks --fast                 # 4 concurrent jobs
-./sprint.sh tasks --parallel --jobs N    # set concurrency explicitly
-./sprint.sh tasks --max                  # remove per-task turn/budget limits
-./sprint.sh tasks --audit                # code audit after each task
-./sprint.sh tasks --drift                # skip done tasks, fix stale ones
+./sprint.sh work --assist               # interactive mode picker
+./sprint.sh work --fast                 # 4 concurrent jobs
+./sprint.sh work --parallel --jobs N    # set concurrency explicitly
+./sprint.sh work --max                  # remove per-task turn/budget limits
+./sprint.sh work --audit                # code audit after each task
+./sprint.sh work --drift                # skip done tasks, fix stale ones
 ```
 
-To run against a different AI CLI, set `FIVEDAY_CLI` (or `CLI=` in `docs/sprintmd/config`) — `claude` is verified; any other binary falls back to a generic prompt passthrough:
+To run against a different AI CLI, set `SPRINTMD_CLI` (or `CLI=` in `docs/sprintmd/config`) — `claude` is verified; any other binary falls back to a generic prompt passthrough:
 
 ```bash
-FIVEDAY_CLI=codex ./sprint.sh tasks
+SPRINTMD_CLI=codex ./sprint.sh work
 ```
 
-Flags combine: `./sprint.sh tasks --max --audit --fast`
+Flags combine: `./sprint.sh work --max --audit --fast`
 
 ### Loop runner
 
@@ -141,13 +153,13 @@ Run tasks continuously with crash recovery. Each task gets a fresh context.
 ### Useful commands
 
 ```bash
-./sprint.sh triage [limit]               # walk through the task pipeline interactively
-./sprint.sh talk <task-id>               # define, refine, split, or stress-test a task (auto-detects state)
+./sprint.sh chat <task-id>               # define, refine, split, or stress-test a task (auto-detects state)
 ./sprint.sh split <path>                 # break a large task into subtasks
-./sprint.sh audit [folder] [limit]       # audit tasks for quality
-./sprint.sh review-code <file> [passes]  # code audit on changed files
-./sprint.sh review-sprint                # dual-persona sprint review
-./sprint.sh validate [--fix]             # validate task files against template
+./sprint.sh gate [folder] [limit]      # vet task quality (next/: READY-gate; other folders: report)
+./sprint.sh polish --code <file>         # code audit on changed files
+./sprint.sh polish <file>                # deep-judge finished work; file enhancements
+./sprint.sh plan think [id]              # dual-persona plan critique
+./sprint.sh validate [--fix]             # integrity-check task IDs and dependency refs
 ./sprint.sh sync [--all]                 # push task changes to GitHub
 ```
 

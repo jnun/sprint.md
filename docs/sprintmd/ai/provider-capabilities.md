@@ -1,6 +1,6 @@
 # AI provider capability matrix
 
-sprint.md speaks one provider-neutral interface (`fiveday_run` / the `cli/*.sh`
+sprint.md speaks one provider-neutral interface (`sprintmd_run` / the `cli/*.sh`
 profiles) but providers are not equal. This table is the single source of
 truth for what each tier can do, so scripts can exploit Claude Code's
 strengths and degrade honestly everywhere else instead of coding to a
@@ -8,9 +8,14 @@ lowest common denominator.
 
 Priority order — the tiers we invest in, most-used first: **Claude Code**,
 **Cursor**, **OpenAI**, then a **generic** catch-all for everything else.
+(A first-class **Grok Build** tier is designed in `docs/guides/grok-provider-tier.md`
+and tracked by plan 5; it is not in the matrix until it ships.)
+
+Design maps: Claude as-built → `docs/guides/claude-provider-tier.md`;
+Grok target → `docs/guides/grok-provider-tier.md`.
 
 The active tier is chosen at `setup.sh` time and stored as `PROVIDER=` in
-`docs/sprintmd/config`. Query it from any script with `fiveday_ai_tier`
+`docs/sprintmd/config`. Query it from any script with `sprintmd_ai_tier`
 (defined in `lib.sh`); it falls back to inferring the tier from the `CLI=`
 binary when `PROVIDER=` is unset.
 
@@ -34,9 +39,9 @@ Add a `cli/<binary>.sh` profile once the flags are verified against a real
 install — see the history note below.
 
 ² Emit-mode auto-detection keys on agent-session env vars in
-`lib.sh:fiveday_ai_mode` (`CLAUDECODE`, `CURSOR_TRACE_ID`, …). Claude Code
+`lib.sh:sprintmd_ai_mode` (`CLAUDECODE`, `CURSOR_TRACE_ID`, …). Claude Code
 and Cursor set these; the OpenAI/generic CLIs are detected only via the
-generic `AI_AGENT` / `FIVEDAY_IN_AGENT` fallbacks or an explicit `MODE=emit`.
+generic `AI_AGENT` / `SPRINTMD_IN_AGENT` fallbacks or an explicit `MODE=emit`.
 
 ³ No dedicated profile ships today. `openai.sh`, `gemini.sh`, and
 `mistral.sh` stubs were created by task 178 and deliberately removed in
@@ -46,7 +51,7 @@ resurrect them without verifying flags against a real install.
 ## What "tier" means for a script
 
 ```bash
-case "$(fiveday_ai_tier)" in
+case "$(sprintmd_ai_tier)" in
     claude-code)
         # Full orchestration: subagents, --tools restriction, --budget caps,
         # buffered/streamed JSON output for machine-readable audit logs.

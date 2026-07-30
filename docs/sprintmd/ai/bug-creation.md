@@ -4,6 +4,8 @@
 
 **Describe what's broken in plain English.** Focus on observable behavior — what happens vs. what should happen.
 
+Bugs are a **triage inbox**, not the work system. Real work lives as tasks after convert.
+
 ## Severity Levels
 
 | Level | Meaning |
@@ -39,6 +41,15 @@ Write observable behaviors that confirm the fix works:
 
 ## After Documenting
 
-1. Create a task to fix it (`./sprint.sh newtask "Fix: [bug description]"`)
-2. Reference this bug file in the task's Notes section
-3. Move this file to `docs/bugs/archived/` when fixed
+When the report is real work, **convert** it — do not keep a parallel bug file:
+
+1. Prefer `./sprint.sh chat bugs` → **[w] work it** — creates a fix task filled
+   from this report (Problem, steps, success criteria, origin in Notes) and
+   **deletes** the bug file.
+2. Or create the task yourself: `./sprint.sh newtask "Fix: [description]"` and
+   delete the bug when the hand-off is done.
+3. Close without a task ([a] in chat bugs) or kill ([k]) also **delete** the
+   report. Open `docs/bugs/` is for unhandled reports only.
+
+If the fix is already obvious, skip the inbox and file a task with `newtask`
+directly.

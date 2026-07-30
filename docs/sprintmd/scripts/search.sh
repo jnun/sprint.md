@@ -17,7 +17,7 @@ QUERY="$1"
 TASKS_DIR="$PROJECT_ROOT/docs/tasks"
 FOUND=0
 
-for stage in "${FIVEDAY_STAGES[@]}"; do
+for stage in "${SPRINTMD_STAGES[@]}"; do
     stage_dir="$TASKS_DIR/$stage"
     [ -d "$stage_dir" ] || continue
 

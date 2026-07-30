@@ -2,6 +2,29 @@
 
 Project management in markdown files. Folders and plain text.
 
+## Guiding principles
+
+Every design decision in this system passes through these lenses:
+
+1. **Lean into agent bias.** Shape work around what an AI agent does well —
+   read context, reason, converse, decide. Prefer commands and tasks that walk
+   with those strengths instead of fighting them.
+2. **Minimize context cost.** Every file, command, and help page costs context
+   when an agent loads it. Fewer, sharper commands beat many overlapping ones.
+   Pruning is a feature.
+3. **Name in common language.** Plain words that read the same to people and
+   agents (`task`, `chat`, `work`, `plan`, `polish`) beat jargon. Lifecycle
+   folders `backlog → next → doing → review` are the affordance. If a term
+   needs translating, pick a different term.
+4. **Instruct positively.** State the desired path as the rule
+   ("Always edit `docs/`, then commit"). Prohibition-shaped rule *lists* hand
+   the model a map of forbidden behavior and no map of the work — under
+   ambiguity it falls into exactly what was described. Reserve a plain
+   "never" for genuine invariants where the wrong action is costly.
+
+When principles conflict: **simple, clean, fast, common language, biased
+toward action.**
+
 ## Task documents
 
 Task files live in `docs/tasks/*/` and describe outcomes in plain language:
@@ -19,9 +42,9 @@ Task files live in `docs/tasks/*/` and describe outcomes in plain language:
 - `docs/ideas/` — rough ideas being refined
 - `docs/features/` — fully defined feature specs
 - `docs/tasks/` — your tasks
-- `docs/epics/` — your epics: named groupings that list task IDs (see below)
-- `docs/bugs/` — your bug reports (archive old ones in `docs/bugs/archived/`)
-- `docs/guides/` — your documentation
+- `docs/plans/` — your plans: named groupings that list task IDs (see below)
+- `docs/bugs/` — open bug reports (inbox only; convert or close deletes the file)
+- `docs/guides/` — your documentation. Style it per `docs/sprintmd/guides/doc-style.md`; run `docs/sprintmd/scripts/prettydoc.py <file>` to align tables
 - `docs/tests/` — your test plans
 - `docs/designs/` — design system, files, and references for the project
 - `docs/examples/` — code standards and worked examples to follow or mimic
@@ -37,7 +60,8 @@ This file governs `docs/`. Read it before modifying any task, bug, or feature.
 2. Tasks in `review/` and `done/` are completed work — old dates mean done, not abandoned
 3. Always read `docs/sprintmd/DOC_STATE.md` before creating tasks (get next ID)
 4. Use `./sprint.sh` commands when available — don't create task files manually
-5. Move tasks by changing folders — folder location = status
+5. Move tasks by changing folders — folder location = status.
+   Always: `git mv SRC DEST || mv SRC DEST` (see Moving Tasks)
 
 **Folder meanings:**
 | Folder | Status |
@@ -53,10 +77,10 @@ This file governs `docs/`. Read it before modifying any task, bug, or feature.
 - **Blocked = a definition failure.** The task can't be worked because *it itself* is unclear: open questions, fuzzy scope, an unresolved decision. Fix by defining, not by waiting. Lives in `blocked/`.
 - **Dependent = a sequencing fact.** The task is fully defined and workable; it just needs another task done first. A task waiting its turn behind another in the same plan is **not blocked** — it stays in `next/`, and the order is expressed by its `**Depends on**:` / `**Blocks**:` fields. A whole chain of dependent tasks has *zero* blocked tasks even when only one can start right now.
 
-**Epics vs. the folders above — don't conflate them either:**
+**Plans vs. the folders above — don't conflate them either:**
 - The six folders above are **lifecycle status**: a task lives in exactly one, and moving it *is* how status changes.
-- An **epic** (`docs/epics/N-name.md`) is a **relational index, not a status.** It is one file that names a clump of related tasks and lists their IDs. The member tasks are **never moved into it** — each stays in its own lifecycle folder and flows through `backlog → next → …` on its own. An epic has no status, is never a lifecycle stage, and is never counted or moved as a task. `docs/epics/` is a sibling of `docs/tasks/`, not a stage inside it.
-- Member IDs are references only: moving or working a member task needs no edit to the epic file. To "push an epic to `next/`", move its member tasks `backlog/ → next/`; the epic file itself never moves. Create one with `./sprint.sh newepic "<name>" [task-id ...]`; `./sprint.sh status` rolls up each epic by resolving its members' current folders.
+- A **plan** (`docs/plans/N-name.md`) is a **relational index, not a status.** It is one file that names a clump of related tasks and lists their IDs. The member tasks are **never moved into it** — each stays in its own lifecycle folder and flows through `backlog → next → …` on its own. A plan is never a lifecycle stage and is never counted or moved as a task; it carries a binary `**Status:** DRAFT → READY` for authoring readiness only. `docs/plans/` is a sibling of `docs/tasks/`, not a stage inside it.
+- Member IDs are references only: moving or working a member task needs no edit to the plan file. To commit a plan into the sprint, run `./sprint.sh plan start <id>` (or move its members `backlog/ → next/` with `git mv SRC DEST || mv SRC DEST`); the plan file itself never moves. Create one with `./sprint.sh newplan "<name>" [task-id ...]`; `./sprint.sh status` rolls up each plan by resolving its members' current folders.
 
 **Do not assume** old file dates mean abandoned. A task from months ago in `done/` is completed history.
 
@@ -79,9 +103,8 @@ docs/
 │   ├── blocked/        # Not fully defined (not merely waiting on another task)
 │   ├── review/         # Awaiting approval
 │   └── done/           # Complete
-├── epics/              # Named groupings that LIST task IDs (relational index, not a stage)
-├── bugs/               # Your bug reports
-│   └── archived/       # Retired bugs
+├── plans/              # Named groupings that LIST task IDs (relational index, not a stage)
+├── bugs/               # Open bug reports (inbox; handled reports are deleted)
 ├── guides/             # Your documentation
 ├── tests/              # Your test plans
 ├── designs/            # Design system, files, references
@@ -97,7 +120,7 @@ docs/
 | **Idea** | Rough concept, needs refinement | `./sprint.sh newidea "User notifications"` |
 | **Feature** | Defined capability to build | `./sprint.sh newfeature "User auth"` or `./sprint.sh newfeature` (AI Q&A) |
 | **Task** | Specific work item | `./sprint.sh newtask "Add login button"` |
-| **Epic** | Group related tasks under one goal | `./sprint.sh newepic "Checkout revamp" 12 13 14` |
+| **Plan** | Group related tasks under one goal | `./sprint.sh newplan "Checkout revamp" 12 13 14` |
 | **Bug** | Something broken | `./sprint.sh newbug "Login fails on mobile"` |
 | **Test** | Validate a deployed thing, then route what you learn into new work | `./sprint.sh newtest "Signup converts visitors"` |
 
@@ -105,10 +128,15 @@ Each command creates a file with inline guidance. Fill in the sections, then com
 
 ## Commands
 
+Happy path (spine): **`chat → plan start → work → polish`**. `loop` runs that spine on autopilot. `gate` and `split` are off-spine; `polish` is after work. The task *noun* (`docs/tasks/`, `newtask`) stays; the execute *verb* is `work`.
+
+Help groups: **create · chat · plan · work · look · keep**.
+
 > Tired of typing `./sprint.sh`? Add `alias sprint='./sprint.sh'` to your shell
 > rc to use `sprint <command>` from a project root. `setup.sh` offers this on
 > install; see `docs/sprintmd/guides/sprint_command.md` for details and a
-> subdirectory-aware variant.
+> subdirectory-aware variant. Run `./sprint.sh` or `bash sprint.sh` — do not
+> force `sh`/`zsh` on the script (any interactive shell is fine as the launcher).
 
 ```bash
 # Creating work
@@ -116,52 +144,74 @@ Each command creates a file with inline guidance. Fill in the sections, then com
 ./sprint.sh newfeature "Name"         # Create feature (quick)
 ./sprint.sh newfeature                # Create feature (AI Q&A)
 ./sprint.sh newtask "Description"     # Create task
-./sprint.sh newepic "Name" [ids]      # Create an epic — a named list of task IDs
+./sprint.sh newplan "Name" [ids]      # Create a plan — a named list of task IDs
 ./sprint.sh newbug "Description"      # Report a bug
 ./sprint.sh newtest "Name"            # Create a test loop to validate a deployed thing
-./sprint.sh status                    # View project status
-./sprint.sh checkfeatures             # Analyze feature alignment
-./sprint.sh ai-context                # Generate AI context summary
 
-# Workflow (AI-powered — runs in your AI agent session, or via any configured CLI)
-./sprint.sh profile                   # Create or update project profile
-./sprint.sh search <keyword>          # Search tasks by keyword
-./sprint.sh talk [target]             # id: define/refine/split a task · folder (blocked/next/backlog): sweep it · bugs: sweep inbox into fix tasks · nothing: walk the sprint's health
-./sprint.sh plan [count] [focus]      # Plan a sprint from backlog
-./sprint.sh define [limit]            # Review and refine tasks in next/ (stamps Status: READY)
-./sprint.sh tasks [limit] [--fast]    # Execute READY tasks from next/ (--force to skip the gate; --audit --excellence to chain quality audits)
-./sprint.sh loop [--refill] [--retry] # Autopilot — chain plan/define/execute, drain the queue
+# Create a plan (author intent — group related tasks under one goal)
+./sprint.sh newplan "Name" [ids]      # 1. Scaffold the plan file (Status: DRAFT)
+./sprint.sh chat plan [id]            # 2. Author it in conversation — reads backlog/ read-only,
+                                      #    records member IDs + goal, flips DRAFT → READY on confirm.
+                                      #    (chat backlog mutates task files; chat plan only records IDs.)
+./sprint.sh plan think [id]           # 3. Optional dual-persona critique of the grouping
+./sprint.sh plan start [id]           # 4. Commit the plan's members into next/ (the sprint)
+
+# Chat & Work (AI-powered — runs in your AI agent session, or via any configured CLI)
+./sprint.sh profile [show]            # Create/update project profile (show: print only, no AI)
+./sprint.sh chat [target]             # id: task · folder: sweep · plan [id]: author a plan · bugs: inbox · nothing: sprint health
+./sprint.sh work [limit] [--fast]     # Execute READY tasks from next/ (--force to skip the gate; --audit --excellence to chain quality audits)
+./sprint.sh loop [--refill] [--retry] # Autopilot — plan start (gates as it commits) then work, drain the queue
+./sprint.sh gate [folder] [limit]     # Off-spine quality gate: re-gate next/ (--force) or report on backlog/doing/blocked
 ./sprint.sh split <path>              # Split a large task into subtasks
-./sprint.sh review-sprint             # Review sprint via dual-persona analysis
-./sprint.sh review-code <file> [passes]  # Run code audit on a task's changes
-./sprint.sh excellence <file>         # Judge finished work against a higher bar; file enhancements
-./sprint.sh polish [limit] [--rounds N]  # Sweep review/: judge each task, reopen ones worth improving to next/
-./sprint.sh audit [folder] [limit]    # Audit tasks in next/ (or specified folder)
-./sprint.sh audit-deps                # File a backlog task auditing outdated/vulnerable deps
+./sprint.sh polish [limit] [--rounds N]  # Sweep review/: reopen tasks worth another pass
+./sprint.sh polish <file>             # Deep-judge one finished piece; file enhancements to backlog/
+./sprint.sh polish --code <file>      # Code-diff audit (fixer/verifier); may fix issues inline
+./sprint.sh deps                      # File a backlog task auditing outdated/vulnerable deps
 
-# Sync
+# Look (read-only — surface state, no mutation)
+./sprint.sh status                    # View project status
+./sprint.sh align                     # Analyze feature alignment
+./sprint.sh context                   # Generate AI context summary
+./sprint.sh search <keyword>          # Search tasks by keyword
+
+# Keep — sync
 ./sprint.sh sync [--all]              # Push task changes to GitHub
 
-# Maintenance
-./sprint.sh validate [--fix] [--dry-run]  # Validate task files (--docs: help/ flag drift; --commands: catalog completeness)
+# Keep — maintenance
+./sprint.sh validate [--fix] [--dry-run]  # Integrity-check task IDs + deps (--docs: help/ flag drift; --commands: catalog completeness)
 ./sprint.sh cleanup [--delete|--force|--all]  # Clean stale files from docs/tmp/
 ./sprint.sh help                      # Show all commands
 ```
 
 ## Moving Tasks
 
-Tasks move through folders. Use `git mv` or `mv` (then commit):
+Folder location **is** status. Change status by moving the file between
+lifecycle folders — not by editing a status field on the task.
+
+**Always move with this exact pattern (agents and humans):**
 
 ```bash
-git mv docs/tasks/backlog/ID-name.md docs/tasks/next/      # Queue
-git mv docs/tasks/next/ID-name.md docs/tasks/doing/      # Start
-git mv docs/tasks/doing/ID-name.md docs/tasks/blocked/   # Under-defined — needs clarifying, not just waiting
-git mv docs/tasks/blocked/ID-name.md docs/tasks/next/      # Now defined, re-queue
-git mv docs/tasks/doing/ID-name.md docs/tasks/review/    # Submit
-git mv docs/tasks/review/ID-name.md docs/tasks/done/       # Complete
+git mv SRC DEST || mv SRC DEST
 ```
 
-If `git mv` fails, use `mv` and commit the change.
+1. Run `git mv` first — preserves history when the file is already tracked.
+2. When `git mv` fails — usual for new tasks not yet committed — finish that
+   **same** move with plain `mv` in the same step, then continue the workflow.
+3. Leave `git add` / `git commit` to the developer unless they asked you to
+   commit. Completing the move is enough to update status.
+
+Lifecycle path:
+
+```bash
+git mv docs/tasks/backlog/ID-name.md docs/tasks/next/    || mv docs/tasks/backlog/ID-name.md docs/tasks/next/     # Queue
+git mv docs/tasks/next/ID-name.md docs/tasks/doing/      || mv docs/tasks/next/ID-name.md docs/tasks/doing/       # Start
+git mv docs/tasks/doing/ID-name.md docs/tasks/blocked/   || mv docs/tasks/doing/ID-name.md docs/tasks/blocked/    # Under-defined
+git mv docs/tasks/blocked/ID-name.md docs/tasks/next/    || mv docs/tasks/blocked/ID-name.md docs/tasks/next/     # Re-queue
+git mv docs/tasks/doing/ID-name.md docs/tasks/review/    || mv docs/tasks/doing/ID-name.md docs/tasks/review/     # Submit
+git mv docs/tasks/review/ID-name.md docs/tasks/done/     || mv docs/tasks/review/ID-name.md docs/tasks/done/      # Complete
+```
+
+Scripts use the same rule via `move_file` in `docs/sprintmd/lib.sh`.
 
 ## Naming
 
@@ -178,8 +228,8 @@ IDs come from `docs/sprintmd/DOC_STATE.md` (sprint_TASK_ID for tasks, sprint_BUG
 **Ideas** = Rough concepts being refined. Start here when unclear.
 **Features** = Fully defined specs. What capabilities exist.
 **Tasks** = Work items. Move through folders as status changes.
-**Epics** = Named groupings that list task IDs. A relational index over tasks, not a status or container — the tasks stay in their own folders.
-**DOC_STATE.md** = Source of truth for IDs (`docs/sprintmd/DOC_STATE.md`: `sprint_TASK_ID`, `sprint_BUG_ID`, `sprint_EPIC_ID`).
+**Plans** = Named groupings that list task IDs. A relational index over tasks, not a status or container — the tasks stay in their own folders.
+**DOC_STATE.md** = Source of truth for IDs (`docs/sprintmd/DOC_STATE.md`: `sprint_TASK_ID`, `sprint_BUG_ID`, `sprint_PLAN_ID`).
 
 ## Ideas Workflow
 
@@ -202,7 +252,7 @@ Work through it manually, or ask an AI agent to guide you.
 Use templates in each folder:
 - `docs/ideas/.TEMPLATE-idea.md`
 - `docs/tasks/.TEMPLATE-task.md`
-- `docs/epics/.TEMPLATE-epic.md`
+- `docs/plans/.TEMPLATE-plan.md`
 - `docs/features/.TEMPLATE-feature.md`
 - `docs/bugs/.TEMPLATE-bug.md`
 - `docs/tests/.TEMPLATE-test.md`

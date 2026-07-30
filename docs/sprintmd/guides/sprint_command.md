@@ -21,7 +21,7 @@ Then reload your shell:
 source ~/.zshrc     # or: source ~/.bashrc
 ```
 
-Now, from a project root, `sprint talk 214` runs `./sprint.sh talk 214`.
+Now, from a project root, `sprint chat 214` runs `./sprint.sh chat 214`.
 
 `setup.sh` offers to add this alias for you at the end of a fresh install — this
 guide is here if you skipped it, want to do it by hand, or need to understand

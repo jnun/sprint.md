@@ -2,7 +2,8 @@
 
 ## Feature Status: DONE
 
-The bug tracking system is fully implemented for capturing and managing bug reports.
+The bug tracking system captures open reports in a flat inbox and hands real
+work off to the task pipeline.
 
 ## Bug Report Creation
 **Status**: DONE
@@ -18,31 +19,29 @@ Four severity levels for prioritization:
 
 ## Bug-to-Task Conversion
 **Status**: DONE
-Bugs can be converted to tasks for tracking through the development pipeline:
-- Create task referencing bug report
-- Move bug to `docs/bugs/archived/`
-- Track fix through standard task workflow
+`./sprint.sh chat bugs` **[w] work it** converts a report into a fix task:
+- Fills the task from the report (Problem, steps, success criteria, origin)
+- Deletes the bug file (inbox holds open reports only)
+- Fix tracks through the standard task workflow
 
 ## Bug State Management
 **Status**: DONE
 Automatic ID management through `docs/sprintmd/DOC_STATE.md`:
 - Bug IDs tracked in unified state file
-- Sequential integer IDs (0, 1, 2, ...)
-- Central tracking in "Bug State" section
+- Sequential integer IDs
 - Prevents ID collisions
 
-## Archival System
+## Inbox (no archive)
 **Status**: DONE
-Processed bugs moved to `docs/bugs/archived/` for historical reference:
-- Maintains complete bug history
-- Keeps active bug directory clean
-- Preserves original reports
+Handled reports leave the workspace:
+- Convert → task + delete report
+- Close / kill → delete report
+- Open `docs/bugs/` is untriaged only
 
 ## Bug Report Format
 **Status**: DONE
 Standardized markdown template for consistency:
-- Reporter information
 - Severity level
 - Description and expected behavior
 - Reproduction steps
-- Environment details
+- Success criteria

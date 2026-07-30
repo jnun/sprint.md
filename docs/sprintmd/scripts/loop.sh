@@ -10,13 +10,15 @@ MAX_HOURS=0
 MAX_ATTEMPTS=0
 COOLDOWN=10
 REFILL=0
-REFILL_SIZE=5
 RETRY=0
 PASSTHROUGH=()
+# Active plan goal (set by plan start during --refill); cheap run context only.
+ACTIVE_PLAN_GOAL=""
+ACTIVE_PLAN_ID=""
 
 # ── Argument parsing ────────────────────────────────────────────────
 # --hours/--max/--cooldown take a numeric value. Validate it here: unlike
-# tasks.sh's boolean --max, loop's --max expects a count, so a bare
+# work.sh's boolean --max, loop's --max expects a count, so a bare
 # `loop --max --audit` would otherwise capture "--audit" as the limit, and
 # every later `[ "$MAX_ATTEMPTS" -gt 0 ]` test would error to stderr and never
 # trip — a silent runaway. Reject a missing or non-integer value up front.
@@ -33,8 +35,10 @@ while [ $# -gt 0 ]; do
     --max)       _require_int --max "${2:-}";       MAX_ATTEMPTS="$2"; shift 2 ;;
     --cooldown)  _require_int --cooldown "${2:-}";  COOLDOWN="$2"; shift 2 ;;
     --refill)    REFILL=1
-                 if [ $# -gt 1 ] && [[ "$2" =~ ^[0-9]+$ ]] && [ "$2" != "0" ]; then
-                   REFILL_SIZE="$2"; shift
+                 # Optional numeric arg was the old auto-planner size; ignore if
+                 # present so existing `loop --refill 3` invocations still work.
+                 if [ $# -gt 1 ] && [[ "$2" =~ ^[0-9]+$ ]]; then
+                   shift
                  fi
                  shift ;;
     --retry)     RETRY=1; shift ;;
@@ -136,10 +140,35 @@ echo "  Backlog:    $(count_tasks "$BACKLOG_DIR") in backlog/"
 [ "$MAX_HOURS" -gt 0 ]    && echo "  Time limit: ${MAX_HOURS}h"
 [ "$MAX_ATTEMPTS" -gt 0 ] && echo "  Task limit: $MAX_ATTEMPTS"
 echo "  Cooldown:   ${COOLDOWN}s"
-[ "$REFILL" -eq 1 ]       && echo "  Refill:     plan $REFILL_SIZE when empty"
+[ "$REFILL" -eq 1 ]       && echo "  Refill:     plan start (next READY plan) when empty"
 [ "$RETRY" -eq 1 ]        && echo "  Retry:      re-queue newly-blocked tasks (once)"
 [ ${#PASSTHROUGH[@]} -gt 0 ] && echo "  Flags:      ${PASSTHROUGH[*]}"
 echo ""
+
+# ── Active plan goal helper (cheap context for this loop process) ───
+# Find the lowest-id plan marked READY. Used by --refill and for banner context.
+next_ready_plan() {
+  local f id status best="" best_id=999999999
+  for f in docs/plans/*.md; do
+    [ -f "$f" ] || continue
+    case "$(basename "$f")" in .TEMPLATE-*|TEMPLATE-*) continue ;; esac
+    id=$(basename "$f" | grep -oE '^[0-9]+' || true)
+    [ -n "$id" ] || continue
+    status=$(grep -m1 -E '^\*\*Status:\*\*' "$f" 2>/dev/null \
+      | sed 's/.*\*\*Status:\*\*[[:space:]]*//' | tr -d '[:space:]')
+    [ "$status" = "READY" ] || continue
+    if [ "$id" -lt "$best_id" ]; then
+      best_id=$id
+      best=$f
+    fi
+  done
+  [ -n "$best" ] && printf '%s' "$best"
+}
+
+plan_goal_oneline() {
+  awk 'BEGIN{g=0} /^## Goal/{g=1; next} g && /^## /{exit} g && NF{print}' "$1" \
+    | head -3 | tr '\n' ' ' | sed 's/[[:space:]]\{1,\}/ /g; s/^ //; s/ $//'
+}
 
 # ── Main loop ───────────────────────────────────────────────────────
 ITERATION=0
@@ -178,17 +207,34 @@ while true; do
     NEXT_COUNT=$(count_tasks "$NEXT_DIR")
   fi
 
-  # ── Refill: plan + define from backlog ──────────────────────────
+  # ── Refill: plan start on next READY plan (human-authored only) ─
   if [ "$NEXT_COUNT" -eq 0 ] && [ "$REFILL" -eq 1 ]; then
-    BACKLOG_COUNT=$(count_tasks "$BACKLOG_DIR")
-    if [ "$BACKLOG_COUNT" -gt 0 ]; then
-      echo "▸ Refilling from backlog ($BACKLOG_COUNT available)..."
-      # stdin redirect auto-approves plan's confirmation prompt
-      bash "$SCRIPT_DIR/plan.sh" "$REFILL_SIZE" < /dev/null || true
-      bash "$SCRIPT_DIR/define.sh" < /dev/null || true
-      REFILLS=$((REFILLS + 1))
+    _ready_plan="$(next_ready_plan || true)"
+    if [ -n "$_ready_plan" ]; then
+      _ready_id=$(basename "$_ready_plan" | grep -oE '^[0-9]+')
+      echo "▸ Refilling via plan start $_ready_id ($(basename "$_ready_plan"))..."
+      if bash "$SCRIPT_DIR/plan-start.sh" "$_ready_id" < /dev/null; then
+        ACTIVE_PLAN_ID="$_ready_id"
+        ACTIVE_PLAN_GOAL="$(plan_goal_oneline "$_ready_plan")"
+        export SPRINTMD_ACTIVE_PLAN_ID="$ACTIVE_PLAN_ID"
+        export SPRINTMD_ACTIVE_PLAN_FILE="$_ready_plan"
+        export SPRINTMD_ACTIVE_PLAN_GOAL="$ACTIVE_PLAN_GOAL"
+        if [ -n "$ACTIVE_PLAN_GOAL" ]; then
+          echo "  Active plan goal: $ACTIVE_PLAN_GOAL"
+        fi
+        # plan start already gated members before promoting them into next/ —
+        # no separate define step. SPRINTMD_ACTIVE_PLAN_* stays exported as
+        # cheap run context that tasks may read.
+        REFILLS=$((REFILLS + 1))
+      else
+        echo "  ⚠ plan start $_ready_id failed — fix blocked/dangling members or status"
+      fi
       NEXT_COUNT=$(count_tasks "$NEXT_DIR")
       echo ""
+    else
+      echo "▸ Refill requested but no READY plan in docs/plans/"
+      echo "  Author one: ./sprint.sh newplan \"…\" && ./sprint.sh chat plan <id>"
+      echo "  Mark READY, then re-run loop --refill."
     fi
   fi
 
@@ -209,7 +255,7 @@ while true; do
   BEFORE_REVIEW=$(count_tasks "$REVIEW_DIR")
   BEFORE_BLOCKED=$(count_tasks "$BLOCKED_DIR")
 
-  bash "$SCRIPT_DIR/tasks.sh" 1 "${PASSTHROUGH[@]+"${PASSTHROUGH[@]}"}" || true
+  bash "$SCRIPT_DIR/work.sh" 1 "${PASSTHROUGH[@]+"${PASSTHROUGH[@]}"}" || true
 
   # Rescue any task left in doing/ (crash recovery)
   for f in "$DOING_DIR"/*.md; do
@@ -228,7 +274,7 @@ while true; do
   if [ "$AFTER_NEXT" -eq "$NEXT_COUNT" ] && [ "$AFTER_REVIEW" -eq "$BEFORE_REVIEW" ] \
      && [ "$AFTER_BLOCKED" -eq "$BEFORE_BLOCKED" ]; then
     echo "▸ No progress — $AFTER_NEXT task(s) in next/ but none are ready to execute."
-    echo "  Vet them with ./sprint.sh define, or loop with --force."
+    echo "  Vet them with ./sprint.sh gate, or loop with --force."
     break
   fi
 

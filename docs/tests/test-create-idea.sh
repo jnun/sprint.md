@@ -86,7 +86,7 @@ assert_contains "Created date" "$content" "**Created:** $today"
 echo "Test 6: Empty name launches refinement session"
 setup
 rc=0
-output=$(cd "$TMPDIR" && FIVEDAY_MODE=emit bash docs/sprintmd/scripts/create-idea.sh "" 2>&1) || rc=$?
+output=$(cd "$TMPDIR" && SPRINTMD_MODE=emit bash docs/sprintmd/scripts/create-idea.sh "" 2>&1) || rc=$?
 if [ "$rc" -eq 0 ]; then
     echo "  PASS: Session path exits 0"; PASS=$((PASS + 1))
 else

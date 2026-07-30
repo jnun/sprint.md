@@ -8,13 +8,13 @@ Fields:
 - `sprint_VERSION`   — installed file-structure version; `setup.sh` reads this on upgrade to decide which migrations to run
 - `sprint_TASK_ID`   — highest task ID used; next task = this + 1
 - `sprint_BUG_ID`    — highest bug ID used; next bug = this + 1
-- `sprint_EPIC_ID`   — highest epic ID used; next epic = this + 1
+- `sprint_PLAN_ID`   — highest plan ID used; next plan = this + 1
 - `Last Updated`   — ISO date; bump when you change a field
 
 ---
 
-**Last Updated**: 2026-07-28
+**Last Updated**: 2026-07-30
 **sprint_VERSION**: 0.0.3
-**sprint_TASK_ID**: 233
-**sprint_BUG_ID**: 2
-**sprint_EPIC_ID**: 1
+**sprint_TASK_ID**: 286
+**sprint_BUG_ID**: 3
+**sprint_PLAN_ID**: 9

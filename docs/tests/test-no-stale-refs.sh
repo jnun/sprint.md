@@ -11,8 +11,8 @@
 # (tracked + untracked-but-not-ignored), which excludes .git, the sprint.md
 # submodule's internals, and gitignored paths (docs/tmp) for free. We further
 # drop the src/ mirror (ship.sh regenerates it from docs/sprintmd and verifies
-# it) and dev-internal work-item narratives (tasks/ideas/features/bugs) that
-# legitimately discuss project history.
+# it) and dev-internal work-item narratives (tasks/ideas/features/bugs/plans)
+# that legitimately discuss project history.
 #
 # Written for bash 3.2 (macOS default): indexed arrays only, no mapfile.
 
@@ -30,7 +30,7 @@ while IFS= read -r f; do
 done < <(
     { git ls-files; git ls-files --others --exclude-standard; } 2>/dev/null \
         | grep -E '\.(sh|md|yml|template)$|(^|/)config$' \
-        | grep -vE '^(src/|docs/(tasks|ideas|features|bugs)/)' \
+        | grep -vE '^(src/|docs/(tasks|ideas|features|bugs|plans)/)' \
         | sort -u
 )
 
@@ -50,7 +50,9 @@ check() {
     # names as tripwire patterns / documentation rather than as real references:
     # this test itself, and ship.sh (whose LEGACY_RE gate scans for them).
     hits=$(grep $ci -InE "$re" "${FILES[@]}" 2>/dev/null \
-        | grep -vE '(^|/)(ship|test-no-stale-refs)\.sh:')
+        | grep -vE '(^|/)(ship|test-no-stale-refs)\.sh:' \
+        | grep -vE 'docs/guides/command-matrix\.md:' \
+        | grep -vE 'docs/plans/')
     if [ -n "$hits" ]; then
         echo "  FAIL: $label"
         echo "$hits" | sed 's/^/        /'
@@ -86,12 +88,18 @@ check '(^|[^m])sprint/(scripts|ai|help|cli|guides|lib|config|DOC_STATE|theory)' 
 check '(^|[^m])sprint/([[:space:]]|$)' \
     "no bare sprint/ framework-dir references (tree diagrams)"
 
-# Old brand prose. FIVEDAY_ env vars are intentionally retained and are not a
-# brand string, so they are not matched here.
+# Old brand prose (display names).
 check '5DayDocs|Five Day Docs|5 Day Docs' "no legacy brand prose"
 
-# ── Epic 212 stale patterns (docs/guides + docs/tests audit) ─────────
-# These guard the specific rot this epic hunted down, so it can never silently
+# Pre-rebrand symbol namespace (task 237). Functions were fiveday_*; env vars
+# and shell vars were FIVEDAY_*. Both are now sprintmd_ / SPRINTMD_. ship.sh is
+# excluded above — its LEGACY_RE patterns deliberately mention the old paths
+# (docs/5day, 5day.sh) as tripwires, not as live symbols.
+check -i 'fiveday' "no fiveday/FIVEDAY symbol namespace"
+check 'five-day|5-day' "no five-day / 5-day brand prose"
+
+# ── Task 212 stale patterns (docs/guides + docs/tests audit) ─────────
+# These guard the specific rot this plan hunted down, so it can never silently
 # return. Each is prophylactic: the tree is clean today, and this list keeps it
 # clean on every future edit.
 
@@ -135,6 +143,18 @@ else
     echo "  PASS: shipped AI-pointer files free of legacy refs"
     PASS=$((PASS + 1))
 fi
+
+
+# ── Plan 8 retired command surface ──────────────────────────────────
+# After the chat/work/gate/align/context/deps remap, live surface paths must
+# not teach retired dispatch labels as runnable commands. Command-matrix
+# retired-names table and this test's own patterns are allowlisted below.
+check '\./sprint\.sh (talk|tasks|define|checkfeatures|ai-context|audit-deps)\b' \
+    "no retired ./sprint.sh command invocations on live surface"
+
+# Config keys renamed with the surface (hard cut).
+check 'MODEL_TALK|MODEL_DEFINE|MODEL_TASKS|BUDGET_TASKS' \
+    "no retired MODEL_TALK/DEFINE/TASKS or BUDGET_TASKS config keys"
 
 echo ""
 echo "Results: $PASS passed, $FAIL failed"

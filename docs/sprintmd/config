@@ -8,7 +8,7 @@ CLI=claude
 
 # Capability tier for this install: claude-code | cursor | openai | generic.
 # Set by setup.sh from your provider choice. Scripts read it (via
-# fiveday_ai_tier) to use full orchestration on claude-code and degrade
+# sprintmd_ai_tier) to use full orchestration on claude-code and degrade
 # gracefully elsewhere. Empty = inferred from CLI above. See the capability
 # matrix in docs/sprintmd/ai/provider-capabilities.md.
 PROVIDER=claude-code
@@ -30,23 +30,26 @@ MODEL_DEFAULT=
 # cheaper default. Set a value here to pin a specific model instead.
 MODEL_FEATURE=
 MODEL_IDEA=
-MODEL_TALK=
-MODEL_DEFINE=
+MODEL_CHAT=
+MODEL_GATE=
 MODEL_SPLIT=
 MODEL_SPRINT=
-MODEL_TASKS=
+MODEL_WORK=
 MODEL_PROFILE=
 MODEL_CODE_AUDIT=
 MODEL_EXCELLENCE=
 MODEL_POLISH=
 MODEL_AUDIT=
 MODEL_DEPS=
+# Cheap pass for chat-folder / chat-bugs verdict-first sort (not a user command).
 MODEL_TRIAGE=
+MODEL_PLAN_THINK=
+# Legacy alias still read if MODEL_PLAN_THINK is empty (plan-think.sh fallback).
 MODEL_REVIEW_SPRINT=
 MODEL_DRIFT=
 
 # Budget caps per invocation (USD). Empty = no cap.
-BUDGET_TASKS=5.00
+BUDGET_WORK=5.00
 BUDGET_AUDIT=3.00
 
 # Code audit max iterative passes

@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # docs/sprintmd/cli/claude.sh — Claude Code CLI profile for sprint.md
 #
-# Defines fiveday_provider_exec(), which maps the provider-neutral interface used by
+# Defines sprintmd_provider_exec(), which maps the provider-neutral interface used by
 # sprint.md scripts to Claude Code's actual CLI flags.
 #
-# Sourced automatically by config.sh when FIVEDAY_CLI=claude (the default).
+# Sourced automatically by config.sh when SPRINTMD_CLI=claude (the default).
 #
 # Live progress: when a script requests buffered --output-format json but
 # stderr is still a terminal, the run is upgraded to stream-json and each
@@ -12,15 +12,15 @@
 # same single result-JSON object the caller expected. Call sites that
 # redirect stderr (parallel runners, captured audit output) automatically
 # fall back to the quiet buffered path — no call-site changes needed.
-# Control with FIVEDAY_STREAM: unset = auto (TTY), 1 = force on, 0 = off.
+# Control with SPRINTMD_STREAM: unset = auto (TTY), 1 = force on, 0 = off.
 #
 # Transient-failure recovery: a dropped connection mid-run ("API Error:
 # Connection closed mid-response") wastes every turn already spent. When a
 # non-interactive run fails transiently, this profile waits and RESUMES the
 # same session ("pick up where you left off"), falling back to a fresh
 # rerun when no session id is recoverable. Sessions are persisted for this
-# reason. Control with FIVEDAY_RETRIES (default 2, 0 = off) and
-# FIVEDAY_RETRY_WAIT (seconds between attempts, default 60).
+# reason. Control with SPRINTMD_RETRIES (default 2, 0 = off) and
+# SPRINTMD_RETRY_WAIT (seconds between attempts, default 60).
 #
 # Wedged-stream recovery: the retry loop above only fires once the CLI call
 # RETURNS a failure — it cannot rescue a request whose streaming response
@@ -28,7 +28,7 @@
 # single request for hours (one accepted request, zero events, no teardown)
 # while the retry logic sat idle waiting for a failure that never came. To cap
 # it, each attempt is wrapped in a wall-clock timeout: if the CLI produces no
-# result within FIVEDAY_ATTEMPT_TIMEOUT seconds (default 1800 = 30 min, 0 =
+# result within SPRINTMD_ATTEMPT_TIMEOUT seconds (default 1800 = 30 min, 0 =
 # off) it is killed, and the kill is treated as a transient failure so the
 # normal wait-and-resume path takes over. Requires `timeout` or `gtimeout`
 # (coreutils) on PATH; if neither is present the wrapper is a no-op and a
@@ -37,7 +37,7 @@
 # Reads stream-json events on stdin; narrates tool activity to stderr and
 # emits only the final result event (identical shape to --output-format
 # json) on stdout. No single quotes in this code — it is embedded in one.
-_FIVEDAY_STREAM_FILTER="$(cat <<'PYEOF'
+_SPRINTMD_STREAM_FILTER="$(cat <<'PYEOF'
 import json, sys
 result_line = None
 for line in sys.stdin:
@@ -75,23 +75,23 @@ PYEOF
 
 # Error text that justifies a retry. Deliberately narrow: budget caps, turn
 # caps, and flag errors must NOT retry.
-_FIVEDAY_TRANSIENT_RE='API Error|Connection (closed|error|reset)|overloaded|rate.?limit|timed? ?out|50[023]|529'
+_SPRINTMD_TRANSIENT_RE='API Error|Connection (closed|error|reset)|overloaded|rate.?limit|timed? ?out|50[023]|529'
 
 # Failures a human must fix — expired/invalid credentials, a required re-login,
 # an exhausted balance. These take PRECEDENCE over the transient check: the
 # CLI often prefixes them with "API Error: 401 …", which would otherwise match
 # the broad transient pattern above and burn the whole retry budget re-running
 # something retrying can never repair. Matching here surfaces them at once.
-_FIVEDAY_FATAL_RE='invalid.{0,12}(api.?key|token)|authentication_error|unauthoriz|/login|please (run|log|sign).{0,4}(in|/login)|OAuth|token (has )?expired|re-?authenticat|credit balance'
+_SPRINTMD_FATAL_RE='invalid.{0,12}(api.?key|token)|authentication_error|unauthoriz|/login|please (run|log|sign).{0,4}(in|/login)|OAuth|token (has )?expired|re-?authenticat|credit balance'
 
 # OS family — used to tailor the "install a timeout tool" hint below, since the
 # package and binary differ per platform (macOS ships none; Linux has it in
 # coreutils; Windows' own timeout.exe is an unrelated pause utility).
 case "${OSTYPE:-$(uname -s 2>/dev/null)}" in
-  darwin*|Darwin*)                   _FIVEDAY_OS=macos ;;
-  linux*|Linux*)                     _FIVEDAY_OS=linux ;;
-  msys*|cygwin*|win32|MINGW*|MSYS*)  _FIVEDAY_OS=windows ;;
-  *)                                 _FIVEDAY_OS=unknown ;;
+  darwin*|Darwin*)                   _SPRINTMD_OS=macos ;;
+  linux*|Linux*)                     _SPRINTMD_OS=linux ;;
+  msys*|cygwin*|win32|MINGW*|MSYS*)  _SPRINTMD_OS=windows ;;
+  *)                                 _SPRINTMD_OS=unknown ;;
 esac
 
 # Per-attempt wall-clock timeout binary. We require GNU coreutils specifically,
@@ -102,33 +102,33 @@ esac
 # (macOS/Homebrew name) then `timeout` (Linux). Empty when neither qualifies →
 # the wrapper below is skipped and a one-time note is printed. GNU timeout
 # exits 124 on expiry, or 128+signal (137 = SIGKILL from -k) if TERM is ignored.
-_FIVEDAY_TIMEOUT_BIN=""
-for _fiveday_cand in gtimeout timeout; do
-  if command -v "$_fiveday_cand" >/dev/null 2>&1 \
-     && "$_fiveday_cand" --version 2>/dev/null | grep -qi coreutils; then
-    _FIVEDAY_TIMEOUT_BIN="$_fiveday_cand"; break
+_SPRINTMD_TIMEOUT_BIN=""
+for _sprintmd_cand in gtimeout timeout; do
+  if command -v "$_sprintmd_cand" >/dev/null 2>&1 \
+     && "$_sprintmd_cand" --version 2>/dev/null | grep -qi coreutils; then
+    _SPRINTMD_TIMEOUT_BIN="$_sprintmd_cand"; break
   fi
 done
-unset _fiveday_cand
+unset _sprintmd_cand
 
 # Print, once per shell session, why the wall-clock cap is inactive and how to
 # fix it for this OS. Called at task kickoff (first exec) when no usable
 # timeout binary was found. Silent when the user disabled the cap themselves.
-_fiveday_warn_no_timeout() {
-  [ -n "${_FIVEDAY_TIMEOUT_WARNED:-}" ] && return 0
-  _FIVEDAY_TIMEOUT_WARNED=1
+_sprintmd_warn_no_timeout() {
+  [ -n "${_SPRINTMD_TIMEOUT_WARNED:-}" ] && return 0
+  _SPRINTMD_TIMEOUT_WARNED=1
   local fix
-  case "$_FIVEDAY_OS" in
+  case "$_SPRINTMD_OS" in
     macos)   fix="install coreutils for gtimeout — run: brew install coreutils" ;;
     linux)   fix="install GNU coreutils (e.g. 'apt install coreutils' or 'dnf install coreutils')" ;;
     windows) fix="the Windows timeout.exe cannot wrap commands — install GNU coreutils in MSYS2/Git Bash (e.g. 'pacman -S coreutils')" ;;
     *)       fix="install GNU coreutils so 'timeout' (or 'gtimeout') is on PATH" ;;
   esac
   printf 'sprint.md: ⚠ timeout will not work until we %s.\n' "$fix" >&2
-  printf '          Until then a wedged/unresponsive API request can hang instead of being capped (set FIVEDAY_ATTEMPT_TIMEOUT=0 to silence this).\n' >&2
+  printf '          Until then a wedged/unresponsive API request can hang instead of being capped (set SPRINTMD_ATTEMPT_TIMEOUT=0 to silence this).\n' >&2
 }
 
-fiveday_provider_exec() {
+sprintmd_provider_exec() {
   # ── Parse provider-neutral arguments ──────────────────────────────
   local prompt="" model="" max_turns="" tools="" permissions=""
   local output_format="" budget="" name="" system_prompt=""
@@ -153,10 +153,10 @@ fiveday_provider_exec() {
   done
 
   # ── Decide on live streaming ──────────────────────────────────────
-  # FIVEDAY_STREAM: 0 = never, 1 = always, unset/other = auto (stderr TTY).
+  # SPRINTMD_STREAM: 0 = never, 1 = always, unset/other = auto (stderr TTY).
   local stream=0
   if [ "$output_format" = "json" ] && command -v python3 >/dev/null 2>&1; then
-    case "${FIVEDAY_STREAM:-auto}" in
+    case "${SPRINTMD_STREAM:-auto}" in
       0) stream=0 ;;
       1) stream=1 ;;
       *) [ -t 2 ] && stream=1 ;;
@@ -167,8 +167,8 @@ fiveday_provider_exec() {
 
   # ── Retry policy ──────────────────────────────────────────────────
   # Resume only makes sense for non-interactive prompt runs.
-  local max_retries="${FIVEDAY_RETRIES:-2}"
-  local wait_s="${FIVEDAY_RETRY_WAIT:-60}"
+  local max_retries="${SPRINTMD_RETRIES:-2}"
+  local wait_s="${SPRINTMD_RETRY_WAIT:-60}"
   [ -n "$prompt" ] || max_retries=0
 
   local resume_prompt="Our connection broke mid-response and this session has been resumed. Review the conversation above and pick up exactly where you left off — do not redo completed work. If no prior progress is visible, start the task from the beginning using the original instructions. The original output requirements still apply."
@@ -183,14 +183,14 @@ fiveday_provider_exec() {
   # is killed and surfaced as a (transient) failure instead of hanging for
   # hours. `-k 10` follows an ignored TERM with a KILL 10s later. When no
   # GNU timeout binary is available, warn the user once at kickoff and run
-  # uncapped rather than failing. FIVEDAY_ATTEMPT_TIMEOUT=0 disables entirely.
-  local attempt_timeout="${FIVEDAY_ATTEMPT_TIMEOUT:-1800}"
+  # uncapped rather than failing. SPRINTMD_ATTEMPT_TIMEOUT=0 disables entirely.
+  local attempt_timeout="${SPRINTMD_ATTEMPT_TIMEOUT:-1800}"
   local -a tmo=()
   if [ "$attempt_timeout" -gt 0 ] 2>/dev/null; then
-    if [ -n "$_FIVEDAY_TIMEOUT_BIN" ]; then
-      tmo=("$_FIVEDAY_TIMEOUT_BIN" -k 10 "$attempt_timeout")
+    if [ -n "$_SPRINTMD_TIMEOUT_BIN" ]; then
+      tmo=("$_SPRINTMD_TIMEOUT_BIN" -k 10 "$attempt_timeout")
     else
-      _fiveday_warn_no_timeout
+      _sprintmd_warn_no_timeout
     fi
   fi
 
@@ -198,7 +198,7 @@ fiveday_provider_exec() {
     attempt=$((attempt + 1))
 
     # ── Build the command for this attempt ──────────────────────────
-    local -a cmd=("$FIVEDAY_CLI")
+    local -a cmd=("$SPRINTMD_CLI")
     if [ "$attempt" -gt 1 ] && [ -n "$session" ]; then
       cmd+=(--resume "$session" -p "$resume_prompt")
     elif [ -n "$system_prompt" ]; then
@@ -232,7 +232,7 @@ fiveday_provider_exec() {
     : > "$out"; : > "$errf"
     if [ "$stream" -eq 1 ]; then
       local -a _ps
-      ${tmo[@]+"${tmo[@]}"} "${cmd[@]}" 2>"$errf" | python3 -c "$_FIVEDAY_STREAM_FILTER" > "$out" \
+      ${tmo[@]+"${tmo[@]}"} "${cmd[@]}" 2>"$errf" | python3 -c "$_SPRINTMD_STREAM_FILTER" > "$out" \
         && _ps=("${PIPESTATUS[@]}") || _ps=("${PIPESTATUS[@]}")
       rc="${_ps[0]}"
     else
@@ -251,7 +251,7 @@ fiveday_provider_exec() {
 
     local transient=0 timed_out=0
     if [ "$failed" -eq 1 ]; then
-      if grep -qiE "$_FIVEDAY_FATAL_RE" "$out" "$errf" 2>/dev/null; then
+      if grep -qiE "$_SPRINTMD_FATAL_RE" "$out" "$errf" 2>/dev/null; then
         # Re-auth / expired-token / exhausted-balance: a human must act.
         # Checked FIRST so an "API Error: 401 …" prefix can't be mistaken for
         # a transient blip and silently retried. Leave transient=0 → surface.
@@ -264,7 +264,7 @@ fiveday_provider_exec() {
       elif [ -s "$out" ] || [ -s "$errf" ]; then
         # Silent startup deaths (empty output) and non-transient errors
         # (bad flags, budget/turn caps) never retry.
-        grep -qiE "$_FIVEDAY_TRANSIENT_RE" "$out" "$errf" 2>/dev/null && transient=1
+        grep -qiE "$_SPRINTMD_TRANSIENT_RE" "$out" "$errf" 2>/dev/null && transient=1
       fi
     fi
 
@@ -291,25 +291,25 @@ fiveday_provider_exec() {
   done
 }
 
-# This provider can host a live interactive session (see fiveday_interactive_ok
+# This provider can host a live interactive session (see sprintmd_interactive_ok
 # in lib.sh, which gates on this flag). Set at source time so the gate sees it.
-FIVEDAY_PROVIDER_INTERACTIVE=1
+SPRINTMD_PROVIDER_INTERACTIVE=1
 
-# fiveday_provider_interactive — launch an INTERACTIVE Claude Code session.
+# sprintmd_provider_interactive — launch an INTERACTIVE Claude Code session.
 #
-# fiveday_provider_exec (above) redirects the CLI's stdout to a temp file so it
+# sprintmd_provider_exec (above) redirects the CLI's stdout to a temp file so it
 # can capture JSON and retry on a dropped connection. That capture is exactly
 # what makes it one-shot: with stdout on a pipe the CLI sees a non-TTY, prints
-# a single response and exits. A `talk`-style dialogue needs the opposite — the
+# a single response and exits. A `chat`-style dialogue needs the opposite — the
 # CLI must inherit the real terminal so the user can reply turn by turn. This
 # function provides that: no stdout capture, no -p/--output-format, no retry
 # loop (a human is present to rerun). The initial message is passed as a bare
 # positional, NOT via -p, because -p forces non-interactive print mode.
 #
-# Precondition: only ever reached via fiveday_run_interactive, which calls
-# fiveday_interactive_ok first — so exec mode and a real TTY are guaranteed here
-# and need no re-check. Same argument surface as fiveday_provider_exec.
-fiveday_provider_interactive() {
+# Precondition: only ever reached via sprintmd_run_interactive, which calls
+# sprintmd_interactive_ok first — so exec mode and a real TTY are guaranteed here
+# and need no re-check. Same argument surface as sprintmd_provider_exec.
+sprintmd_provider_interactive() {
   local prompt="" model="" tools="" permissions="" name="" system_prompt=""
   local skip_permissions=0
   local -a extra_args=()
@@ -331,7 +331,7 @@ fiveday_provider_interactive() {
     esac
   done
 
-  local -a cmd=("$FIVEDAY_CLI")
+  local -a cmd=("$SPRINTMD_CLI")
   [ -n "$system_prompt" ] && cmd+=(--append-system-prompt "$system_prompt")
   [ -n "$model" ]         && cmd+=(--model "$model")
   [ -n "$tools" ]         && cmd+=(--allowedTools "$tools")

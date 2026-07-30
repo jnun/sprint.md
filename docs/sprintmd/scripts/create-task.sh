@@ -26,14 +26,14 @@ fi
 FEATURE="${2:-}"
 
 # Convert to a filename-safe slug; reject descriptions with no slug-able text.
-KEBAB_CASE_DESC=$(fiveday_slug "$DESCRIPTION") || {
+KEBAB_CASE_DESC=$(sprintmd_slug "$DESCRIPTION") || {
     echo -e "${RED}ERROR: Description has no letters or numbers to build a filename from.${NC}"
     echo "Provide a description with at least one alphanumeric character."
     exit 1
 }
 
 # Serialize ID allocation so concurrent creates never draw the same ID.
-fiveday_lock
+sprintmd_lock
 
 # Read highest task ID and increment with error handling
 NEW_ID=$(alloc_id sprint_TASK_ID) || {
@@ -76,7 +76,7 @@ fi
 LAST_UPDATED=$(date +%F)
 bump_doc_state sprint_TASK_ID "$NEW_ID"
 bump_doc_state "Last Updated" "$LAST_UPDATED"
-fiveday_unlock
+sprintmd_unlock
 echo -e "${GREEN}✓ DOC_STATE.md updated successfully${NC}"
 
 # Verify task file was created successfully
