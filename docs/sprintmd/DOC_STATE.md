@@ -5,7 +5,7 @@ Managed by scripts in `docs/sprintmd/scripts/` and by `setup.sh`. Safe to edit b
 if you need to fix a counter — the field lines below are what scripts parse.
 
 Fields:
-- `sprint_VERSION`   — installed file-structure version; `setup.sh` reads this on upgrade to decide which migrations to run
+- `sprint_VERSION`   — installed product version (from `src/VERSION` via setup/ship)
 - `sprint_TASK_ID`   — highest task ID used; next task = this + 1
 - `sprint_BUG_ID`    — highest bug ID used; next bug = this + 1
 - `sprint_PLAN_ID`   — highest plan ID used; next plan = this + 1
@@ -15,6 +15,6 @@ Fields:
 
 **Last Updated**: 2026-07-30
 **sprint_VERSION**: 0.0.3
-**sprint_TASK_ID**: 286
+**sprint_TASK_ID**: 298
 **sprint_BUG_ID**: 3
-**sprint_PLAN_ID**: 9
+**sprint_PLAN_ID**: 11

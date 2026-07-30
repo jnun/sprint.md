@@ -79,7 +79,7 @@ This file governs `docs/`. Read it before modifying any task, bug, or feature.
 
 **Plans vs. the folders above — don't conflate them either:**
 - The six folders above are **lifecycle status**: a task lives in exactly one, and moving it *is* how status changes.
-- A **plan** (`docs/plans/N-name.md`) is a **relational index, not a status.** It is one file that names a clump of related tasks and lists their IDs. The member tasks are **never moved into it** — each stays in its own lifecycle folder and flows through `backlog → next → …` on its own. A plan is never a lifecycle stage and is never counted or moved as a task; it carries a binary `**Status:** DRAFT → READY` for authoring readiness only. `docs/plans/` is a sibling of `docs/tasks/`, not a stage inside it.
+- A **plan** (`docs/plans/N-name.md`) is a **relational index, not a status.** It is one file that names a clump of related tasks and lists their IDs. The member tasks are **never moved into it** — each stays in its own lifecycle folder and flows through `backlog → next → …` on its own. A plan is never a lifecycle stage and is never counted or moved as a task; it carries a `**Status:** DRAFT | READY | STARTED` for its own life: `DRAFT` while authoring, `READY` once authored and safe for `plan start` / `loop --refill`, and `STARTED` — a one-way switch set by `plan start` — once its members have been committed to `next/`. Retirement is deletion: when every member sits in `docs/tasks/done/`, `./sprint.sh plan done <id>` removes the file. There is no stored `DONE` and no `NEXT` plan status. Two disambiguations: a plan `**Status:**` is **not** a task folder (`next/` is a lifecycle stage; `STARTED` is a plan field), and plan-level `READY` is **not** the task-level `**Status: READY**` the gate stamps on each member. `docs/plans/` is a sibling of `docs/tasks/`, not a stage inside it.
 - Member IDs are references only: moving or working a member task needs no edit to the plan file. To commit a plan into the sprint, run `./sprint.sh plan start <id>` (or move its members `backlog/ → next/` with `git mv SRC DEST || mv SRC DEST`); the plan file itself never moves. Create one with `./sprint.sh newplan "<name>" [task-id ...]`; `./sprint.sh status` rolls up each plan by resolving its members' current folders.
 
 **Do not assume** old file dates mean abandoned. A task from months ago in `done/` is completed history.
@@ -117,7 +117,7 @@ docs/
 
 | What | When | Command |
 |------|------|---------|
-| **Idea** | Rough concept, needs refinement | `./sprint.sh newidea "User notifications"` |
+| **Idea** | Rough concept, needs refinement | `./sprint.sh newidea "User notifications"` or `./sprint.sh newidea` (AI Q&A) |
 | **Feature** | Defined capability to build | `./sprint.sh newfeature "User auth"` or `./sprint.sh newfeature` (AI Q&A) |
 | **Task** | Specific work item | `./sprint.sh newtask "Add login button"` |
 | **Plan** | Group related tasks under one goal | `./sprint.sh newplan "Checkout revamp" 12 13 14` |
@@ -133,14 +133,16 @@ Happy path (spine): **`chat → plan start → work → polish`**. `loop` runs t
 Help groups: **create · chat · plan · work · look · keep**.
 
 > Tired of typing `./sprint.sh`? Add `alias sprint='./sprint.sh'` to your shell
-> rc to use `sprint <command>` from a project root. `setup.sh` offers this on
-> install; see `docs/sprintmd/guides/sprint_command.md` for details and a
-> subdirectory-aware variant. Run `./sprint.sh` or `bash sprint.sh` — do not
-> force `sh`/`zsh` on the script (any interactive shell is fine as the launcher).
+> rc to use `sprint <command>` from a project root (`sprint -g work`,
+> `sprint -c chat 12`). `setup.sh` offers this on install; see
+> `docs/sprintmd/guides/sprint_command.md` for details and a subdirectory-aware
+> variant. Run `./sprint.sh` or `bash sprint.sh` — do not force `sh`/`zsh` on
+> the script (any interactive shell is fine as the launcher).
 
 ```bash
 # Creating work
-./sprint.sh newidea "My rough idea"   # Create idea to refine
+./sprint.sh newidea "My rough idea"   # Create idea (quick template)
+./sprint.sh newidea                   # Create idea (AI Q&A — eight phases)
 ./sprint.sh newfeature "Name"         # Create feature (quick)
 ./sprint.sh newfeature                # Create feature (AI Q&A)
 ./sprint.sh newtask "Description"     # Create task
@@ -154,9 +156,13 @@ Help groups: **create · chat · plan · work · look · keep**.
                                       #    records member IDs + goal, flips DRAFT → READY on confirm.
                                       #    (chat backlog mutates task files; chat plan only records IDs.)
 ./sprint.sh plan think [id]           # 3. Optional dual-persona critique of the grouping
-./sprint.sh plan start [id]           # 4. Commit the plan's members into next/ (the sprint)
+./sprint.sh plan start [id]           # 4. Commit the plan's members into next/ — latches Status: STARTED
+./sprint.sh plan done [id]            # 5. Retire: when every member is in done/, delete the plan file
 
-# Chat & Work (AI-powered — runs in your AI agent session, or via any configured CLI)
+# Chat & Work (AI-powered — emit inside Claude/Grok/Cursor sessions, or exec via CLI)
+# Per-run provider (leading flags; does not rewrite docs/sprintmd/config):
+./sprint.sh -g work                   # This run: Grok Build  (-c / --claude for Claude Code)
+./sprint.sh --claude chat 12          # This run: Claude Code (same as -c)
 ./sprint.sh profile [show]            # Create/update project profile (show: print only, no AI)
 ./sprint.sh chat [target]             # id: task · folder: sweep · plan [id]: author a plan · bugs: inbox · nothing: sprint health
 ./sprint.sh work [limit] [--fast]     # Execute READY tasks from next/ (--force to skip the gate; --audit --excellence to chain quality audits)

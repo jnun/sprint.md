@@ -41,9 +41,10 @@ This creates the folder structure, CLI, templates, and docs in your project. You
 
 ```bash
 ./sprint.sh profile
+./sprint.sh -g profile    # optional: Grok Build for this run (-c = Claude Code)
 ```
 
-An AI-guided interview about your stack, conventions, and goals. The answers are saved to `docs/sprintmd/project.md` so every command that follows already knows what you're building and how.
+An AI-guided interview about your stack, conventions, and goals. The answers are saved to `docs/sprintmd/project.md` so every command that follows already knows what you're building and how. Default AI provider comes from setup / `docs/sprintmd/config`; leading `-g` / `-c` override for one run.
 
 ### 3. Define your features
 
@@ -110,7 +111,8 @@ Happy path (spine): `chat → plan start → work → polish`. `loop` is that sp
 # Author a plan, then commit its members into next/
 ./sprint.sh newplan "Theme" 12 13
 ./sprint.sh chat plan <id>       # author / mark READY
-./sprint.sh plan start <id>      # members → next/
+./sprint.sh plan start <id>      # members → next/ (plan latches STARTED)
+./sprint.sh plan done <id>       # all members in done/ → delete the plan
 
 # Validate — catch done, underspecified, or blocked tasks before execution
 ./sprint.sh gate
@@ -132,13 +134,22 @@ Happy path (spine): `chat → plan start → work → polish`. `loop` is that sp
 ./sprint.sh work --drift                # skip done tasks, fix stale ones
 ```
 
-To run against a different AI CLI, set `SPRINTMD_CLI` (or `CLI=` in `docs/sprintmd/config`) — `claude` is verified; any other binary falls back to a generic prompt passthrough:
+First-class AI providers (setup picker or `CLI=` / `PROVIDER=` in
+`docs/sprintmd/config`): **Claude Code** (`claude` / `claude-code`) and
+**Grok Build** (`grok` / `grok-build`). Both support interactive `chat`, emit
+inside the agent session, and parallel subagent orchestration. Other binaries
+fall back to a generic prompt passthrough.
+
+Per-run provider (leading flags; does **not** rewrite config):
 
 ```bash
-SPRINTMD_CLI=codex ./sprint.sh work
+./sprint.sh -g work                 # Grok Build this run
+./sprint.sh -c chat 12              # Claude Code this run
+./sprint.sh --grok loop --refill    # long form
+SPRINTMD_CLI=codex ./sprint.sh work # generic env override
 ```
 
-Flags combine: `./sprint.sh work --max --audit --fast`
+Work flags combine: `./sprint.sh work --max --audit --fast`
 
 ### Loop runner
 

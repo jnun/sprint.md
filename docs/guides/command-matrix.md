@@ -65,8 +65,8 @@ Only target names. No archaeology in this table.
 ### Create — `new*`
 
 Command		Mints
-newidea		Idea to refine
-newfeature	Feature spec
+newidea [name]	Idea to refine (no name = AI Q&A; with name = template)
+newfeature [name]	Feature spec (no name = AI Q&A; with name = template)
 newtask		Task (the unit of work)
 newplan		Plan (named list of task IDs)
 newbug		Bug report (inbox)
@@ -89,9 +89,14 @@ artifact, never only in the chat.
 
 Command		Does
 plan think [id]	Automated dual-persona critique of a plan
-plan start [id]	Gate members and commit them into `next/`
+plan start [id]	Gate members and commit them into `next/` (latches Status: STARTED)
+plan done [id]	Retire — delete the plan once every member is in `done/`
 
-`next/` **is** the sprint. A plan file never moves; only member tasks do.
+`next/` **is** the sprint. A plan file never moves; only member tasks do. A plan
+file carries its own `**Status:** DRAFT | READY | STARTED` — STARTED is a
+one-way latch set by `plan start` (members committed to `next/`), not a mirror
+of where members currently sit. Retirement is deletion via `plan done`, never a
+stored DONE status.
 
 ### work — autonomous transform
 
@@ -132,6 +137,29 @@ validate		Integrity: IDs, edges, help/docs/commands surface
 cleanup			Clear stale scratch files
 deps			Scan package ecosystems; file one backlog task on upgrades/advisories
 
+### Global launcher flags — not commands
+
+Leading flags on `./sprint.sh` (before the command). They apply for **this run
+only** and do **not** rewrite `docs/sprintmd/config`. Durable default stays
+setup / config; env `SPRINTMD_CLI` / `SPRINTMD_PROVIDER` is the same override
+without the short flag.
+
+Flag			Does
+-c / --claude	Claude Code for this run (`CLI=claude`, `PROVIDER=claude-code`)
+-g / --grok		Grok Build for this run (`CLI=grok`, `PROVIDER=grok-build`)
+
+```bash
+./sprint.sh -g work              # Grok Build this run
+./sprint.sh -c chat 12           # Claude Code this run
+./sprint.sh --grok loop --refill
+sprint -g work                   # same, with the shell alias
+```
+
+Placement: **flag, not a command** (see rules below). Do not invent sibling
+commands like `work-grok` or a top-level `provider` verb for one-shot switches.
+Last leading flag wins if both are passed. Flags after the command name are
+command-local, not these.
+
 ---
 
 ## Placement rules
@@ -150,7 +178,8 @@ carries a profession word		retire the word (`audit`, `excellence`, `review-` as 
 
 Registry groups, help sections, and this matrix use the **same six labels**:
 `create · chat · plan · work · look · keep`. No parallel taxonomy
-(pipeline / workflow / maint / …).
+(pipeline / workflow / maint / …). Global provider switches stay **launcher
+flags** (`-c` / `-g`), not a seventh family.
 
 ---
 

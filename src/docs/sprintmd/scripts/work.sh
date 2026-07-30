@@ -260,14 +260,10 @@ PROMPT
 }
 
 # ── Emit mode: hand the queue to the surrounding agent ───────────────
-# On claude-code the driver has a Task/subagent tool, so we emit an
-# orchestration plan: dispatch each task to a FRESH subagent so tasks don't
-# share context, run them in parallel, and move each file by result — this
-# mirrors exec mode's per-task isolation natively. Other tiers (cursor, openai,
-# generic) can't be assumed to have a subagent tool; handing them the
-# orchestration prompt is a broken imitation. They get the honest sequential
-# fallback: work the tasks one at a time in the current context, resetting focus
-# between them. Same routing rules either way, so behavior can't drift.
+# On orchestration-capable tiers (claude-code Task tool; grok-build
+# spawn_subagent) we emit a parallel plan: one FRESH subagent per task so
+# contexts never mix. Other tiers get the honest sequential fallback. Same
+# routing rules either way so behavior can't drift.
 if [ "$AI_MODE" = "emit" ]; then
   _profile_line="$(sprintmd_profile_line)"
 
@@ -291,11 +287,11 @@ if [ "$AI_MODE" = "emit" ]; then
    d. If it landed in review/, run: ./sprint.sh polish docs/tasks/review/<name>
       (leave it in review/ even if the verdict is BLOCKER)"
 
-  if [ "$(sprintmd_ai_tier)" = "claude-code" ]; then
+  if sprintmd_orchestration_capable; then
     sprintmd_run -p "You are running the sprint.md task queue: $COUNT task(s) to execute.
-CLAUDE.md is auto-loaded.${_profile_line}
+CLAUDE.md / AGENTS.md is auto-loaded when present.${_profile_line}
 
-Execute each task in its OWN fresh subagent (Task tool) so tasks never share
+Execute each task in $(sprintmd_subagent_own_fresh) so tasks never share
 context. Dispatch them $_jobs_hint. You are the orchestrator — the subagents
 do the work, you move the files.
 
@@ -317,7 +313,7 @@ how many landed in review/ vs blocked/."
   else
     # Honest sequential fallback — no subagent tool assumed.
     sprintmd_run -p "You are running the sprint.md task queue: $COUNT task(s) to execute.
-CLAUDE.md is auto-loaded.${_profile_line}
+CLAUDE.md / AGENTS.md is auto-loaded when present.${_profile_line}
 
 Work the tasks ONE AT A TIME, in the listed order. You do not have a subagent
 tool, so you are the worker, not an orchestrator — after finishing each task,
@@ -387,7 +383,7 @@ for line in sys.stdin:
 # render live progress on the terminal. Returns the CLI's exit code.
 _run_task() {
   local name="$1" display="${2:-0}" log
-  log="$(sprintmd_log_path tasks "$name")"
+  log="$(sprintmd_log_path work "$name")"
   if [ "$display" -eq 1 ]; then
     sprintmd_run -p "$(_task_prompt "$WORKING_DIR/$name")" \
       ${_model_args[@]+"${_model_args[@]}"} \
@@ -451,7 +447,7 @@ _route_result() {
     FAILED=$((FAILED + 1))
     HARD_FAIL=1
     echo "  ✗ Failed (exit $rc) — left in $WORKING_DIR/$name"
-    echo "    Log: docs/tmp/log-tasks-${name%.md}-*.json"
+    echo "    Log: docs/tmp/log-work-${name%.md}-*.json"
   fi
 }
 

@@ -21,12 +21,16 @@ DOCUMENTATION.md outlines the entire ruleset for docs.
 Start here when you have a rough concept.
 
 ```bash
-./sprint.sh newidea "Let people share playlists"
+./sprint.sh newidea "Let people share playlists"   # quick template
+./sprint.sh newidea                                # AI-guided eight-phase Q&A
+./sprint.sh -g newidea                             # same Q&A via Grok this run
 ```
 
-This creates `docs/ideas/let-people-share-playlists.md` with a guided thinking
-framework. Work through it to move from a rough spark to a clear bet: who has
-the problem, what you'll build, and the smallest version worth testing.
+With a name, creates `docs/ideas/let-people-share-playlists.md` from the
+template. Without a name, an interactive AI session walks you through the eight
+phases and writes the file at the end. Either way you move from a rough spark
+to a clear bet: who has the problem, what you'll build, and the smallest
+version worth testing.
 
 **Do this:** Fill in the phases. End with a short list of features that serve
 the idea.
@@ -65,13 +69,16 @@ workable task:
 
 ```bash
 ./sprint.sh chat 12          # use the task's number
+./sprint.sh -g chat 12       # same, Grok Build for this run only
+./sprint.sh -c chat 12       # same, Claude Code for this run only
 ```
 
 `chat` reads the task, then asks one focused question at a time — sharpening the
 problem, the success criteria, and the technical notes until any developer could
 pick it up. It edits the file as you answer, so progress shows up right in the
 task. And if the task turns out to be several jobs in a trench coat, it splits
-them into small, ordered sub-tasks for you.
+them into small, ordered sub-tasks for you. Leading `-g` / `-c` pick the AI
+provider for that run without changing `docs/sprintmd/config`.
 
 ## Step 4 — Move tasks to done
 
@@ -143,6 +150,13 @@ purpose: each one stops so you can fix whatever it reveals before moving on.
 
 `plan start` **commits** a human-authored plan into `next/`; `work` **executes**
 that queue. Keeping the steps apart lets you catch problems each surface.
+
+A plan file carries its own `**Status:** DRAFT | READY | STARTED` (separate from
+the task folders and from a task's own `READY`): `DRAFT` while you author it,
+`READY` once it is safe to start, and `STARTED` — a one-way latch — once
+`plan start` has committed its members. When every member reaches `done/`,
+`./sprint.sh plan done <id>` retires the plan by deleting the file; there is no
+stored DONE status.
 
 Want it unattended? `./sprint.sh loop --refill --retry` starts the next READY
 plan when the queue empties, then gate + work — only authored intent refills.

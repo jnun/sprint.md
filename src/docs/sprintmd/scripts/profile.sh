@@ -134,7 +134,7 @@ RULES:
 # When a live session is not possible, degrade to one-shot and say so (same
 # guard and wording pattern as chat.sh).
 if [ "$(sprintmd_ai_mode)" = "exec" ] && ! sprintmd_interactive_ok; then
-  echo -e "${YELLOW}Note: a live back-and-forth needs an interactive-capable AI CLI (claude) in a real terminal.${NC}"
+  echo -e "${YELLOW}Note: a live back-and-forth needs an interactive-capable AI CLI (claude or grok) in a real terminal.${NC}"
   echo -e "${YELLOW}Doing a single profile pass instead. To wire up the full interactive experience,${NC}"
   echo -e "${YELLOW}see docs/sprintmd/guides/use_chat.md${NC}"
   echo ""

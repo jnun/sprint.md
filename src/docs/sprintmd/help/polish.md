@@ -37,7 +37,7 @@ Verdicts (last line of each task's report):
 Round cap: keyed on the '**Reworked**:' header counter, which ONLY polish
 increments — one bump per confirmed reopen. Once a task's Reworked count
 reaches --rounds (default 1) it is capped and skipped. The cap ignores '##
-Refine'/'## Rework' headings in the body (a define pass or hand edit can write
+Refine'/'## Rework' headings in the body (a gate pass or hand edit can write
 those), so polish never skips a task it has not actually judged; a missing
 counter reads as 0. --force overrides the cap for a one-off deeper pass. The
 refine pass NEVER edits product code — it appends the '## Rework' section and
@@ -61,7 +61,7 @@ Runs an iterative fixer/verifier loop:
   - VERIFIER: read-only tools, confirms fixes are correct
 
 Context modes (how the audit knows what changed):
-  1. MANIFEST FILE — tasks writes a manifest listing changed files
+  1. MANIFEST FILE — work writes a manifest listing changed files
   2. TASK FILE — parses the ## Completed section for changed files
   3. EXPLICIT FILE LIST — pass file paths directly
 
@@ -78,6 +78,10 @@ Usage:
   ./sprint.sh polish file1.py file2  # deep-judge explicit files
   ./sprint.sh polish --code <task.md> [max-passes]
   ./sprint.sh polish --code f1 f2 -- 3
+
+Provider for this run only (leading flags; does not rewrite config):
+  ./sprint.sh -g polish              # Grok Build
+  ./sprint.sh -c polish --code f.py  # Claude Code
 
 Model selection uses docs/sprintmd/config (MODEL_POLISH / MODEL_EXCELLENCE /
 MODEL_CODE_AUDIT, else MODEL_DEFAULT). Override per run with the matching

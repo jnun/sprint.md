@@ -26,5 +26,9 @@ How it improves on a single `work` pass:
   - Time-boxed execution with --hours
   - Cooldown between tasks to pace API usage
 
-Composable with Claude Code's /loop for crash recovery:
+Provider for this run only (leading flags; does not rewrite config):
+  ./sprint.sh -g loop --refill       # Grok Build
+  ./sprint.sh -c loop --hours 2      # Claude Code
+
+Composable with Claude Code's /loop (or equivalent) for crash recovery:
   /loop ./sprint.sh loop --hours 2

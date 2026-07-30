@@ -46,7 +46,8 @@ EOF
 
 assert_contains() {
     local desc="$1" haystack="$2" needle="$3"
-    if echo "$haystack" | grep -qF "$needle"; then
+    # -- so needles like --claude are not parsed as grep options (macOS grep).
+    if echo "$haystack" | grep -qF -- "$needle"; then
         echo "  PASS: $desc"
         PASS=$((PASS + 1))
     else
@@ -113,12 +114,19 @@ rc=0
 bash "$TMPDIR/sprint.sh" newfeature </dev/null >/dev/null 2>&1 || rc=$?
 assert_exit_code "newfeature no-arg does not error" "0" "$rc"
 
-# Test 7: newidea without name exits 1
-echo "Test 7: newidea without args exits 1"
+# Test 7: newidea without a name enters AI Q&A mode (does NOT error).
+# Same dual path as newfeature: no name = AI session, not a usage error.
+echo "Test 7: newidea without args enters Q&A (no error)"
 setup
+# Idea Q&A needs the idea template (create-idea.sh copies it).
+mkdir -p "$TMPDIR/docs/ideas"
+[ -f "$(cd "$(dirname "$0")/.." && pwd)/ideas/.TEMPLATE-idea.md" ] && \
+  cp "$(cd "$(dirname "$0")/.." && pwd)/ideas/.TEMPLATE-idea.md" \
+    "$TMPDIR/docs/ideas/.TEMPLATE-idea.md" 2>/dev/null || \
+  printf '# [IDEA-NAME]\n' > "$TMPDIR/docs/ideas/.TEMPLATE-idea.md"
 rc=0
-bash "$TMPDIR/sprint.sh" newidea 2>/dev/null || rc=$?
-assert_exit_code "newidea no-arg exits 1" "1" "$rc"
+bash "$TMPDIR/sprint.sh" newidea </dev/null >/dev/null 2>&1 || rc=$?
+assert_exit_code "newidea no-arg does not error" "0" "$rc"
 
 # Test 8: newbug without description exits 1
 echo "Test 8: newbug without args exits 1"
@@ -154,6 +162,61 @@ EOF
 output=$(bash "$TMPDIR/sprint.sh" status 2>&1)
 assert_contains "Shows in progress section" "$output" "In progress:"
 assert_contains "Shows task name" "$output" "5-active-task"
+
+# Test 12: help documents global provider flags
+echo "Test 12: help documents -c/-g provider flags"
+setup
+output=$(bash "$TMPDIR/sprint.sh" help 2>&1)
+assert_contains "Usage mentions -c|-g" "$output" "[-c|-g]"
+assert_contains "Help lists --claude" "$output" "--claude"
+assert_contains "Help lists --grok" "$output" "--grok"
+
+# Test 13: -g exports Grok provider for child scripts
+echo "Test 13: -g sets SPRINTMD_CLI/PROVIDER for this run"
+setup
+cat > "$TMPDIR/docs/sprintmd/scripts/work.sh" << 'EOF'
+#!/usr/bin/env bash
+printf 'CLI=%s\n' "${SPRINTMD_CLI:-}"
+printf 'PROVIDER=%s\n' "${SPRINTMD_PROVIDER:-}"
+EOF
+chmod +x "$TMPDIR/docs/sprintmd/scripts/work.sh"
+output=$(bash "$TMPDIR/sprint.sh" -g work 2>&1)
+assert_contains "-g sets CLI=grok" "$output" "CLI=grok"
+assert_contains "-g sets PROVIDER=grok-build" "$output" "PROVIDER=grok-build"
+
+# Test 14: -c / --claude export Claude provider
+echo "Test 14: -c and --claude set Claude provider"
+setup
+cat > "$TMPDIR/docs/sprintmd/scripts/work.sh" << 'EOF'
+#!/usr/bin/env bash
+printf 'CLI=%s\n' "${SPRINTMD_CLI:-}"
+printf 'PROVIDER=%s\n' "${SPRINTMD_PROVIDER:-}"
+EOF
+chmod +x "$TMPDIR/docs/sprintmd/scripts/work.sh"
+output=$(bash "$TMPDIR/sprint.sh" -c work 2>&1)
+assert_contains "-c sets CLI=claude" "$output" "CLI=claude"
+assert_contains "-c sets PROVIDER=claude-code" "$output" "PROVIDER=claude-code"
+output=$(bash "$TMPDIR/sprint.sh" --claude work 2>&1)
+assert_contains "--claude sets CLI=claude" "$output" "CLI=claude"
+
+# Test 15: last leading provider flag wins
+echo "Test 15: last provider flag wins"
+setup
+cat > "$TMPDIR/docs/sprintmd/scripts/work.sh" << 'EOF'
+#!/usr/bin/env bash
+printf 'CLI=%s\n' "${SPRINTMD_CLI:-}"
+EOF
+chmod +x "$TMPDIR/docs/sprintmd/scripts/work.sh"
+output=$(bash "$TMPDIR/sprint.sh" -g -c work 2>&1)
+assert_contains "last flag (-c) wins" "$output" "CLI=claude"
+
+# Test 16: unknown global option exits 1
+echo "Test 16: unknown global option exits 1"
+setup
+rc=0
+output=$(bash "$TMPDIR/sprint.sh" -x work 2>&1) || rc=$?
+assert_exit_code "Unknown option exits 1" "1" "$rc"
+assert_contains "Unknown option message" "$output" "Unknown option: -x"
 
 # --- Summary ---
 echo ""

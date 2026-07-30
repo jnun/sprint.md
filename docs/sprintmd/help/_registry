@@ -14,7 +14,7 @@
 # display order. A command may have a second row for a notable sub-form
 # (e.g. validate --docs); existence checks dedupe on the command field.
 
-newidea       | create   | <name>              | Create a new idea to refine
+newidea       | create   | [name]              | Create a new idea (no name = AI Q&A)
 newfeature    | create   | [name]              | Create a new feature (no name = AI Q&A)
 newtask       | create   | <description>       | Create a new task
 newplan       | create   | <name> [task-id...] | Create a plan — a named list of task IDs grouping related work
@@ -23,13 +23,13 @@ newtest       | create   | <name>              | Create a test loop to validate 
 
 chat          | chat     | [target]            | id: define/refine/split one task · folder (blocked/next/backlog): sweep · plan [id]: author a plan · bugs: sweep inbox · nothing: walk sprint health (spine: chat → plan start → work)
 
-plan          | plan     | think|start [id]    | think: dual-persona plan critique · start: gate + commit members to next/ (the sprint) — heads the spine → work
+plan          | plan     | think/start/done [id] | think: dual-persona plan critique · start: gate + commit members to next/ (the sprint), latches STARTED · done: delete the plan once every member is in done/ — heads the spine → work
 
 work          | work     | [limit] [--fast]    | Execute — happy path: run READY tasks in next/ → review/ (after plan start)
 loop          | work     | [--refill] [--retry]| Autopilot spine — plan start refill (gates as it commits) then work drain
 gate          | work     | [folder] [limit]    | Off-spine quality gate — re-gate next/ (--force) or report on backlog/doing/blocked (not the happy path)
 split         | work     | <path>              | Off-spine — one-shot split of a large task into subtasks (no conversation)
-polish        | work     | [limit|file] [--code] [--rounds N] | After work — quality sweep review/, deep-judge a file, or --code audit
+polish        | work     | [limit/file] [--code] [--rounds N] | After work — quality sweep review/, deep-judge a file, or --code audit
 
 status        | look     |                     | Show project status
 search        | look     | <keyword>           | Search tasks by keyword

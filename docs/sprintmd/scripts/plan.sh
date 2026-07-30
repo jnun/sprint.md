@@ -5,6 +5,7 @@
 # This entry is the namespace for:
 #   plan think [id]  — dual-persona critique (plan-think.sh)
 #   plan start [id]  — commit members into next/ (plan-start.sh)
+#   plan done  [id]  — retire a plan whose every member is in done/ (plan-done.sh)
 #
 # The old auto-planner (theme guess + auto-move + cached plan file) is
 # retired. Bare `plan` prints usage. next/ IS the sprint.
@@ -30,6 +31,7 @@ plan — decisive plan verbs (authoring is chat plan)
 Usage:
   ./sprint.sh plan think [id]    dual-persona critique of a plan
   ./sprint.sh plan start [id]    commit plan members into next/ (the sprint)
+  ./sprint.sh plan done  [id]    retire a plan once every member is in done/
 
   ./sprint.sh chat plan [id]     author/refine a plan conversationally
   ./sprint.sh newplan "<name>"   scaffold a new plan file
@@ -42,6 +44,7 @@ EOF
 case "${1:-}" in
   think) shift; run_sub plan-think.sh "$@" ;;
   start) shift; run_sub plan-start.sh "$@" ;;
+  done)  shift; run_sub plan-done.sh "$@" ;;
   -h|--help|help) usage; exit 0 ;;
   "")
     usage

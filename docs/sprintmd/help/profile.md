@@ -12,10 +12,11 @@ instead of only asking what changed.
 Usage:
   ./sprint.sh profile           # create or update project profile (interactive)
   ./sprint.sh profile show      # print current profile (no AI)
+  ./sprint.sh -g profile        # Grok Build for this run (leading -c = Claude)
 
 profile show cats docs/sprintmd/project.md, or prints a short "no
 profile yet" message with the create command. No AI session is started.
 
 After running profile (create/update):
   - docs/sprintmd/project.md exists with project conventions
-  - chat, define, plan, and tasks pick it up automatically
+  - chat, gate, plan, and work pick it up automatically

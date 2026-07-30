@@ -5,11 +5,11 @@
 # Invoked as: ./sprint.sh plan start [id] [--commit-only]
 #
 # next/ IS the sprint, so workability is decided BEFORE a member enters it: each
-# backlog member is run through the shared workability gate (gate.sh, same code
-# `define` runs) while still in backlog/ — READY is promoted into next/, BLOCKED
-# lands in blocked/ (never visits next/), DONE goes to review/. --commit-only
-# skips the gate and does the pure, deterministic backlog→next mv (power users,
-# tests, non-AI environments).
+# backlog member is run through the shared workability gate (gate-lib.sh — same
+# code `./sprint.sh gate` runs) while still in backlog/ — READY is promoted into
+# next/, BLOCKED lands in blocked/ (never visits next/), DONE goes to review/.
+# --commit-only skips the gate and does the pure, deterministic backlog→next mv
+# (power users, tests, non-AI environments).
 #
 # Location-aware regardless of mode: next=idempotent, already-blocked=stop,
 # past=skip, missing=hard error. Moves use move_file (git mv || mv); developer owns commits.
@@ -17,8 +17,8 @@
 set -euo pipefail
 
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/lib.sh"
-# The gate is the shared workability review — the same code `define` runs. Both
-# surfaces call one implementation so their verdicts and rules never drift.
+# Shared workability review — same implementation as `./sprint.sh gate`. Both
+# surfaces call one library so their verdicts and rules never drift.
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/gate-lib.sh"
 
 PLANS_DIR="docs/plans"
@@ -63,6 +63,22 @@ find_plan() {
 plan_status() {
   grep -m1 -E '^\*\*Status:\*\*' "$1" 2>/dev/null \
     | sed 's/.*\*\*Status:\*\*[[:space:]]*//' | tr -d '[:space:]' || true
+}
+
+# STARTED latch: set-or-replace the **Status:** line to STARTED (one-way).
+# Idempotent — re-running plan start just re-stamps the single status line; it
+# never appends a duplicate. Set regardless of how many members moved this run,
+# because STARTED means "this plan has been committed to the sprint," not
+# "members moved just now." Only DRAFT | READY are ever replaced here.
+stamp_started() {
+  local f="$1"
+  if grep -qE '^\*\*Status:\*\*' "$f" 2>/dev/null; then
+    sed_inplace 's/^\*\*Status:\*\*.*/**Status:** STARTED/' "$f"
+  else
+    # No status line at all (malformed plan) — append one; plan_status reads the
+    # first match, so a single appended line still reports STARTED.
+    printf '\n**Status:** STARTED\n' >> "$f"
+  fi
 }
 
 # Extract ## Goal body (until next ## heading), first non-empty lines collapsed.
@@ -261,10 +277,10 @@ elif [ ${#MOVE_PATHS[@]} -gt 0 ]; then
   # BLOCKED → blocked/, DONE → review/ (handled inside the shared gate).
   sprintmd_gate_init plan "$NEXT_DIR" "$NEXT_DIR"
 
-  # claude-code emit fast path: one subagent per member, in parallel. The agent
-  # runs each review and performs the promote/move itself per the folded-in
-  # instructions. Only worth the orchestration for more than one member.
-  if [ "$(sprintmd_ai_mode)" = "emit" ] && [ "$(sprintmd_ai_tier)" = "claude-code" ] \
+  # Orchestration-capable emit fast path: one subagent per member, in parallel.
+  # The agent runs each review and promote/move per folded-in instructions.
+  # Only worth the orchestration for more than one member.
+  if [ "$(sprintmd_ai_mode)" = "emit" ] && sprintmd_orchestration_capable \
      && [ ${#MOVE_PATHS[@]} -gt 1 ]; then
     sprintmd_gate_parallel "${MOVE_PATHS[@]}"
     EMITTED=1
@@ -301,6 +317,12 @@ else
 fi
 [ ${#SKIP_NEXT[@]} -gt 0 ] && echo "  (already queued: ${#SKIP_NEXT[@]})"
 [ ${#SKIP_PAST[@]} -gt 0 ] && echo "  (already past next/: ${#SKIP_PAST[@]})"
+
+# One-way STARTED latch: this plan has now been committed to the sprint. Set on
+# every successful exit — gated, emit, --commit-only, and idempotent re-runs —
+# regardless of how many members moved this run. It never reverts as members
+# flow through next/doing/review/done; `plan done` later deletes the file.
+stamp_started "$PLAN_FILE"
 
 GOAL="$(plan_goal_text "$PLAN_FILE")"
 if [ -n "$GOAL" ]; then

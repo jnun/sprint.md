@@ -51,13 +51,15 @@ field() {
     | sed -E 's/^[^:]*:[[:space:]]*//'
 }
 
-# id_list "1, 3-5, none" -> "1 3 4 5". Expands N-M ranges; drops none/n-a/blank.
+# id_list "1, #3-5, none" -> "1 3 4 5". Expands N-M ranges; drops none/n-a/blank.
+# Leading '#' is optional (same as sprintmd_iter_id_list in lib.sh).
 id_list() {
   local raw="$1" tok lo hi n ids=""
   case "$(printf '%s' "$raw" | tr '[:upper:]' '[:lower:]')" in
     none*|n/a*|-*|'') return 0 ;;
   esac
   for tok in $(printf '%s' "$raw" | tr ',' ' '); do
+    tok="${tok#\#}"
     if [[ "$tok" =~ ^([0-9]+)-([0-9]+)$ ]]; then
       lo="${BASH_REMATCH[1]}"; hi="${BASH_REMATCH[2]}"
       [ "$lo" -le "$hi" ] || continue
@@ -226,11 +228,11 @@ EOF
 
   # 5. Stage-specific checks.
   if [ "$stage" = "next" ]; then
-    # Stale-ready — queued to run without define's READY verdict.
+    # Stale-ready — queued to run without gate's READY verdict.
     if [ "$verdict" != "READY" ]; then
       add_finding 4 HYGIENE "$id" "$file" \
-        "sits in next/ without a '**Status: READY**' stamp (tasks will skip it)" \
-        "run 'chat $id' to finish defining it, or 'define' to vet it"
+        "sits in next/ without a '**Status: READY**' stamp (work will skip it)" \
+        "run 'chat $id' to finish defining it, or 'gate' to vet it"
     fi
     # Dependency-stage violations — grade each unmet dep by where it sits.
     for u in $(sprintmd_unmet_deps "$file"); do
@@ -351,7 +353,7 @@ WAIT_N=$(printf '%s' "$WAITING" | grep -c '^' || true)
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo "  Sprint: $NEXT_COUNT queued  ·  $RUN_N runnable now  ·  $WAIT_N waiting  ·  $FINDING_COUNT finding(s)"
 if [ -n "$RUNNABLE" ]; then
-  echo "  Frontier (what 'tasks' would run now): $RUNNABLE"
+  echo "  Frontier (what 'work' would run now): $RUNNABLE"
   # "runnable" mirrors the executor's gate (READY + deps met); a listed task can
   # still carry a finding below, so the two views are complementary, not at odds.
   [ "$FINDING_COUNT" -gt 0 ] && echo "  (some frontier tasks may still carry findings below — walk those first)"
@@ -396,7 +398,7 @@ $(printf '%s' "$WAITING")"
 FINDINGS_RENDERED="$(render_findings)"
 
 # The next→blocked resolution logic (present two paths, demote inline for B,
-# hand off to define for A, gate the drop path behind an edge audit) is shared
+# hand off to chat for A, keep the drop path behind an edge audit) is shared
 # with the chat-next folder walk (task 226). It lives in lib.sh so both entry
 # points walk the edge identically — do not inline a second copy here.
 NEXT_BLOCKED_RESOLUTION="$(sprintmd_next_blocked_resolution)"
@@ -450,7 +452,7 @@ RULES
 # plainly rather than pretending a conversation happened. The same
 # sprintmd_interactive_ok that routes the run decides the warning, so they agree.
 if [ "$(sprintmd_ai_mode)" = "exec" ] && ! sprintmd_interactive_ok; then
-  echo -e "${YELLOW}Note: a live walkthrough needs an interactive-capable AI CLI (claude) in a real terminal.${NC}"
+  echo -e "${YELLOW}Note: a live walkthrough needs an interactive-capable AI CLI (claude or grok) in a real terminal.${NC}"
   echo -e "${YELLOW}Doing a single pass over the findings instead. To wire up the full experience,${NC}"
   echo -e "${YELLOW}see docs/sprintmd/guides/use_chat.md${NC}"
   echo ""

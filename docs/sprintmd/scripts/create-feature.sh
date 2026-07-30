@@ -62,6 +62,14 @@ _model_args=()
 
 _PROFILE_LINE="$(sprintmd_profile_line)"
 
+# Live multi-turn Q&A needs an interactive-capable CLI on a real TTY. When exec
+# cannot offer one, degrade to a single pass and say so (same contract as chat).
+if [ "$(sprintmd_ai_mode)" = "exec" ] && ! sprintmd_interactive_ok; then
+  echo -e "${YELLOW}Note: a live feature Q&A needs an interactive-capable AI CLI (claude or grok) in a real terminal.${NC}"
+  echo -e "${YELLOW}Doing a single definition pass instead. For the full experience, see docs/sprintmd/guides/use_chat.md${NC}"
+  echo ""
+fi
+
 TEMPLATE_FILE="docs/features/.TEMPLATE-feature.md"
 APPEND_PROMPT="You are a product-minded developer helping a colleague define a new feature through conversation.${_PROFILE_LINE}
 
@@ -105,7 +113,7 @@ RULES:
 - You may only create files under docs/features/. Do not modify any other files.
 - Do not write code or design the implementation — only define the feature."
 
-sprintmd_run \
+sprintmd_run_interactive \
   --append-system-prompt "$APPEND_PROMPT" \
   ${_model_args[@]+"${_model_args[@]}"} \
   --tools "Read,Edit,Write,Bash" \

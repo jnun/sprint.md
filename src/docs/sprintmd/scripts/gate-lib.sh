@@ -24,7 +24,7 @@
 # Usage:
 #   sprintmd_gate_init [KIND] [STAY_DIR] [READY_DIR]  # once — invariant context
 #   sprintmd_gate_review FILE              # one task: run + route; sets outputs
-#   sprintmd_gate_parallel FILE...         # emit-mode claude-code fan-out
+#   sprintmd_gate_parallel FILE...         # emit-mode orchestration fan-out
 #
 # sprintmd_gate_review sets, on return:
 #   SPRINTMD_GATE_VERDICT  READY | BLOCKED | DONE | EMIT | NOSTAMP | FAILED
@@ -66,12 +66,12 @@ _sprintmd_gate_sprint_index() {
 # review shares: the emit-mode move instruction, the profile pointer, and the
 # next/backlog index block. Call once before sprintmd_gate_review /
 # sprintmd_gate_parallel.
-#   KIND      log-file kind for sprintmd_log_path (default "define").
+#   KIND      log-file kind for sprintmd_log_path (default "gate").
 #   STAY_DIR  where a READY task stays, for the emit move instruction's wording
 #             (default: "its current location"). Ignored when READY_DIR is set.
 #   READY_DIR when set, a READY task is MOVED here instead of staying in place —
 #             `plan start` passes next/ so a vetted backlog member is promoted
-#             into the sprint. Empty (define) = READY stays where it was.
+#             into the sprint. Empty (gate) = READY stays where it was.
 sprintmd_gate_init() {
   SPRINTMD_GATE_KIND="${1:-gate}"
   local stay_dir="${2:-}"
@@ -229,11 +229,11 @@ You may only use Edit/Write on the task file at $1.
 EOF
 }
 
-# ── claude-code fast path: review all given tasks in parallel subagents ─────
-# On the claude-code tier in emit mode, dispatching one subagent per task is
-# strictly faster than emitting N prompts the host agent runs one after another,
-# and the reviews are independent (each touches only its own file). Emits the
-# orchestration prompt. Args: the task file paths to review (one subagent each).
+# ── Orchestration-capable fast path: parallel subagents ─────────────────────
+# On claude-code / grok-build in emit mode, one subagent per task is faster than
+# N sequential prompts; reviews are independent. Subagent wording comes from
+# sprintmd_subagent_parallel_dispatch (Task tool vs spawn_subagent). Args: the
+# task file paths to review (one subagent each).
 sprintmd_gate_parallel() {
   local count=$# f _parallel_files=""
   for f in "$@"; do
@@ -243,8 +243,7 @@ sprintmd_gate_parallel() {
 
   sprintmd_run -p "You are orchestrating a parallel task-definition review of $count tasks.
 
-Dispatch ONE subagent per task file below, ALL IN PARALLEL (issue every Task
-tool call in a single message). Each subagent reviews exactly one file and
+$(sprintmd_subagent_parallel_dispatch) Each subagent reviews exactly one file and
 follows this contract verbatim, substituting its assigned file path:
 
 ────────────────────────────────────────────────────────────
@@ -334,7 +333,7 @@ sprintmd_gate_review() {
         SPRINTMD_GATE_VERDICT="DONE"
         ;;
       READY)
-        # Default (define): READY stays put. With READY_DIR set (plan start),
+        # Default (gate): READY stays put. With READY_DIR set (plan start),
         # a vetted member is promoted — moved into next/ — only now that it
         # graded READY, so unready work never touches the sprint.
         if [ -n "${SPRINTMD_GATE_READY_DIR:-}" ]; then

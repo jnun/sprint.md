@@ -12,6 +12,9 @@ IDs. The tasks are never moved into it: each stays in its own lifecycle folder
 never counted or moved as a task; `docs/plans/` is a sibling of `docs/tasks/`,
 not a lifecycle stage. New plans start with `**Status:** DRAFT`; flip to
 `READY` when the plan is authored and safe for `plan start` / `loop --refill`.
+`plan start` then latches `**Status:** STARTED` (a one-way switch) as it commits
+members to `next/`, and once every member reaches `done/`, `./sprint.sh plan
+done <id>` retires the plan by deleting the file — there is no stored DONE.
 
 The plan gets an auto-assigned ID from a dedicated `sprint_PLAN_ID` counter
 in `docs/sprintmd/DOC_STATE.md` (bumped on creation, exactly like task and bug

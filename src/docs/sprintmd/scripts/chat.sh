@@ -112,14 +112,14 @@ fi
 
 # ── Close-the-loop: a blocked task that chat fully defines goes straight back
 # into the sprint. Only meaningful when the task is in blocked/ (that's where
-# define parked it); for any other stage there is no loop to close, so this is
+# gate parked it); for any other stage there is no loop to close, so this is
 # empty and the closing section reads clean. A human-supervised chat is a
-# stronger readiness signal than define's automated pass, so chat stamps the
-# READY verdict itself instead of bouncing the task through another define run.
+# stronger readiness signal than gate's automated pass, so chat stamps the
+# READY verdict itself instead of bouncing the task through another gate run.
 if [ "$STAGE" = "blocked" ]; then
   _CLOSE_LOOP_INSTR="
 1b. CLOSE THE LOOP (this task is in blocked/):
-define parked this task in blocked/ because it wasn't defined enough to work.
+gate parked this task in blocked/ because it wasn't defined enough to work.
 If — and ONLY if — the conversation has genuinely resolved it (no open decision
 remains and it now reads as fully defined), close the loop so it can be worked:
 1. Make the file END with a '## Questions' section whose first line is EXACTLY:
@@ -162,10 +162,10 @@ fi
 # surfaces that it depends on another undefined task; walking that chain in THIS
 # conversation piles context up and burns tokens. So we hand the next task off
 # through its FILE (a durable note the fresh session reads) and start clean:
-# emit mode spawns a brand-new subagent (the driving agent has a Task tool);
+# emit mode on orchestration-capable tiers spawns a brand-new subagent;
 # exec mode can't open a window, so it prints the command for the user to run.
-if [ "$(sprintmd_ai_mode)" = "emit" ] && [ "$(sprintmd_ai_tier)" = "claude-code" ]; then
-  _CONTINUE_INSTR="Then CONTINUE THE CHAIN in a fresh context so this session's tokens don't pile up: launch a NEW subagent (Task tool) for <next-id>. Its entire instruction: 'Run ./sprint.sh chat <next-id> and carry that task as far toward READY as you can on your own — read the *Context from chat* note already in its file, refine it, and if a question genuinely needs the human, leave it in the file's ## Questions section and report it back.' Tell the user you have spun up a fresh agent for <next-id> and say in one line what it is picking up."
+if [ "$(sprintmd_ai_mode)" = "emit" ] && sprintmd_orchestration_capable; then
+  _CONTINUE_INSTR="Then CONTINUE THE CHAIN in a fresh context so this session's tokens don't pile up: $(sprintmd_subagent_spawn_phrase "<next-id>"). Its entire instruction: 'Run ./sprint.sh chat <next-id> and carry that task as far toward READY as you can on your own — read the *Context from chat* note already in its file, refine it, and if a question genuinely needs the human, leave it in the file's ## Questions section and report it back.' Tell the user you have spun up a fresh agent for <next-id> and say in one line what it is picking up."
 else
   _CONTINUE_INSTR="Then, to keep each session's context small, do NOT keep going here. Tell the user the next task to define and the exact command to run in a FRESH window:  ./sprint.sh chat <next-id>  — the *Context from chat* note you just wrote means that fresh session already has what it needs."
 fi
@@ -341,7 +341,7 @@ ${_CLOSE_LOOP_INSTR}
 # same sprintmd_interactive_ok that routes the run decides the warning, so the
 # two can never disagree.
 if [ "$(sprintmd_ai_mode)" = "exec" ] && ! sprintmd_interactive_ok; then
-  echo -e "${YELLOW}Note: a live back-and-forth needs an interactive-capable AI CLI (claude) in a real terminal.${NC}"
+  echo -e "${YELLOW}Note: a live back-and-forth needs an interactive-capable AI CLI (claude or grok) in a real terminal.${NC}"
   echo -e "${YELLOW}Doing a single refinement pass instead. To wire up the full chat experience,${NC}"
   echo -e "${YELLOW}see docs/sprintmd/guides/use_chat.md${NC}"
   echo ""

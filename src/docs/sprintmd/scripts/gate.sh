@@ -186,7 +186,7 @@ fi
 # READY-gate mode (next/): deep review, write ## Questions, move files.
 # The review contract, sprint-context builder, verdict routing, and file
 # moves are the shared workability gate — see gate.sh. This section is the
-# define-specific orchestration around it: which tasks to review, the run
+# gate-specific orchestration around it: which tasks to review, the run
 # summary, and the chat queue for what came back blocked.
 # ═════════════════════════════════════════════════════════════════════
 
@@ -243,13 +243,11 @@ echo ""
 # stay in next/, so that is the gate's stay-dir.
 sprintmd_gate_init gate "$NEXT_DIR"
 
-# ── claude-code fast path: review all tasks in parallel subagents ─────
-# On the claude-code tier in emit mode, dispatching one subagent per task is
-# strictly faster than emitting N prompts the host agent runs one after another,
-# and the reviews are independent (each touches only its own file). Other tiers
-# can't fan out, and exec mode drives the CLI directly — both fall through to
-# the sequential loop below. Only worth the orchestration when COUNT > 1.
-if [ "$AI_MODE" = "emit" ] && [ "$(sprintmd_ai_tier)" = "claude-code" ] && [ "$COUNT" -gt 1 ]; then
+# ── Orchestration-capable fast path: parallel subagents in emit mode ──
+# On claude-code / grok-build in emit mode, one subagent per task is strictly
+# faster than N sequential prompts; reviews are independent. Other tiers and
+# exec mode fall through to the sequential loop. Only when COUNT > 1.
+if [ "$AI_MODE" = "emit" ] && sprintmd_orchestration_capable && [ "$COUNT" -gt 1 ]; then
   sprintmd_gate_parallel "${TASK_FILES[@]:0:$COUNT}"
   echo ""
   exit 0
@@ -284,8 +282,8 @@ _chat_line() {
 # cause of a block is often an UPSTREAM task that isn't defined yet, so a flat
 # "these are blocked" list hides the real work. This orders it top-down: the
 # undefined upstream tasks (the real X-Y-Z to define) and dependency-free blocks
-# come first; blocks that wait on them come after. Talk the top of the list and
-# the rest often fall out READY on the next define run.
+# come first; blocks that wait on them come after. Chat the top of the list and
+# the rest often fall out READY on the next gate run.
 # Args: the blocked task basenames (as in $BLOCKED_DIR).
 _chat_queue() {
   [ "$#" -gt 0 ] || return 0
@@ -307,7 +305,7 @@ _chat_queue() {
   # Upstream deps that aren't blocked themselves but still need DEFINING (not yet
   # stamped READY). These are the tasks whose absence is really holding the sprint
   # up — surface them ABOVE the blocks that depend on them. A READY-but-unfinished
-  # dep only needs `tasks` to run it, not chat, so it's left off this list.
+  # dep only needs `work` to run it, not chat, so it's left off this list.
   local upstream="" d dfile _res
   for d in $(printf '%s' "$all_deps" | tr ' ' '\n' | grep -E '^[0-9]+$' | sort -un); do
     case " $blocked_ids " in *" $d "*) continue ;; esac
@@ -318,12 +316,12 @@ _chat_queue() {
   done
 
   echo ""
-  echo "▸ Talk queue — define the blocking work, top-down:"
+  echo "▸ Chat queue — define the blocking work, top-down:"
   echo "  (the AI raises the questions, you make the calls)"
   echo ""
   local first_group=1
   if [ -n "$upstream$roots" ]; then
-    echo "  Talk these first — nothing upstream is blocking them:"
+    echo "  Chat these first — nothing upstream is blocking them:"
     for d in $(printf '%s' "$upstream" | tr ' ' '\n' | grep -E '^[0-9]+$' | sort -un); do
       _res="$(sprintmd_find_task "$d")" && _chat_line "$d" "${_res%%$'\t'*}" ""
     done

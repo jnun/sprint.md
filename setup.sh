@@ -203,45 +203,40 @@ fi
 INSTALLED_VERSION=""
 UPDATE_MODE=false
 
-# Check if sprint.md is already installed
+# Check if sprint.md is already installed. Product version lives only in
+# docs/sprintmd/DOC_STATE.md (written from src/VERSION). There is no separate
+# migration-epoch ladder — layout cleanups below are path-presence only.
 if [ -f "docs/sprintmd/DOC_STATE.md" ]; then
-    # 2.2.0+ install
     INSTALLED_VERSION=$(grep '^\*\*sprint_VERSION\*\*:' docs/sprintmd/DOC_STATE.md 2>/dev/null | sed 's/.*:[[:space:]]*//' | head -1)
-
-    if [ -z "$INSTALLED_VERSION" ]; then
-        INSTALLED_VERSION="0.0.0"
-    fi
+    [ -n "$INSTALLED_VERSION" ] || INSTALLED_VERSION="unknown"
 
     UPDATE_MODE=true
     echo "Existing sprint.md installation detected (version $INSTALLED_VERSION)"
     echo "This will update to version $CURRENT_VERSION"
     echo ""
 elif [ -f "docs/STATE.md" ]; then
-    # Pre-2.2.0 install — STATE.md still at old location, will be migrated
+    # Older layout: STATE.md at docs/ root — will be moved to DOC_STATE.md below.
     INSTALLED_VERSION=$(grep '^\*\*sprint_VERSION\*\*:' docs/STATE.md 2>/dev/null | sed 's/.*:[[:space:]]*//' | head -1)
-
-    if [ -z "$INSTALLED_VERSION" ]; then
-        INSTALLED_VERSION="0.0.0"
-    fi
+    [ -n "$INSTALLED_VERSION" ] || INSTALLED_VERSION="unknown"
 
     UPDATE_MODE=true
-    echo "Existing sprint.md installation detected (version $INSTALLED_VERSION, pre-2.2.0 layout)"
+    echo "Existing sprint.md installation detected (version $INSTALLED_VERSION, older layout)"
     echo "This will update to version $CURRENT_VERSION"
     echo ""
 elif [ -d "docs/tasks" ] || [ -d "work/tasks" ] || [ -d "docs/work/tasks" ]; then
-    # Legacy structure detected
-    INSTALLED_VERSION="0.0.0"
+    INSTALLED_VERSION="unknown"
     UPDATE_MODE=true
-    echo "Legacy sprint.md structure detected"
-    echo "This will migrate to the current structure"
+    echo "Existing project docs structure detected"
+    echo "This will install/update sprint.md to version $CURRENT_VERSION"
     echo ""
 elif [ -f "DOCUMENTATION.md" ]; then
-    # Partial installation
-    INSTALLED_VERSION="0.0.0"
+    INSTALLED_VERSION="unknown"
     UPDATE_MODE=true
 fi
 
 if $UPDATE_MODE; then
+    # Remember for the final summary only — never used as a migration gate.
+    ORIGINAL_VERSION="$INSTALLED_VERSION"
     echo "Do you want to continue with the update? (y/n)"
     read -r CONFIRM
     if [[ ! "$CONFIRM" =~ ^[Yy]$ ]]; then
@@ -285,336 +280,6 @@ merge_config() {
 
     $changed && return 0 || return 1
 }
-
-# ============================================================================
-# VERSION MIGRATIONS (only run in update mode)
-# ============================================================================
-
-if $UPDATE_MODE; then
-    # Remember the version we started from — the migrations below walk
-    # INSTALLED_VERSION forward, so this is the only point it still holds
-    # the version actually on disk. Used in the final summary.
-    ORIGINAL_VERSION="$INSTALLED_VERSION"
-
-    echo ""
-    echo "Running version migrations..."
-
-    # Migration from pre-0.1.0 (work/ at root)
-    if [[ "$INSTALLED_VERSION" < "0.1.0" ]]; then
-        echo ""
-        echo "Migrating from pre-0.1.0 structure..."
-
-        if [ -d "work" ]; then
-            if [ ! -d "docs/work" ]; then
-                mkdir -p docs
-                mv work docs/
-                echo "  Moved work/ to docs/work/"
-            else
-                echo "  Both work/ and docs/work/ exist - backing up and merging..."
-                mv work work.backup
-                echo "  Moved old work/ to work.backup/"
-            fi
-
-            if [ -f "docs/work/STATE.md" ]; then
-                mv docs/work/STATE.md docs/
-                echo "  Moved STATE.md to docs/"
-            fi
-        fi
-
-        ensure_task_folders
-
-        # Move loose task files to backlog
-        if [ -d "docs/tasks" ]; then
-            for file in docs/tasks/*.md; do
-                if [ -f "$file" ]; then
-                    basename=$(basename "$file")
-                    if [[ "$basename" != "INDEX.md" ]] && [[ "$basename" != "TEMPLATE"* ]]; then
-                        mv "$file" "docs/tasks/backlog/" 2>/dev/null || true
-                        echo "  Moved $basename to backlog/"
-                    fi
-                fi
-            done
-        fi
-
-        INSTALLED_VERSION="0.1.0"
-    fi
-
-    # Migration from 0.1.0 to 1.0.0
-    if [[ "$INSTALLED_VERSION" < "1.0.0" ]]; then
-        echo ""
-        echo "Migrating from 0.1.0 to 1.0.0..."
-
-        ensure_task_folders
-        safe_mkdir "docs/bugs"
-        safe_mkdir "docs/sprintmd/scripts"
-        safe_mkdir "docs/sprintmd/ai"
-        safe_mkdir "docs/designs"
-        safe_mkdir "docs/examples"
-        safe_mkdir "docs/data"
-        safe_mkdir "docs/features"
-        safe_mkdir "docs/guides"
-
-        find docs -type d -empty -exec touch {}/.gitkeep \; 2>/dev/null || true
-
-        INSTALLED_VERSION="1.0.0"
-    fi
-
-    # Migration from 1.x to 2.0.0 - Flatten docs/work/ hierarchy
-    if [[ "$INSTALLED_VERSION" < "2.0.0" ]]; then
-        if [ -d "docs/work" ]; then
-            echo ""
-            echo "================================================"
-            echo "  Migrating to 2.0.0 - Structure Simplification"
-            echo "================================================"
-            echo ""
-            echo "Flattening directory structure:"
-            echo "  docs/work/tasks/ -> docs/tasks/"
-            echo "  docs/work/bugs/ -> docs/bugs/"
-            echo "  docs/work/scripts/ -> docs/sprintmd/scripts/"
-            echo ""
-
-            BACKUP_DIR="docs/work-backup-$(date +%Y%m%d-%H%M%S)"
-            cp -R "docs/work" "$BACKUP_DIR"
-            echo "  Backup created at $BACKUP_DIR"
-
-            # Migrate directories
-            for subdir in tasks bugs designs examples data; do
-                if [ -d "docs/work/$subdir" ]; then
-                    if [ -d "docs/$subdir" ]; then
-                        cp -R "docs/work/$subdir/." "docs/$subdir/"
-                    else
-                        mv "docs/work/$subdir" "docs/$subdir"
-                    fi
-                    echo "  Migrated docs/work/$subdir -> docs/$subdir"
-                fi
-            done
-
-            # Special handling for scripts -> sprintmd/scripts
-            if [ -d "docs/work/scripts" ]; then
-                mkdir -p "docs/sprintmd/scripts"
-                cp -R "docs/work/scripts/." "docs/sprintmd/scripts/"
-                echo "  Migrated docs/work/scripts -> docs/sprintmd/scripts"
-            fi
-
-            # Move platform config
-            if [ -f "docs/work/.platform-config" ]; then
-                mv "docs/work/.platform-config" "docs/.platform-config"
-            fi
-
-            # Clean up
-            rm -rf "docs/work"
-            echo "  Removed docs/work/ directory"
-        fi
-
-        INSTALLED_VERSION="2.0.0"
-    fi
-
-    # Migration from 2.0.0 to 2.1.0 - Framework namespace
-    if [[ "$INSTALLED_VERSION" < "2.1.0" ]]; then
-        echo ""
-        echo "Migrating to 2.1.0 - Framework namespace..."
-
-        mkdir -p "docs/sprintmd/scripts"
-        mkdir -p "docs/sprintmd/ai"
-
-        # Move scripts from docs/scripts/ if it exists
-        if [ -d "docs/scripts" ]; then
-            for script in docs/scripts/*.sh; do
-                if [ -f "$script" ]; then
-                    mv "$script" "docs/sprintmd/scripts/"
-                    echo "  Moved $(basename "$script") -> docs/sprintmd/scripts/"
-                fi
-            done
-        fi
-
-        INSTALLED_VERSION="2.1.0"
-    fi
-
-    # Migration from 2.1.x to 2.2.0 - Move STATE.md into docs/sprintmd/ as DOC_STATE.md
-    if [[ "$INSTALLED_VERSION" < "2.2.0" ]]; then
-        if [ -f "docs/STATE.md" ] && [ ! -f "docs/sprintmd/DOC_STATE.md" ]; then
-            echo ""
-            echo "Migrating to 2.2.0 - Moving STATE.md to docs/sprintmd/DOC_STATE.md..."
-            mkdir -p "docs/sprintmd"
-            mv docs/STATE.md docs/sprintmd/DOC_STATE.md
-            echo "  Moved docs/STATE.md -> docs/sprintmd/DOC_STATE.md"
-        fi
-
-        INSTALLED_VERSION="2.2.0"
-    fi
-
-    # Migration from 2.x to 3.0.0 - Rename docs/tasks/live/ to docs/tasks/done/
-    if [[ "$INSTALLED_VERSION" < "3.0.0" ]]; then
-        if [ -d "docs/tasks/live" ]; then
-            echo ""
-            echo "================================================"
-            echo "  Migrating to 3.0.0 - Rename live/ to done/"
-            echo "================================================"
-            echo ""
-            echo "sprint.md now uses standard Kanban terminology:"
-            echo "  backlog → next → doing → review → done"
-            echo ""
-            echo "The 'live' folder has been renamed to 'done' to align with"
-            echo "common project management vocabulary."
-            echo ""
-
-            LIVE_COUNT=$(find "docs/tasks/live" -name "*.md" -maxdepth 1 2>/dev/null | wc -l | tr -d ' ')
-
-            if [ "$LIVE_COUNT" -gt 0 ]; then
-                echo "  Found $LIVE_COUNT task file(s) in docs/tasks/live/"
-                echo ""
-            fi
-
-            # Try git mv first (preserves history), fall back to mv
-            if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-                if git mv "docs/tasks/live" "docs/tasks/done" 2>/dev/null; then
-                    msg_success "git mv docs/tasks/live/ -> docs/tasks/done/"
-                else
-                    # git mv can fail if there are unstaged changes; fall back
-                    mkdir -p "docs/tasks/done"
-                    if [ "$LIVE_COUNT" -gt 0 ]; then
-                        mv docs/tasks/live/* "docs/tasks/done/" 2>/dev/null || true
-                    fi
-                    # Move .gitkeep if present
-                    mv docs/tasks/live/.gitkeep "docs/tasks/done/" 2>/dev/null || true
-                    rmdir "docs/tasks/live" 2>/dev/null || rm -rf "docs/tasks/live"
-                    msg_success "mv docs/tasks/live/ -> docs/tasks/done/"
-                fi
-            else
-                mkdir -p "docs/tasks/done"
-                if [ "$LIVE_COUNT" -gt 0 ]; then
-                    mv docs/tasks/live/* "docs/tasks/done/" 2>/dev/null || true
-                fi
-                mv docs/tasks/live/.gitkeep "docs/tasks/done/" 2>/dev/null || true
-                rmdir "docs/tasks/live" 2>/dev/null || rm -rf "docs/tasks/live"
-                msg_success "mv docs/tasks/live/ -> docs/tasks/done/"
-            fi
-
-            # Update any feature files that still reference LIVE status
-            for feature_file in docs/features/*.md; do
-                [ -f "$feature_file" ] || continue
-                if grep -qF '**Status**: LIVE' "$feature_file" 2>/dev/null; then
-                    sed -i '' 's/\*\*Status\*\*: LIVE/**Status**: DONE/g' "$feature_file" 2>/dev/null || \
-                    sed -i 's/\*\*Status\*\*: LIVE/**Status**: DONE/g' "$feature_file" 2>/dev/null || true
-                fi
-                if grep -qF 'Feature Status: LIVE' "$feature_file" 2>/dev/null; then
-                    sed -i '' 's/Feature Status: LIVE/Feature Status: DONE/g' "$feature_file" 2>/dev/null || \
-                    sed -i 's/Feature Status: LIVE/Feature Status: DONE/g' "$feature_file" 2>/dev/null || true
-                fi
-            done
-
-        else
-            # No live/ folder — just ensure done/ exists
-            safe_mkdir "docs/tasks/done"
-        fi
-
-        INSTALLED_VERSION="3.0.0"
-    fi
-
-    # Migration from 3.x to 4.0.0 - Rename docs/tasks/working/ to docs/tasks/doing/
-    if [[ "$INSTALLED_VERSION" < "4.0.0" ]]; then
-        if [ -d "docs/tasks/working" ]; then
-            echo ""
-            echo "================================================"
-            echo "  Migrating to 4.0.0 - Rename working/ to doing/"
-            echo "================================================"
-            echo ""
-            echo "sprint.md now uses 'doing' instead of 'working' to align with"
-            echo "Kanban and Get Stuff Done terminology:"
-            echo "  backlog → next → doing → review → done"
-            echo ""
-
-            WORKING_COUNT=$(find "docs/tasks/working" -name "*.md" -maxdepth 1 2>/dev/null | wc -l | tr -d ' ')
-
-            if [ "$WORKING_COUNT" -gt 0 ]; then
-                echo "  Found $WORKING_COUNT task file(s) in docs/tasks/working/"
-                echo ""
-            fi
-
-            # Try git mv first (preserves history), fall back to mv
-            if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-                if git mv "docs/tasks/working" "docs/tasks/doing" 2>/dev/null; then
-                    msg_success "git mv docs/tasks/working/ -> docs/tasks/doing/"
-                else
-                    mkdir -p "docs/tasks/doing"
-                    if [ "$WORKING_COUNT" -gt 0 ]; then
-                        mv docs/tasks/working/* "docs/tasks/doing/" 2>/dev/null || true
-                    fi
-                    mv docs/tasks/working/.gitkeep "docs/tasks/doing/" 2>/dev/null || true
-                    rmdir "docs/tasks/working" 2>/dev/null || rm -rf "docs/tasks/working"
-                    msg_success "mv docs/tasks/working/ -> docs/tasks/doing/"
-                fi
-            else
-                mkdir -p "docs/tasks/doing"
-                if [ "$WORKING_COUNT" -gt 0 ]; then
-                    mv docs/tasks/working/* "docs/tasks/doing/" 2>/dev/null || true
-                fi
-                mv docs/tasks/working/.gitkeep "docs/tasks/doing/" 2>/dev/null || true
-                rmdir "docs/tasks/working" 2>/dev/null || rm -rf "docs/tasks/working"
-                msg_success "mv docs/tasks/working/ -> docs/tasks/doing/"
-            fi
-        else
-            safe_mkdir "docs/tasks/doing"
-        fi
-
-        INSTALLED_VERSION="4.0.0"
-    fi
-
-    # Migration from 4.0.0 to 4.1.0 - Remove files consolidated in this release
-    if [[ "$INSTALLED_VERSION" < "4.1.0" ]]; then
-        REMOVED_FILES=(
-            "docs/sprintmd/ai/task-writing-rules.md"
-            "docs/sprintmd/ai/sprint-review.md"
-            "docs/sprintmd/ai/.gitkeep"
-            "docs/sprintmd/theory/feynman-method.md"
-        )
-        for f in "${REMOVED_FILES[@]}"; do
-            if [ -f "$f" ]; then
-                if git rm -f "$f" >/dev/null 2>&1; then
-                    msg_step "Removed $f (consolidated)"
-                elif rm -f "$f" 2>/dev/null; then
-                    msg_step "Removed $f (consolidated)"
-                fi
-            fi
-        done
-        rmdir "docs/sprintmd/theory" 2>/dev/null || true
-
-        INSTALLED_VERSION="4.1.0"
-    fi
-
-    # Migration: config.sh -> flat config file
-    if [ -f "docs/sprintmd/config.sh" ] && [ ! -f "docs/sprintmd/config" ]; then
-        echo ""
-        echo "Migrating config.sh to flat config file..."
-        (
-            # Source old bash config in subshell to extract values
-            source "docs/sprintmd/config.sh" 2>/dev/null
-            cat > "docs/sprintmd/config" <<CONF
-# sprint.md Configuration (migrated from config.sh)
-# Edit freely. Changes preserved across updates. Format: KEY=VALUE
-
-CLI=${SPRINTMD_CLI:-claude}
-MODEL_DEFAULT=${SPRINTMD_MODEL_DEFAULT-}
-MODEL_CHAT=${SPRINTMD_MODEL_CHAT-${SPRINTMD_MODEL_PLAN-}}
-MODEL_GATE=${SPRINTMD_MODEL_GATE-}
-MODEL_SPLIT=${SPRINTMD_MODEL_SPLIT-}
-MODEL_SPRINT=${SPRINTMD_MODEL_SPRINT-}
-MODEL_WORK=${SPRINTMD_MODEL_WORK-}
-MODEL_CODE_AUDIT=${SPRINTMD_MODEL_CODE_AUDIT-}
-MODEL_AUDIT=${SPRINTMD_MODEL_AUDIT-}
-MODEL_DRIFT=${SPRINTMD_MODEL_DRIFT-}
-BUDGET_WORK=${SPRINTMD_BUDGET_WORK:-5.00}
-BUDGET_AUDIT=${SPRINTMD_BUDGET_AUDIT:-3.00}
-AUDIT_MAX_PASSES=${SPRINTMD_AUDIT_MAX_PASSES:-2}
-CONF
-        )
-        mv "docs/sprintmd/config.sh" "docs/sprintmd/config.sh.bak"
-        msg_success "Migrated config.sh -> config (backup at config.sh.bak)"
-    fi
-
-    echo ""
-    echo "Migrations complete."
-fi
 
 # ============================================================================
 # PLATFORM CONFIGURATION
@@ -722,7 +387,7 @@ Managed by scripts in \`docs/sprintmd/scripts/\` and by \`setup.sh\`. Safe to ed
 if you need to fix a counter — the field lines below are what scripts parse.
 
 Fields:
-- \`sprint_VERSION\`   — installed file-structure version; \`setup.sh\` reads this on upgrade to decide which migrations to run
+- \`sprint_VERSION\`   — installed product version (from \`src/VERSION\` via setup/ship)
 - \`sprint_TASK_ID\`   — highest task ID used; next task = this + 1
 - \`sprint_BUG_ID\`    — highest bug ID used; next bug = this + 1
 - \`sprint_PLAN_ID\`   — highest plan ID used; next plan = this + 1
@@ -742,11 +407,11 @@ STATE_EOF
         msg_error "Failed to create docs/sprintmd/DOC_STATE.md"
     fi
 else
-    # Reconcile DOC_STATE.md - preserve user data, update version
+    # Reconcile DOC_STATE.md - preserve user data, update product version
     EXISTING_TASK_ID=$(grep '^\*\*sprint_TASK_ID\*\*:' docs/sprintmd/DOC_STATE.md 2>/dev/null | sed 's/.*:[[:space:]]*//' | grep -o '^[0-9]*' | head -1)
     EXISTING_BUG_ID=$(grep '^\*\*sprint_BUG_ID\*\*:' docs/sprintmd/DOC_STATE.md 2>/dev/null | sed 's/.*:[[:space:]]*//' | grep -o '^[0-9]*' | head -1)
-    # Prefer sprint_PLAN_ID; fall back to legacy sprint_EPIC_ID after epic→plan rebrand.
     EXISTING_PLAN_ID=$(grep '^\*\*sprint_PLAN_ID\*\*:' docs/sprintmd/DOC_STATE.md 2>/dev/null | sed 's/.*:[[:space:]]*//' | grep -o '^[0-9]*' | head -1)
+    # One-shot read of pre-rebrand counter if PLAN_ID never written.
     if [ -z "$EXISTING_PLAN_ID" ]; then
         EXISTING_PLAN_ID=$(grep '^\*\*sprint_EPIC_ID\*\*:' docs/sprintmd/DOC_STATE.md 2>/dev/null | sed 's/.*:[[:space:]]*//' | grep -o '^[0-9]*' | head -1)
     fi
@@ -764,7 +429,7 @@ Managed by scripts in \`docs/sprintmd/scripts/\` and by \`setup.sh\`. Safe to ed
 if you need to fix a counter — the field lines below are what scripts parse.
 
 Fields:
-- \`sprint_VERSION\`   — installed file-structure version; \`setup.sh\` reads this on upgrade to decide which migrations to run
+- \`sprint_VERSION\`   — installed product version (from \`src/VERSION\` via setup/ship)
 - \`sprint_TASK_ID\`   — highest task ID used; next task = this + 1
 - \`sprint_BUG_ID\`    — highest bug ID used; next bug = this + 1
 - \`sprint_PLAN_ID\`   — highest plan ID used; next plan = this + 1
@@ -1353,67 +1018,46 @@ else
 fi
 
 # ============================================================================
-# CLEANUP LEGACY FILES
+# LAYOUT CLEANUP (path-presence only — no version ladder)
 # ============================================================================
+# setup.sh never deletes what is no longer in the distribution. Renames and
+# consolidations leave behind folders/files that block a clean tree. Every
+# check below is gated only on "does this path exist?" — not on product version.
+# User work (task bodies, plan files) is moved; framework-owned files are removed.
 
-# Legacy INDEX.md cleanup. Earlier versions of sprint.md shipped a curated set
-# of INDEX.md files into docs/ as per-folder orientation pages. They turned
-# out to be confusing and useless, so they were removed. Offer to delete any
-# that are still sitting in the user's project from an older install.
-LEGACY_INDEX_PATHS=(
-    "docs/INDEX.md"
-    "docs/tasks/INDEX.md"
-    "docs/bugs/INDEX.md"
-    "docs/features/INDEX.md"
-    "docs/designs/INDEX.md"
-    "docs/examples/INDEX.md"
-    "docs/data/INDEX.md"
-    "docs/guides/INDEX.md"
-    "docs/sprintmd/scripts/INDEX.md"
-)
-
-LEGACY_INDEX_FOUND=()
-for f in "${LEGACY_INDEX_PATHS[@]}"; do
-    [ -f "$f" ] && LEGACY_INDEX_FOUND+=("$f")
-done
-
-if [ ${#LEGACY_INDEX_FOUND[@]} -gt 0 ]; then
-    msg_header "Legacy INDEX.md files detected"
-    echo "In older versions of sprint.md we supported INDEX.md files, but decided"
-    echo "they were confusing and useless."
-    echo ""
-    echo "Files to be deleted:"
-    for f in "${LEGACY_INDEX_FOUND[@]}"; do
-        echo "  $f"
-    done
-    echo ""
-    echo "Do you want to remove these files from your docs/ directory? [Y]es/No"
-    read -r LEGACY_INDEX_CHOICE
-
-    if [[ -z "$LEGACY_INDEX_CHOICE" ]] || [[ "$LEGACY_INDEX_CHOICE" =~ ^[Yy] ]]; then
-        for f in "${LEGACY_INDEX_FOUND[@]}"; do
-            if git rm -f "$f" >/dev/null 2>&1; then
-                msg_success "git rm $f"
-            elif rm -f "$f" 2>/dev/null; then
-                msg_success "rm $f"
-            else
-                msg_error "Failed to remove $f"
-            fi
-        done
-    else
-        msg_step "Skipped legacy INDEX.md cleanup"
+# ── STATE.md → docs/sprintmd/DOC_STATE.md ────────────────────────────
+if [ -f "docs/STATE.md" ] && [ ! -f "docs/sprintmd/DOC_STATE.md" ]; then
+    safe_mkdir "docs/sprintmd"
+    if mv docs/STATE.md docs/sprintmd/DOC_STATE.md 2>/dev/null; then
+        msg_step "Moved docs/STATE.md → docs/sprintmd/DOC_STATE.md"
     fi
 fi
 
-# Legacy live/ folder cleanup. The 3.0.0 migration handles this during version
-# upgrades, but if a user somehow still has an empty docs/tasks/live/ directory
-# (e.g. partial migration, manual copy), clean it up.
+# ── config.sh → flat docs/sprintmd/config (current keys only) ────────
+# Hard cut: no dual-read of retired MODEL_TALK / MODEL_TASKS / etc. The
+# shipped template is the source of truth; merge_config fills missing keys.
+if [ -f "docs/sprintmd/config.sh" ] && [ ! -f "docs/sprintmd/config" ]; then
+    echo ""
+    echo "Replacing docs/sprintmd/config.sh with flat config (current keys)..."
+    if safe_copy "$SPRINTMD_SOURCE_DIR/src/docs/sprintmd/config" "docs/sprintmd/config" "docs/sprintmd/config"; then
+        mv "docs/sprintmd/config.sh" "docs/sprintmd/config.sh.bak" 2>/dev/null || true
+        msg_success "Installed flat config (old config.sh backed up as config.sh.bak)"
+        msg_step "Re-set CLI/models in docs/sprintmd/config if you had custom pins"
+    fi
+fi
+# Drop a stale config.sh when the flat file already exists.
+if [ -f "docs/sprintmd/config.sh" ] && [ -f "docs/sprintmd/config" ]; then
+    mv "docs/sprintmd/config.sh" "docs/sprintmd/config.sh.bak" 2>/dev/null \
+        && msg_step "Backed up obsolete docs/sprintmd/config.sh → config.sh.bak" || true
+fi
+
+# ── docs/tasks/live/ → done/ ─────────────────────────────────────────
 if [ -d "docs/tasks/live" ]; then
     STALE_LIVE_COUNT=$(find "docs/tasks/live" -name "*.md" -maxdepth 1 2>/dev/null | wc -l | tr -d ' ')
     if [ "$STALE_LIVE_COUNT" -gt 0 ]; then
         msg_header "Stale docs/tasks/live/ folder detected"
-        echo "sprint.md 3.0 renamed live/ to done/. Your live/ folder still has"
-        echo "$STALE_LIVE_COUNT task file(s) that should be moved to done/."
+        echo "The lifecycle folder is done/ (not live/). Your live/ folder still has"
+        echo "$STALE_LIVE_COUNT task file(s)."
         echo ""
         echo "Move files from live/ to done/? [Y]es/No"
         read -r LIVE_CLEANUP_CHOICE
@@ -1435,15 +1079,13 @@ if [ -d "docs/tasks/live" ]; then
     fi
 fi
 
-# Legacy working/ folder cleanup. The 4.0.0 migration handles this during
-# version upgrades, but if a user somehow still has a docs/tasks/working/
-# directory (e.g. partial migration, manual copy), clean it up.
+# ── docs/tasks/working/ → doing/ ─────────────────────────────────────
 if [ -d "docs/tasks/working" ]; then
     STALE_WORKING_COUNT=$(find "docs/tasks/working" -name "*.md" -maxdepth 1 2>/dev/null | wc -l | tr -d ' ')
     if [ "$STALE_WORKING_COUNT" -gt 0 ]; then
         msg_header "Stale docs/tasks/working/ folder detected"
-        echo "sprint.md 4.0 renamed working/ to doing/. Your working/ folder still has"
-        echo "$STALE_WORKING_COUNT task file(s) that should be moved to doing/."
+        echo "The lifecycle folder is doing/ (not working/). Your working/ folder still has"
+        echo "$STALE_WORKING_COUNT task file(s)."
         echo ""
         echo "Move files from working/ to doing/? [Y]es/No"
         read -r WORKING_CLEANUP_CHOICE
@@ -1463,6 +1105,131 @@ if [ -d "docs/tasks/working" ]; then
     else
         rmdir "docs/tasks/working" 2>/dev/null || true
     fi
+fi
+
+# ── docs/epics/ → docs/plans/ ────────────────────────────────────────
+if [ -d "docs/epics" ]; then
+    msg_header "Moving docs/epics/ → docs/plans/"
+    safe_mkdir "docs/plans"
+    for f in docs/epics/* docs/epics/.[!.]* docs/epics/..?*; do
+        [ -e "$f" ] || continue
+        base="$(basename "$f")"
+        case "$base" in
+            .|..|.TEMPLATE-epic.md|.gitkeep) continue ;;
+        esac
+        if [ -e "docs/plans/$base" ]; then
+            msg_warning "docs/plans/$base already exists — left docs/epics/$base in place"
+            continue
+        fi
+        if git rev-parse --is-inside-work-tree >/dev/null 2>&1 \
+           && git mv "$f" "docs/plans/$base" 2>/dev/null; then
+            msg_step "git mv docs/epics/$base → docs/plans/$base"
+        elif mv "$f" "docs/plans/$base" 2>/dev/null; then
+            msg_step "mv docs/epics/$base → docs/plans/$base"
+        else
+            msg_warning "Could not move docs/epics/$base"
+        fi
+    done
+    rm -f docs/epics/.TEMPLATE-epic.md docs/epics/.gitkeep 2>/dev/null || true
+    if rmdir "docs/epics" 2>/dev/null; then
+        msg_success "Removed empty docs/epics/"
+    elif [ -d "docs/epics" ]; then
+        msg_warning "docs/epics/ still has files — review and remove manually"
+    fi
+fi
+
+# ── Retired framework files (safe to delete) ─────────────────────────
+RETIRED_FRAMEWORK_FILES=(
+    # talk → chat
+    "docs/sprintmd/scripts/talk.sh"
+    "docs/sprintmd/scripts/talk-bugs.sh"
+    "docs/sprintmd/scripts/talk-folder.sh"
+    "docs/sprintmd/scripts/talk-sprint.sh"
+    "docs/sprintmd/help/talk.md"
+    "docs/sprintmd/guides/use_talk.md"
+    # define → gate
+    "docs/sprintmd/scripts/define.sh"
+    "docs/sprintmd/help/define.md"
+    # tasks (execute) → work
+    "docs/sprintmd/scripts/tasks.sh"
+    "docs/sprintmd/help/tasks.md"
+    # newepic → newplan
+    "docs/sprintmd/scripts/create-epic.sh"
+    "docs/sprintmd/help/newepic.md"
+    "docs/epics/.TEMPLATE-epic.md"
+    # look-family renames
+    "docs/sprintmd/scripts/ai-context.sh"
+    "docs/sprintmd/help/ai-context.md"
+    "docs/sprintmd/help/checkfeatures.md"
+    # keep-family / retired profession commands
+    "docs/sprintmd/scripts/audit-deps.sh"
+    "docs/sprintmd/help/audit-deps.md"
+    "docs/sprintmd/scripts/audit-code.sh"
+    "docs/sprintmd/scripts/audit-excellence.sh"
+    "docs/sprintmd/scripts/audit-tasks.sh"
+    "docs/sprintmd/help/audit.md"
+    "docs/sprintmd/help/excellence.md"
+    "docs/sprintmd/help/review-code.md"
+    "docs/sprintmd/scripts/review-sprint.sh"
+    "docs/sprintmd/help/review-sprint.md"
+    # consolidated / removed guidance
+    "docs/sprintmd/ai/task-writing-rules.md"
+    "docs/sprintmd/ai/sprint-review.md"
+    "docs/sprintmd/ai/.gitkeep"
+    "docs/sprintmd/theory/feynman-method.md"
+    # obsolete INDEX.md orientation pages
+    "docs/INDEX.md"
+    "docs/tasks/INDEX.md"
+    "docs/bugs/INDEX.md"
+    "docs/features/INDEX.md"
+    "docs/designs/INDEX.md"
+    "docs/examples/INDEX.md"
+    "docs/data/INDEX.md"
+    "docs/guides/INDEX.md"
+    "docs/sprintmd/scripts/INDEX.md"
+)
+
+_retired_removed=0
+for f in "${RETIRED_FRAMEWORK_FILES[@]}"; do
+    if [ -f "$f" ]; then
+        if git rm -f "$f" >/dev/null 2>&1 || rm -f "$f" 2>/dev/null; then
+            msg_step "Removed retired $f"
+            _retired_removed=$((_retired_removed + 1))
+        else
+            msg_warning "Could not remove retired $f"
+        fi
+    fi
+done
+if [ "$_retired_removed" -gt 0 ]; then
+    msg_success "Pruned $_retired_removed retired framework file(s)"
+fi
+rmdir "docs/sprintmd/theory" 2>/dev/null || true
+
+# ── Strip dead config keys (hard cut — no value carry to new names) ──
+# Runtime only reads the current key set. Old pins (MODEL_TALK, BUDGET_TASKS,
+# MODEL_REVIEW_SPRINT, …) are removed so they cannot confuse editors; re-set
+# under the current names in docs/sprintmd/config if you still need them.
+if [ -f "docs/sprintmd/config" ]; then
+    _dead_keys=(
+        MODEL_TALK MODEL_DEFINE MODEL_TASKS BUDGET_TASKS
+        MODEL_REVIEW_SPRINT
+        MODEL_PLAN
+    )
+    _cfg_tmp="$(mktemp "docs/sprintmd/config.XXXXXX")" || _cfg_tmp=""
+    if [ -n "$_cfg_tmp" ]; then
+        _dead_re='^(MODEL_TALK|MODEL_DEFINE|MODEL_TASKS|BUDGET_TASKS|MODEL_REVIEW_SPRINT|MODEL_PLAN)='
+        if grep -qE "$_dead_re" docs/sprintmd/config 2>/dev/null; then
+            if grep -vE "$_dead_re" docs/sprintmd/config > "$_cfg_tmp" 2>/dev/null \
+               && mv -f "$_cfg_tmp" docs/sprintmd/config; then
+                msg_step "Removed retired model/budget keys from docs/sprintmd/config"
+            else
+                rm -f "$_cfg_tmp" 2>/dev/null
+            fi
+        else
+            rm -f "$_cfg_tmp" 2>/dev/null
+        fi
+    fi
+    unset _dead_keys _cfg_tmp _dead_re
 fi
 
 # ============================================================================
@@ -1496,26 +1263,28 @@ if $UPDATE_MODE && [ -n "$CURRENT_CLI" ]; then
     echo "  Current: $CURRENT_CLI"
 fi
 echo "  1) Claude"
-echo "  2) Cursor"
-echo "  3) OpenAI / Codex"
-echo "  4) Gemini"
-echo "  5) Mistral"
-echo "  6) Other"
+echo "  2) Grok Build"
+echo "  3) Cursor"
+echo "  4) OpenAI / Codex"
+echo "  5) Gemini"
+echo "  6) Mistral"
+echo "  7) Other"
 echo ""
 if $UPDATE_MODE && [ -n "$CURRENT_CLI" ]; then
-    echo "Enter your choice (1-6, or press Enter to keep current):"
+    echo "Enter your choice (1-7, or press Enter to keep current):"
 else
-    echo "Enter your choice (1-6, or press Enter for Claude):"
+    echo "Enter your choice (1-7, or press Enter for Claude):"
 fi
 read -r CLI_CHOICE
 
 case "$CLI_CHOICE" in
     1)  SELECTED_CLI="claude"       ;;
-    2)  SELECTED_CLI="cursor-agent" ;;
-    3)  SELECTED_CLI="codex"        ;;
-    4)  SELECTED_CLI="gemini"       ;;
-    5)  SELECTED_CLI="mistral"      ;;
-    6)
+    2)  SELECTED_CLI="grok"         ;;
+    3)  SELECTED_CLI="cursor-agent" ;;
+    4)  SELECTED_CLI="codex"        ;;
+    5)  SELECTED_CLI="gemini"       ;;
+    6)  SELECTED_CLI="mistral"      ;;
+    7)
         echo "Enter the CLI binary name:"
         read -r CUSTOM_CLI
         if [ -z "$CUSTOM_CLI" ]; then
@@ -1543,6 +1312,7 @@ esac
 # inference in lib.sh:sprintmd_ai_tier exactly, so config and library agree.
 case "$SELECTED_CLI" in
     claude)              SELECTED_PROVIDER="claude-code" ;;
+    grok)                SELECTED_PROVIDER="grok-build"  ;;
     cursor-agent|cursor) SELECTED_PROVIDER="cursor"      ;;
     codex)               SELECTED_PROVIDER="openai"      ;;
     *)                   SELECTED_PROVIDER="generic"     ;;
@@ -1570,7 +1340,8 @@ fi
 
 # Provider-specific instruction file. When Claude Code or Cursor is the tier,
 # offer to create the matching AI instruction file if it doesn't exist yet.
-# Reuses the prepend-never-clobber machinery (setup_ai_file) — no new content.
+# Grok Build auto-loads AGENTS.md / CLAUDE.md when present — no extra file
+# invented here (plan 5 v1: none extra). Reuses prepend-never-clobber.
 case "$SELECTED_PROVIDER" in
     claude-code) PROVIDER_AI_FILE="CLAUDE.md"    ;;
     cursor)      PROVIDER_AI_FILE=".cursorrules" ;;
@@ -1596,7 +1367,7 @@ msg_header "Running validation checks..."
 VALIDATION_PASSED=true
 
 # Check required directories
-for dir in docs/tasks/backlog docs/tasks/next docs/tasks/doing docs/tasks/blocked docs/tasks/review docs/tasks/done docs/bugs docs/sprintmd/scripts docs/features docs/guides; do
+for dir in docs/tasks/backlog docs/tasks/next docs/tasks/doing docs/tasks/blocked docs/tasks/review docs/tasks/done docs/bugs docs/plans docs/sprintmd/scripts docs/features docs/guides; do
     if [ ! -d "$dir" ]; then
         VALIDATION_PASSED=false
         msg_error "Missing directory: $dir"

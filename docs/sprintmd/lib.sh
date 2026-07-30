@@ -18,7 +18,8 @@
 #   sprintmd_cfg KEY            — read a value from docs/sprintmd/config
 #   sprintmd_cfg_set KEY VALUE  — update or append a value in config
 #   sprintmd_resolve_model SFX  — model resolution: env > config > default
-#   sprintmd_tier_model SFX     — sprintmd_resolve_model, strongest model on claude-code
+#   sprintmd_tier_model SFX     — sprintmd_resolve_model; strong default on
+#       claude-code (opus) and grok-build (grok-4.5) when config is empty
 #   sprintmd_profile_line       — one-line pointer to project.md (empty if absent)
 #   sprintmd_conversation_method — contents of ai/conversation.md (loud fail if missing)
 #   sprintmd_next_blocked_resolution — prompt block: walk one next→blocked BLOCKER
@@ -28,9 +29,16 @@
 #   sprintmd_review_verdict FILE — READY/BLOCKED/DONE stamp from a gate review
 #   sprintmd_log_path KIND NAME — timestamped log path under docs/tmp
 #   sprintmd_load_profile [cli] — source the provider profile (sprintmd_provider_exec)
-#   sprintmd_ai_tier            — capability tier: claude-code|cursor|openai|generic
+#   sprintmd_ai_tier            — capability tier: claude-code|grok-build|cursor|openai|generic
 #   sprintmd_ai_mode            — "emit" or "exec" for the current environment
+#   sprintmd_orchestration_capable — true for tiers with emit subagent fan-out
+#       (claude-code, grok-build)
+#   sprintmd_subagent_tool_name — "Task tool" | "spawn_subagent" for prompt wording
+#   sprintmd_subagent_spawn_phrase [purpose] — "Launch a NEW subagent …" fragment
+#   sprintmd_subagent_own_fresh — "its OWN fresh subagent (…)" fragment
+#   sprintmd_subagent_parallel_dispatch — parallel fan-out instruction line
 #   sprintmd_emitted            — true if the last sprintmd_run only emitted a prompt
+#   sprintmd_announce_provider  — once per process: ▸ Provider: cli (tier) · mode: …
 #   sprintmd_run ARGS…          — run AI: emit prompt to stdout, or exec the CLI
 #   sprintmd_interactive_ok     — true if a live session is possible (exec mode,
 #       interactive-capable provider, real TTY) — one source of truth
@@ -211,17 +219,21 @@ sprintmd_resolve_model() {
 # Usage: model=$(sprintmd_tier_model FEATURE)
 #
 # Like sprintmd_resolve_model, but when nothing is configured (env/config both
-# empty) and the provider tier supports model selection (claude-code), fall
-# back to the strongest appropriate alias instead of letting the CLI pick its
-# cheaper default. For interactive, reasoning-heavy flows — the feature Q&A
-# and the idea Feynman protocol — the best model is worth it unless the user
-# has pinned one. Other tiers can't select a model, so this returns empty
-# (their default.sh passthrough would only warn about a dropped flag).
+# empty) and the provider tier supports model selection, fall back to a strong
+# default instead of letting the CLI pick a cheaper one. For interactive,
+# reasoning-heavy flows — feature Q&A, idea Feynman, chat — the best model is
+# worth it unless the user has pinned one.
+#   claude-code → opus
+#   grok-build  → grok-4.5 (re-verify with `grok models` if the product renames)
+# Other tiers return empty (their default.sh passthrough would only warn).
 sprintmd_tier_model() {
     local suffix="$1" model
     model="$(sprintmd_resolve_model "$suffix")"
-    if [ -z "$model" ] && [ "$(sprintmd_ai_tier)" = "claude-code" ]; then
-        model="opus"
+    if [ -z "$model" ]; then
+        case "$(sprintmd_ai_tier)" in
+            claude-code) model="opus" ;;
+            grok-build)  model="grok-4.5" ;;
+        esac
     fi
     printf '%s' "$model"
 }
@@ -262,18 +274,19 @@ sprintmd_conversation_method() {
 # edge: present the two real paths as a choice, action Path B (demote) inline,
 # hand Path A (define the dependency) off to chat's fresh-context chain, and gate
 # the drop path behind an on-the-spot edge audit. Path A's hand-off mirrors
-# chat.sh's own emit-vs-exec split: an emit-mode claude-code session can spawn a
-# fresh subagent; every other environment prints the command to run in a fresh
-# window. Always returns 0 so it is safe in `x=$(sprintmd_next_blocked_resolution)`.
+# chat.sh's own emit-vs-exec split: an emit-mode orchestration-capable session
+# (claude-code / grok-build) can spawn a fresh subagent; every other environment
+# prints the command to run in a fresh window. Always returns 0 so it is safe
+# in `x=$(sprintmd_next_blocked_resolution)`.
 sprintmd_next_blocked_resolution() {
     local path_a
-    if [ "$(sprintmd_ai_mode)" = "emit" ] && [ "$(sprintmd_ai_tier)" = "claude-code" ]; then
-        path_a="Hand this off to a FRESH context — do NOT redefine the dependency inline here. Launch a NEW subagent (Task tool) for the blocked dependency, aimed at the MOST-UPSTREAM undefined one first (the dependency whose own '**Depends on**' has no undefined deps left; break ties by lowest id). Its entire instruction: 'Run ./sprint.sh chat <dep-id> and carry that task as far toward READY as you can on your own — read any *Context from chat* note in its file, refine it, and if a question genuinely needs the human, leave it in the file's ## Questions section and report it back.' Tell the user you spun up a fresh agent for <dep-id> and say in one line what it is picking up."
+    if [ "$(sprintmd_ai_mode)" = "emit" ] && sprintmd_orchestration_capable; then
+        path_a="Hand this off to a FRESH context — do NOT redefine the dependency inline here. $(sprintmd_subagent_spawn_phrase "the blocked dependency"), aimed at the MOST-UPSTREAM undefined one first (the dependency whose own '**Depends on**' has no undefined deps left; break ties by lowest id). Its entire instruction: 'Run ./sprint.sh chat <dep-id> and carry that task as far toward READY as you can on your own — read any *Context from chat* note in its file, refine it, and if a question genuinely needs the human, leave it in the file's ## Questions section and report it back.' Tell the user you spun up a fresh agent for <dep-id> and say in one line what it is picking up."
     else
         path_a="Hand this off — do NOT redefine the dependency inline here. Tell the user the exact command to run in a FRESH window:  ./sprint.sh chat <dep-id>  (for the most-upstream undefined dependency). Keeping each session's context small is the point of chaining out."
     fi
     printf '%s' "─── RESOLVING A next→blocked BLOCKER (dependent task <D> in next/ depends on task <B> in blocked/) ───
-A next/ task that depends on a task still sitting in blocked/ can NEVER run: the executor ('tasks') silently HOLDS it until the dependency leaves blocked/. Do not merely report this — close the loop. Present the TWO REAL paths as an explicit choice and act on the one the user picks. Do NOT frame 'drop the Depends on line' as a way out of a genuine block — that only makes <D> LOOK runnable while the work it needs is still undone (the folder-satisfaction trap).
+A next/ task that depends on a task still sitting in blocked/ can NEVER run: the executor ('work') silently HOLDS it until the dependency leaves blocked/. Do not merely report this — close the loop. Present the TWO REAL paths as an explicit choice and act on the one the user picks. Do NOT frame 'drop the Depends on line' as a way out of a genuine block — that only makes <D> LOOK runnable while the work it needs is still undone (the folder-satisfaction trap).
 
 PATH A — DEFINE THE BLOCKED DEPENDENCY <B> (choose when the dependency is real and still needed):
 ${path_a}
@@ -283,7 +296,7 @@ PATH B — DEMOTE THE DEPENDENT TASK <D> BACK TO backlog/ (choose to pull it out
 On the user's OK, action this INLINE: move <D> out of the sprint so next/ holds no work blocked on an undefined task —  git mv docs/tasks/next/<D-file> docs/tasks/backlog/<D-file> || mv docs/tasks/next/<D-file> docs/tasks/backlog/<D-file>. THEN RE-SCAN next/ for any OTHER task that also depends on <B>: the preflight already emitted a SEPARATE BLOCKER finding for each (next task, blocked dep) pair, so <B>'s other dependents are already in the findings list — recognize them by the same blocked id <B>, do not run a fresh board scan. Only when NONE remain may you say 'the sprint no longer contains work blocked on <B>.' If siblings remain, name them and offer to resolve each in turn (A or B).
 
 THE DROP PATH — a metadata correction for a STALE or SPURIOUS edge ONLY, and only after an on-the-spot audit:
-Dropping the '**Depends on**:' line is NOT one of the two resolution paths above. It is reserved for an edge that is not a genuine dependency. Before you may even offer it, AUDIT THE EDGE on the spot — a bounded, READ-ONLY reasoning step, NOT a define pass: read WHY <D> needed <B> (what <D>'s Problem/Success actually required from <B>) and check whether that need is already satisfied elsewhere or has become obsolete. ONLY an edge that FAILS this audit (need already met / no longer needed) may be dropped from <D>'s Depends on line. An edge whose need still stands IS a real dependency: route to A or B, never drop. No audit, no drop."
+Dropping the '**Depends on**:' line is NOT one of the two resolution paths above. It is reserved for an edge that is not a genuine dependency. Before you may even offer it, AUDIT THE EDGE on the spot — a bounded, READ-ONLY reasoning step, NOT a gate pass: read WHY <D> needed <B> (what <D>'s Problem/Success actually required from <B>) and check whether that need is already satisfied elsewhere or has become obsolete. ONLY an edge that FAILS this audit (need already met / no longer needed) may be dropped from <D>'s Depends on line. An edge whose need still stands IS a real dependency: route to A or B, never drop. No audit, no drop."
 }
 
 # Resolve a task file by numeric ID. Prints "path<TAB>stage-dir" on success.
@@ -305,7 +318,7 @@ sprintmd_find_task() {
     return 1
 }
 
-# Timestamped log path: sprintmd_log_path define 42-fix-thing.md
+# Timestamped log path: sprintmd_log_path gate 42-fix-thing.md
 sprintmd_log_path() {
     local kind="$1" name="$2"
     printf 'docs/tmp/log-%s-%s-%s.json' "$kind" "${name%.md}" "$(date +%Y%m%d-%H%M%S)"
@@ -337,7 +350,7 @@ task_feature() {
 
 # sprintmd_review_verdict FILE -> READY | BLOCKED | DONE | "" (no verdict).
 # Reads only the LAST "## Questions" section and requires the line-anchored
-# bold stamp define.sh's review writes. A loose grep for "Status: BLOCKED"
+# bold stamp gate's review writes. A loose grep for "Status: BLOCKED"
 # anywhere in the file once mis-routed a READY task to blocked/ because its
 # body *quoted* the verdict vocabulary — this helper exists so no script
 # ever parses the stamp loosely again.
@@ -372,9 +385,12 @@ sprintmd_iter_id_list() {
     esac
     # Word-split is intentional: commas become spaces, then each token is
     # classified. Double commas / stray spaces yield empty tokens that skip.
+    # Leading '#' is stripped so both "291" and "#291" (plan/chat prose style)
+    # parse as the same task id.
     # shellcheck disable=SC2086
     for tok in $(printf '%s' "$raw" | tr ',' ' '); do
         [ -z "$tok" ] && continue
+        tok="${tok#\#}"
         if [[ "$tok" =~ ^([0-9]+)-([0-9]+)$ ]]; then
             lo="${BASH_REMATCH[1]}"; hi="${BASH_REMATCH[2]}"
             if [ "$lo" -gt "$hi" ]; then
@@ -523,12 +539,12 @@ sprintmd_load_profile() {
 
 # ── AI capability tier ───────────────────────────────────────────────
 # Prints the provider capability tier this install runs at:
-#   claude-code | cursor | openai | generic
+#   claude-code | grok-build | cursor | openai | generic
 # Precedence: config/env PROVIDER (written by setup.sh) > inference from
 # the CLI binary name. The inference mirrors setup.sh's picker so an install
 # that upgrades without re-running the picker still resolves a sane tier.
-# Later scripts branch on this: full orchestration (subagents, JSON output,
-# budget caps) on claude-code; graceful degradation elsewhere. See the
+# Later scripts branch on this: full orchestration (subagents, JSON output)
+# on claude-code and grok-build; graceful degradation elsewhere. See the
 # capability matrix in docs/sprintmd/ai/provider-capabilities.md.
 sprintmd_ai_tier() {
     if [ -n "${SPRINTMD_PROVIDER:-}" ]; then
@@ -537,9 +553,76 @@ sprintmd_ai_tier() {
     fi
     case "$SPRINTMD_CLI" in
         claude)              printf 'claude-code' ;;
+        grok)                printf 'grok-build' ;;
         cursor-agent|cursor) printf 'cursor' ;;
         codex)               printf 'openai' ;;
         *)                   printf 'generic' ;;
+    esac
+}
+
+# ── Orchestration-capable tiers ──────────────────────────────────────
+# True when emit mode can fan out via native subagents (one fresh worker per
+# task). Claude Code uses the Task tool; Grok Build uses spawn_subagent.
+# Every multi-task emit gate (work, gate, polish, chat chain, plan start,
+# next→blocked) should call this instead of hard-coding a single tier name.
+sprintmd_orchestration_capable() {
+    case "$(sprintmd_ai_tier)" in
+        claude-code|grok-build) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+# Short name of the subagent mechanism for prompt wording only.
+sprintmd_subagent_tool_name() {
+    case "$(sprintmd_ai_tier)" in
+        grok-build) printf 'spawn_subagent' ;;
+        *)          printf 'Task tool' ;;
+    esac
+}
+
+# "Launch a NEW subagent …" fragment. Optional $1 = purpose phrase
+# (e.g. "the blocked dependency", "<next-id>").
+sprintmd_subagent_spawn_phrase() {
+    local purpose="${1:-}"
+    case "$(sprintmd_ai_tier)" in
+        grok-build)
+            if [ -n "$purpose" ]; then
+                printf 'Launch a NEW subagent via spawn_subagent (subagent_type: general-purpose) for %s' "$purpose"
+            else
+                printf 'Launch a NEW subagent via spawn_subagent (subagent_type: general-purpose)'
+            fi
+            ;;
+        *)
+            if [ -n "$purpose" ]; then
+                printf 'Launch a NEW subagent (Task tool) for %s' "$purpose"
+            else
+                printf 'Launch a NEW subagent (Task tool)'
+            fi
+            ;;
+    esac
+}
+
+# "its OWN fresh subagent (…)" — used by work / polish multi-task prompts.
+sprintmd_subagent_own_fresh() {
+    case "$(sprintmd_ai_tier)" in
+        grok-build)
+            printf 'its OWN fresh subagent (spawn_subagent, subagent_type: general-purpose)'
+            ;;
+        *)
+            printf 'its OWN fresh subagent (Task tool)'
+            ;;
+    esac
+}
+
+# One-line parallel dispatch instruction for gate-lib and similar fan-outs.
+sprintmd_subagent_parallel_dispatch() {
+    case "$(sprintmd_ai_tier)" in
+        grok-build)
+            printf 'Dispatch ONE subagent per task file below, ALL IN PARALLEL (issue every spawn_subagent call in a single message; subagent_type: general-purpose).'
+            ;;
+        *)
+            printf 'Dispatch ONE subagent per task file below, ALL IN PARALLEL (issue every Task tool call in a single message).'
+            ;;
     esac
 }
 
@@ -554,15 +637,18 @@ sprintmd_ai_tier() {
 # Resolved once and cached: nothing this depends on (env, config, CLI
 # presence) changes within a single invocation, and sprintmd_run calls this on
 # every AI request — the uncached path spawns awk+tail (via sprintmd_cfg) each
-# time, which is hot in the audit/triage/tasks loops.
+# time, which is hot in the audit/triage/work loops.
 _SPRINTMD_MODE_CACHE=""
 sprintmd_ai_mode() {
     [ -n "$_SPRINTMD_MODE_CACHE" ] && { printf '%s' "$_SPRINTMD_MODE_CACHE"; return; }
 
     local m="${SPRINTMD_MODE:-$(sprintmd_cfg MODE)}"
     if [ -z "$m" ]; then
+        # Agent-session env vars: Claude Code, Cursor, Grok Build (GROK_AGENT=1).
+        # Only vars confirmed in real sessions — do not invent markers.
         if [ -n "${CLAUDECODE:-}" ] || [ -n "${CLAUDE_CODE_SESSION_ID:-}" ] \
            || [ -n "${CURSOR_TRACE_ID:-}" ] || [ -n "${CURSOR_SESSION_ID:-}" ] \
+           || [ -n "${GROK_AGENT:-}" ] \
            || [ -n "${AI_AGENT:-}" ] || [ -n "${SPRINTMD_IN_AGENT:-}" ]; then
             m="emit"
         elif command -v "$SPRINTMD_CLI" >/dev/null 2>&1; then
@@ -602,9 +688,30 @@ sprintmd_emit_prompt() {
     printf '%s\n' "─────────────────────────────────────────────────────────────"
 }
 
+# sprintmd_announce_provider — one-line banner so a leading -g/-c, env override,
+# or config default is obvious before a long silent headless CLI run.
+# Prints once per process (multi-task work/polish only announce on the first
+# AI call). Always writes stderr; if stderr is not a TTY (common when callers
+# do `sprintmd_run … 2>/dev/null | tee log`), also writes /dev/tty so the
+# human still sees the line without double-printing on a normal terminal.
+sprintmd_announce_provider() {
+    [ -n "${_SPRINTMD_PROVIDER_ANNOUNCED:-}" ] && return 0
+    _SPRINTMD_PROVIDER_ANNOUNCED=1
+    local cli tier mode line
+    cli="${SPRINTMD_CLI:-?}"
+    tier="$(sprintmd_ai_tier)"
+    mode="$(sprintmd_ai_mode)"
+    line=$(printf '▸ Provider: %s (%s) · mode: %s' "$cli" "$tier" "$mode")
+    printf '%s\n' "$line" >&2
+    if [ ! -t 2 ] && { true >/dev/tty; } 2>/dev/null; then
+        printf '%s\n' "$line" >/dev/tty 2>/dev/null || true
+    fi
+}
+
 # sprintmd_run — route an AI request to emit or exec based on the mode.
 # Same argument surface as the provider profiles.
 sprintmd_run() {
+    sprintmd_announce_provider
     SPRINTMD_LAST_MODE="$(sprintmd_ai_mode)"
     if [ "$SPRINTMD_LAST_MODE" = "emit" ]; then
         sprintmd_emit_prompt "$@"
@@ -643,6 +750,7 @@ sprintmd_interactive_ok() {
 #          stays in its REPL. Otherwise degrade to the one-shot exec path.
 # Used by chat.sh — the one command that is a dialogue rather than a job.
 sprintmd_run_interactive() {
+    sprintmd_announce_provider
     SPRINTMD_LAST_MODE="$(sprintmd_ai_mode)"
     if [ "$SPRINTMD_LAST_MODE" = "emit" ]; then
         sprintmd_emit_prompt "$@"

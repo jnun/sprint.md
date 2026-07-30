@@ -15,10 +15,6 @@ REVIEW_FILE="docs/tmp/plan-think.md"
 PLAN_ID="${1:-}"
 
 MODEL="$(sprintmd_resolve_model PLAN_THINK)"
-# Fall back to the old config key so existing installs keep their pin.
-if [ -z "$MODEL" ]; then
-  MODEL="$(sprintmd_resolve_model REVIEW_SPRINT)"
-fi
 TOOLS="Read,Edit,Write,Bash,Grep,Glob"
 PERMISSIONS="auto"
 MAX_TURNS=50

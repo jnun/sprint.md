@@ -247,7 +247,7 @@ Rules:
         # context chain — the intrinsic dep resolution, not reimplemented here.
         bash "$(dirname "${BASH_SOURCE[0]}")/chat.sh" "$task_id" </dev/tty || true
         echo ""
-        echo -e "  ${DIM}Talk session complete. Continuing the sweep...${NC}"
+        echo -e "  ${DIM}Chat session complete. Continuing the sweep...${NC}"
         defined=$((defined + 1))
       else
         echo -e "  ${YELLOW}Could not extract task ID. Skipping define.${NC}"

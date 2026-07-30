@@ -1,8 +1,9 @@
 # Claude Provider Tier (as built)
 
 How sprint.md runs at full strength today when the AI provider is **Claude Code**.
-This is the reference tier: every other provider degrades from this design, not
-the other way around.
+This is one of two first-class orchestration tiers (peer: **Grok Build** —
+`docs/guides/grok-provider-tier.md`). Other providers degrade from these designs,
+not the other way around.
 
 Ship truth for flags and gates lives in code; this guide is the human/agent map
 of that design. Capability matrix: `docs/sprintmd/ai/provider-capabilities.md`.
@@ -32,7 +33,7 @@ Scripts never call claude flags directly. They call one of these and the profile
 maps them.
 
 Call						Use
-sprintmd_run				One-shot job (tasks, define, polish, plan think, …)
+sprintmd_run				One-shot job (work, gate, polish, plan think, …)
 sprintmd_run_interactive	Live dialogue (chat, profile, conversational creates)
 sprintmd_ai_tier			Returns claude-code so scripts can branch
 sprintmd_tier_model SFX		Model for a script; on this tier empty config → opus for heavy flows
@@ -71,6 +72,7 @@ from a thin driver session. Unrelated tasks do not share a prompt window.
 Command					Emit on claude-code																									Exec on claude-code
 work					Driver prompt: one Task-tool subagent per task file; parallel when --fast/--parallel; route doing → review/blocked	One claude process per task (parallel jobs = parallel processes)
 gate (many files)		One subagent per task, all in parallel, shared review contract														Per-file / sequential via sprintmd_run as coded
+plan start (many)		Same gate parallel path (`sprintmd_gate_parallel`) for multi-member promote											Per-file gate via sprintmd_run
 polish (many)			One judge subagent per task; route by verdict																		Per-file sprintmd_run
 chat chain				After READY, spawn a NEW subagent for ./sprint.sh chat next-id														Print or run the next chat command; human continues
 next→blocked handoff	Same: fresh Task subagent for the upstream blocked dep																Command to run in a fresh window
@@ -93,6 +95,8 @@ These branches are intentional. Generic tiers get the honest sequential path.
 Script		Gate
 work.sh	Emit orchestration vs sequential fallback
 gate.sh	Parallel multi-file emit review
+gate-lib.sh	Shared parallel prompt ("Task tool") used by gate + plan start
+plan-start.sh	Multi-member emit gate via sprintmd_gate_parallel
 polish.sh	Parallel multi-file emit judge
 chat.sh		Continue-the-chain subagent wording
 lib.sh		next→blocked Path A subagent wording; sprintmd_tier_model opus default
@@ -105,6 +109,7 @@ Step	Action
 3		Inside Claude Code: run ./sprint.sh chat / work / polish — emit mode
 4		From a plain terminal: same commands — exec launches claude
 5		Parallel batch: ./sprint.sh work --fast (or --parallel --jobs N)
+6		Per-run override (no config rewrite): ./sprint.sh -c work or --claude (peer: -g / --grok)
 
 ## Related
 

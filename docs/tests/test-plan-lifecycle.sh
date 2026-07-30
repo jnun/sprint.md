@@ -1,0 +1,127 @@
+#!/usr/bin/env bash
+# Test: plan lifecycle — plan start STARTED latch + plan done audit/delete
+# Covers task 290 SC1:
+#   - plan start stamps **Status:** STARTED (one-way, no duplicate line on re-run)
+#   - plan done refuses (exit 1, plan intact) when any member is not in done/
+#   - plan done deletes the plan file when every member is in done/
+#   - plan done dedups a member id listed twice (harmless when its one file is done/)
+
+set -euo pipefail
+
+PASS=0
+FAIL=0
+SPRINTMD_SRC="$(cd "$(dirname "$0")/../sprintmd" && pwd)"
+
+# Fresh throwaway project with the whole sprintmd tree (plan-start.sh sources
+# lib.sh + gate-lib.sh; lib.sh loads a cli/ provider profile). Copying the tree
+# gives every runtime dependency without hand-picking files.
+setup() {
+    TMPDIR=$(mktemp -d)
+    trap 'rm -rf "$TMPDIR"' EXIT
+    mkdir -p "$TMPDIR/docs/plans"
+    mkdir -p "$TMPDIR/docs/tasks"/{backlog,next,doing,review,done,blocked}
+    cp -R "$SPRINTMD_SRC" "$TMPDIR/docs/sprintmd"
+    git -C "$TMPDIR" init -q
+}
+
+# Write a plan file with the given id, status, and member bullet lines (each a
+# full "- [ ] #ID — title" string passed as a trailing arg).
+make_plan() {
+    local id="$1" status="$2"; shift 2
+    local f="$TMPDIR/docs/plans/${id}-throwaway.md"
+    {
+        echo "# Plan ${id}: Throwaway"
+        echo ""
+        echo "**Status:** ${status}"
+        echo ""
+        echo "## Goal"
+        echo "Exercise the plan lifecycle."
+        echo ""
+        echo "## Members"
+        local line
+        for line in "$@"; do echo "$line"; done
+    } > "$f"
+    printf '%s' "$f"
+}
+
+# Create a task file for member ID in the given lifecycle folder.
+make_task() {
+    local id="$1" folder="$2"
+    printf '# Task %s: member\n' "$id" > "$TMPDIR/docs/tasks/$folder/${id}-member.md"
+}
+
+assert_contains() {
+    local desc="$1" haystack="$2" needle="$3"
+    if echo "$haystack" | grep -qF "$needle"; then
+        echo "  PASS: $desc"; PASS=$((PASS + 1))
+    else
+        echo "  FAIL: $desc (expected to contain '$needle')"; FAIL=$((FAIL + 1))
+    fi
+}
+
+assert_eq() {
+    local desc="$1" expected="$2" actual="$3"
+    if [ "$expected" = "$actual" ]; then
+        echo "  PASS: $desc"; PASS=$((PASS + 1))
+    else
+        echo "  FAIL: $desc (expected '$expected', got '$actual')"; FAIL=$((FAIL + 1))
+    fi
+}
+
+echo "=== test-plan-lifecycle.sh ==="
+
+# --- Test 1: plan start stamps STARTED (one-way, idempotent) ---
+echo "Test 1: plan start stamps STARTED and never duplicates the status line"
+setup
+make_plan 100 READY "- [ ] #500 — member" >/dev/null
+make_task 500 backlog
+(cd "$TMPDIR" && bash docs/sprintmd/scripts/plan.sh start 100 --commit-only >/dev/null 2>&1)
+plan="$TMPDIR/docs/plans/100-throwaway.md"
+assert_contains "Status flipped to STARTED" "$(cat "$plan")" '**Status:** STARTED'
+assert_eq "Member promoted into next/" "true" "$([ -f "$TMPDIR/docs/tasks/next/500-member.md" ] && echo true || echo false)"
+# The latch is a set-or-replace of the single status line, so it replaces the
+# prior READY line rather than appending — exactly one **Status:** line remains.
+count=$(grep -c '^\*\*Status:\*\*' "$plan" || true)
+assert_eq "Exactly one **Status:** line (replaced, not appended)" "1" "$count"
+
+# --- Test 2: plan done refuses when a member is not in done/ ---
+echo "Test 2: plan done exits non-zero and leaves the plan intact when a member is outside done/"
+setup
+plan=$(make_plan 101 STARTED "- [x] #501 — done member" "- [x] #502 — review member")
+make_task 501 done
+make_task 502 review    # in review/, not done/ → must fail
+if (cd "$TMPDIR" && bash docs/sprintmd/scripts/plan.sh done 101 >/dev/null 2>&1); then
+    echo "  FAIL: plan done should exit non-zero with a member in review/"; FAIL=$((FAIL + 1))
+else
+    echo "  PASS: plan done exits non-zero with a member in review/"; PASS=$((PASS + 1))
+fi
+assert_eq "Plan file left intact on failure" "true" "$([ -f "$plan" ] && echo true || echo false)"
+
+# --- Test 3: plan done deletes the plan when every member is in done/ ---
+echo "Test 3: plan done deletes the plan file once every member is in done/"
+setup
+plan=$(make_plan 102 STARTED "- [x] #503 — a" "- [x] #504 — b")
+make_task 503 done
+make_task 504 done
+if (cd "$TMPDIR" && bash docs/sprintmd/scripts/plan.sh done 102 >/dev/null 2>&1); then
+    echo "  PASS: plan done exits zero when all members are in done/"; PASS=$((PASS + 1))
+else
+    echo "  FAIL: plan done should exit zero when all members are in done/"; FAIL=$((FAIL + 1))
+fi
+assert_eq "Plan file deleted on full pass" "true" "$([ -f "$plan" ] && echo false || echo true)"
+
+# --- Test 4: plan done dedups a member id listed twice ---
+echo "Test 4: a member id listed twice is deduped, not treated as two required files"
+setup
+plan=$(make_plan 103 STARTED "- [x] #505 — first mention" "- [x] #505 grep report — duplicate mention")
+make_task 505 done   # ONE file for the id that appears on two member lines
+if (cd "$TMPDIR" && bash docs/sprintmd/scripts/plan.sh done 103 >/dev/null 2>&1); then
+    echo "  PASS: plan done passes with a deduped duplicate member id"; PASS=$((PASS + 1))
+else
+    echo "  FAIL: duplicate member id should dedup to one required file"; FAIL=$((FAIL + 1))
+fi
+assert_eq "Plan file deleted after dedup pass" "true" "$([ -f "$plan" ] && echo false || echo true)"
+
+echo ""
+echo "Results: $PASS passed, $FAIL failed"
+[ "$FAIL" -eq 0 ] && exit 0 || exit 1

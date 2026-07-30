@@ -49,6 +49,10 @@ After running on next/:
   - BLOCKED tasks: answer questions in the file, move back to next/
   - DONE tasks: verify in review/, then move to done/
 
+Provider for this run only (leading flags; does not rewrite config):
+  ./sprint.sh -g gate                # Grok Build
+  ./sprint.sh -c gate --force        # Claude Code
+
 Related commands:
   gate    — this command: quality gate on next/, quality report elsewhere (off-spine)
   chat    — interactive refine/split on one task or a folder sweep

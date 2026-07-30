@@ -91,7 +91,13 @@ print_command_group() {
 show_help() {
     echo -e "${CYAN}sprint.md CLI${NC}"
     echo ""
-    echo "Usage: ./sprint.sh <command> [options]"
+    echo "Usage: ./sprint.sh [-c|-g] <command> [options]"
+    echo ""
+    echo -e "${BLUE}Provider (this run only — does not rewrite config):${NC}"
+    echo "  -c, --claude                     Claude Code  (CLI=claude, PROVIDER=claude-code)"
+    echo "  -g, --grok                       Grok Build   (CLI=grok, PROVIDER=grok-build)"
+    echo "  Default comes from docs/sprintmd/config (or setup.sh). Env SPRINTMD_CLI /"
+    echo "  SPRINTMD_PROVIDER also override. Examples: ./sprint.sh -g work"
     echo ""
     echo -e "${BLUE}Create:${NC}"
     print_command_group create
@@ -130,8 +136,8 @@ show_command_help() {
 }
 
 cmd_newidea() {
-    [ -z "${1:-}" ] && { echo -e "${RED}ERROR: Idea name required${NC}"; exit 1; }
-    run_script "create-idea.sh" "$1"
+    # Optional name — same dual path as newfeature: no name = AI Q&A session.
+    run_script "create-idea.sh" "$@"
 }
 
 cmd_newtask() {
@@ -343,6 +349,38 @@ cmd_align() {
 cmd_context() {
     run_script "context.sh"
 }
+
+# Global provider flags (leading only). This-run env override — does not rewrite
+# docs/sprintmd/config. lib.sh prefers SPRINTMD_CLI / SPRINTMD_PROVIDER over config.
+#   ./sprint.sh -g work          # Grok Build for this run
+#   ./sprint.sh --claude chat 12 # Claude Code for this run
+while [ $# -gt 0 ]; do
+    case "$1" in
+        -c|--claude)
+            export SPRINTMD_CLI=claude
+            export SPRINTMD_PROVIDER=claude-code
+            shift
+            ;;
+        -g|--grok)
+            export SPRINTMD_CLI=grok
+            export SPRINTMD_PROVIDER=grok-build
+            shift
+            ;;
+        -h|--help)
+            # Leave for the main dispatcher (help with or without a command).
+            break
+            ;;
+        -*)
+            echo -e "${RED}Unknown option: $1${NC}" >&2
+            echo "Global provider flags: -c/--claude, -g/--grok" >&2
+            echo "Run ./sprint.sh help for commands." >&2
+            exit 1
+            ;;
+        *)
+            break
+            ;;
+    esac
+done
 
 # Intercept --help/-h on any command: ./sprint.sh work --help → help work
 CMD="${1:-}"

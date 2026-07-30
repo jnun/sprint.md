@@ -19,32 +19,41 @@ terminal).
 
 ### 1. Inside an AI agent session — "emit" mode
 
-If you are already working inside a coding agent (Claude Code, Cursor, etc.),
-`chat` prints its instructions into that session and your agent conducts the
-conversation directly. You just keep chatting in the tool you are already in —
-answer each question, and the agent edits the task file as you go. This is the
-default whenever sprint.md detects it is running inside an agent.
+If you are already working inside a coding agent (Claude Code, Grok Build,
+Cursor, etc.), `chat` prints its instructions into that session and your agent
+conducts the conversation directly. You just keep chatting in the tool you are
+already in — answer each question, and the agent edits the task file as you go.
+This is the default whenever sprint.md detects it is running inside an agent
+(`CLAUDECODE`, `GROK_AGENT=1`, Cursor session vars, or an explicit `MODE=emit`).
 
-### 2. A plain terminal with the `claude` CLI — "exec" mode (full experience)
+### 2. A plain terminal with Claude or Grok — "exec" mode (full experience)
 
-If you run `./sprint.sh chat <id>` from an ordinary terminal and the `claude`
-CLI is installed, `chat` launches a **live, interactive Claude session** on the
-task. It asks its first question and then hands you the prompt — you type your
+If you run `./sprint.sh chat <id>` from an ordinary terminal and a first-class
+CLI is installed (`CLI=claude` or `CLI=grok` in config), `chat` launches a
+**live, interactive session** on the task:
+
+| Config | Opens |
+|--------|--------|
+| `CLI=claude` / `PROVIDER=claude-code` | Claude Code REPL |
+| `CLI=grok` / `PROVIDER=grok-build` | Grok Build TUI |
+
+It asks its first question and then hands you the prompt — you type your
 answer, it edits the file, asks the next question, and so on. This is the full
 back-and-forth the command was designed for.
 
-To end it, close the session the normal way (`Ctrl-D`, or `/exit`). Your edits
-are saved to the task file as the conversation happens, so there is nothing to
-"commit" at the end — when you exit, the refined task is already on disk.
+To end it, close the session the normal way (`Ctrl-D`, or `/exit` / the
+provider's quit). Your edits are saved to the task file as the conversation
+happens, so there is nothing to "commit" at the end — when you exit, the
+refined task is already on disk.
 
 ### 3. Anything else — a single refinement pass (degraded)
 
 If `chat` is running in exec mode but there is **no interactive terminal**
 (you piped it, or it is in CI or a loop) or your provider has **no interactive
-profile** (any CLI other than `claude`), a live REPL would just hang waiting on
-input. So instead `chat` does one useful pass — it reads the task, sizes it up,
-and writes an improved version — then exits. You will see a note on screen
-saying this happened and pointing back to this guide.
+profile** (any CLI other than `claude` or `grok`), a live REPL would just hang
+waiting on input. So instead `chat` does one useful pass — it reads the task,
+sizes it up, and writes an improved version — then exits. You will see a note
+on screen saying this happened and pointing back to this guide.
 
 That single pass is genuinely useful, but it is not the conversation. To get
 the real thing, use option 1 or 2 below.
@@ -53,22 +62,26 @@ the real thing, use option 1 or 2 below.
 
 Pick whichever fits how you work:
 
-- **Run it inside your agent.** Open your task in Claude Code (or another
-  coding agent) and run `./sprint.sh chat <id>` there. The agent runs the
-  conversation itself (emit mode). Nothing to install.
+- **Run it inside your agent.** Open your task in Claude Code, Grok Build, or
+  another coding agent and run `./sprint.sh chat <id>` there. The agent runs the
+  conversation itself (emit mode). Nothing to install beyond the agent you
+  already use.
 
-- **Install the `claude` CLI and use a real terminal.** With `claude` on your
-  `PATH`, run `./sprint.sh chat <id>` from an interactive shell (not piped, not
-  CI). You get the live session in option 2.
+- **Install a first-class CLI and use a real terminal.** With `claude` or
+  `grok` on your `PATH`, set `CLI` (and ideally `PROVIDER`) via `./setup.sh` or
+  `docs/sprintmd/config`, then run `./sprint.sh chat <id>` from an interactive
+  shell (not piped, not CI). You get the live session in option 2. For one
+  command without editing config: `./sprint.sh -g chat <id>` (Grok) or
+  `./sprint.sh -c chat <id>` (Claude).
 
 If you keep landing in the single-pass fallback when you did not expect it,
 check:
 
 - **Are you at a real terminal?** Piping the command, or running it from a
   script/CI job, removes the TTY that an interactive session needs.
-- **Is `CLI=claude` in `docs/sprintmd/config`?** Interactive sessions are only
-  wired up for the `claude` provider today. Other CLIs fall back to the single
-  pass.
+- **Is `CLI=claude` or `CLI=grok` active?** From config, from `./sprint.sh -c` /
+  `-g` for this run, or from `SPRINTMD_CLI`. Interactive sessions are wired for
+  those profiles today. Other CLIs fall back to the single pass.
 - **Is `MODE` forcing something?** In `docs/sprintmd/config`, `MODE=emit` always
   prints the prompt for a surrounding agent; `MODE=exec` always spawns the CLI;
   empty auto-detects. If you set it, make sure it matches how you actually run.
@@ -88,28 +101,19 @@ when there's more to define, keeps the chain moving without ballooning context.
 
 - **The next dependency is picked up in a fresh context.** Defining one task
   often reveals it depends on another task that isn't defined yet. Rather than
-  keep chating in the same session — where the whole conversation stays in
+  keep chatting in the same session — where the whole conversation stays in
   context and burns tokens — `chat` writes a short **Context from chat** note
   into that next task's file (just the decisions that flow downstream), then
-  starts fresh on it: inside an agent it spins up a *new* agent for the next
-  task; in a plain terminal it prints the `./sprint.sh chat <id>` for you to run
-  in a new window. Either way the next session begins with a clean context and
-  reads what it needs from the file. When nothing downstream is left undefined,
-  `chat` says the chain is complete and stops.
+  starts fresh on it: inside an orchestration-capable agent (Claude Code or
+  Grok Build) it spins up a *new* subagent for the next task; in a plain
+  terminal it prints the `./sprint.sh chat <id>` for you to run in a new window.
+  Either way the next session begins with a clean context and reads what it
+  needs from the file. When nothing downstream is left undefined, `chat` says
+  the chain is complete and stops.
 
 ## Choosing the model
 
-Left unset on the `claude` provider, `chat` uses the strongest model — it is an
-interactive, reasoning-heavy flow and worth it. To pin a specific model, set
-`MODEL_CHAT` in `docs/sprintmd/config` (or the `SPRINTMD_MODEL_CHAT` environment
-variable); it falls back to `MODEL_DEFAULT` when empty.
-
-## When to reach for something else
-
-- To **split** a task into atomic sub-tasks without the conversation, use
-  `./sprint.sh split <file>`.
-
-`chat` handles every conversational case itself — a blank stub, a rough draft, a
-task that's really several jobs, or one that already looks done and needs
-stress-testing. It sizes the task up and routes to the right depth, so reach for
-it whenever a task feels off and you want to think it through out loud.
+`chat` uses `MODEL_CHAT` (then `MODEL_DEFAULT`) from config. On the
+`claude-code` and `grok-build` tiers, an empty model falls back to a strong
+default (`opus` / `grok-4.5`) via `sprintmd_tier_model`. Pin a model in config
+when you want a specific one.

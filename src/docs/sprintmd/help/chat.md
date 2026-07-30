@@ -111,6 +111,11 @@ Usage:
   ./sprint.sh chat bugs         # sweep the bug inbox → fix tasks
   ./sprint.sh chat              # walk the whole sprint's structural health
 
+Provider for this run only (leading flags; does not rewrite config):
+  ./sprint.sh -g chat <id>      # Grok Build
+  ./sprint.sh -c chat <id>      # Claude Code
+Default comes from docs/sprintmd/config (CLI / PROVIDER) or setup.sh.
+
 What it does:
   - Sizes the task up first, then splits or refines accordingly
   - Asks one focused question at a time, targeting the biggest gap
@@ -122,7 +127,7 @@ What it does:
     altitude — technologies and reasons, plus references to repo files and
     external docs; never code snippets
   - Closes the loop on a blocked task: when the conversation genuinely
-    resolves one that `define` parked in blocked/, it stamps the task
+    resolves one that `gate` parked in blocked/, it stamps the task
     **Status: READY**, drops the stale ## BLOCKED section, and moves it
     back to next/ — ready to run with `./sprint.sh work`. If a real
     question still remains, it leaves the task in blocked/ and says so.

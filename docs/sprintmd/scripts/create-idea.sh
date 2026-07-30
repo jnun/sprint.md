@@ -52,10 +52,9 @@ if [ -n "${1:-}" ]; then
 fi
 
 # ── Without argument: AI-assisted Q&A ──────────────────────────────
-# No CLI-presence check: sprintmd_run falls back to emit mode when no binary is
-# installed (or when already inside an agent session), printing the prompt for
-# the surrounding agent to run. Bailing here would break that path — the same
-# reason create-feature.sh has no such check.
+# No CLI-presence check: emit mode prints the prompt for the surrounding agent
+# when no binary is installed (or already inside a session). Bailing here would
+# break that path — same reason create-feature.sh has no such check.
 
 echo "▸ Starting idea refinement session..."
 echo ""
@@ -65,6 +64,14 @@ _model_args=()
 [ -n "$_MODEL" ] && _model_args=(--model "$_MODEL")
 
 _PROFILE_LINE="$(sprintmd_profile_line)"
+
+# Live multi-turn Q&A needs an interactive-capable CLI on a real TTY. When exec
+# cannot offer one, degrade to a single pass and say so (same contract as chat).
+if [ "$(sprintmd_ai_mode)" = "exec" ] && ! sprintmd_interactive_ok; then
+  echo -e "${YELLOW}Note: a live idea session needs an interactive-capable AI CLI (claude or grok) in a real terminal.${NC}"
+  echo -e "${YELLOW}Doing a single refinement pass instead. For the full experience, see docs/sprintmd/guides/use_chat.md${NC}"
+  echo ""
+fi
 
 TEMPLATE_FILE="docs/ideas/.TEMPLATE-idea.md"
 APPEND_PROMPT="You are a thinking partner helping a colleague develop a raw idea into features ready to build. You guide them through eight phases — divergent first (open up), convergent second (close down).${_PROFILE_LINE}
@@ -135,7 +142,7 @@ RULES:
 - Write in plain English throughout. No jargon.
 - You may only create files under docs/ideas/. Do not modify any other files."
 
-sprintmd_run \
+sprintmd_run_interactive \
   --append-system-prompt "$APPEND_PROMPT" \
   ${_model_args[@]+"${_model_args[@]}"} \
   --tools "Read,Edit,Write,Bash" \

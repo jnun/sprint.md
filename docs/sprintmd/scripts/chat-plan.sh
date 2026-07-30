@@ -9,8 +9,9 @@
 # chat shapes; plan acts. This walk only writes docs/plans/<id>-*.md — it never
 # moves or edits task files. Member tasks are chosen from backlog/ by ID
 # reference. The shared Conversation Method (ai/conversation.md) is injected
-# unchanged. Status is binary: DRAFT while authoring → READY when the user
-# confirms (the signal plan start / loop --refill gate on).
+# unchanged. Authoring writes only the first two of the plan's three statuses:
+# DRAFT while authoring → READY when the user confirms (the signal plan start /
+# loop --refill gate on). STARTED is latched later by plan start, never here.
 
 set -euo pipefail
 
@@ -159,7 +160,7 @@ RULES
 
 # ── Interactive contract (same as chat.sh) ───────────────────────────
 if [ "$(sprintmd_ai_mode)" = "exec" ] && ! sprintmd_interactive_ok; then
-  echo -e "${YELLOW}Note: a live plan-authoring walk needs an interactive-capable AI CLI (claude) in a real terminal.${NC}"
+  echo -e "${YELLOW}Note: a live plan-authoring walk needs an interactive-capable AI CLI (claude or grok) in a real terminal.${NC}"
   echo -e "${YELLOW}Doing a single pass instead. To wire up the full experience,${NC}"
   echo -e "${YELLOW}see docs/sprintmd/guides/use_chat.md${NC}"
   echo ""

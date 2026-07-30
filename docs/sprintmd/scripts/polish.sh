@@ -777,7 +777,7 @@ fi
 
 # The round cap keys on the **Reworked**: header integer — state that ONLY
 # polish increments — never on '## Rework'/'## Refine' headings in the body
-# (those can be written by a pre-work define pass, a chat walk, or a hand edit,
+# (those can be written by a pre-work gate pass, a chat walk, or a hand edit,
 # so counting them skips tasks polish never actually judged). A missing field
 # reads as 0, so legacy review/ tasks become judgeable again rather than being
 # back-counted from old headings.
@@ -917,11 +917,11 @@ with a Why and an unchecked '- [ ]' checklist, and leave the task's existing
 Success criteria, ## Completed, and '**Status: READY**' stamp untouched. End
 with: VERDICT: PASS | REOPEN — <n> | BLOCKER — <reason>."
 
-  if [ "$(sprintmd_ai_tier)" = "claude-code" ]; then
+  if sprintmd_orchestration_capable; then
     sprintmd_run -p "You are running the sprint.md polish queue: $COUNT finished
-task(s) in review/ to judge. CLAUDE.md is auto-loaded.${_profile_line}
+task(s) in review/ to judge. CLAUDE.md / AGENTS.md is auto-loaded when present.${_profile_line}
 
-Judge each task in its OWN fresh subagent (Task tool) so contexts never mix.
+Judge each task in $(sprintmd_subagent_own_fresh) so contexts never mix.
 You are the orchestrator — the subagents judge and rewrite; you move the files.
 
 For EACH task file below:
@@ -1010,7 +1010,7 @@ for ((i=0; i<COUNT; i++)); do
         _bump_reworked "$TASK_FILE"
         move_file "$TASK_FILE" "$NEXT_DIR/$TASK_NAME"
         REOPENED=$((REOPENED + 1))
-        echo "  ↩ Reopened → $NEXT_DIR/$TASK_NAME (round $NEXT_ROUND queued for tasks)"
+        echo "  ↩ Reopened → $NEXT_DIR/$TASK_NAME (round $NEXT_ROUND queued for work)"
       else
         PASSED=$((PASSED + 1))
         echo "  ⚠ Verdict REOPEN but no '## Rework' section was written — left in review/"

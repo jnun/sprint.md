@@ -55,9 +55,13 @@ verdict does NOT halt the queue — the task still routes to review/ with the
 blocker recorded in its '## Excellence' section, and the end-of-run summary
 counts how many blockers were found.
 
-Inside an AI session (Claude Code, Cursor, …) tasks are dispatched to fresh
-subagents in the current session. In a plain terminal they run via the CLI in
-docs/sprintmd/config. Override per-run with an env prefix:
+Inside an AI session (Claude Code, Grok Build, Cursor, …) tasks are dispatched
+to fresh subagents in the current session. In a plain terminal they run via the
+CLI in docs/sprintmd/config. Override the provider for one run with a leading
+flag (does not rewrite config):
+  ./sprint.sh -g work                   # Grok Build for this run
+  ./sprint.sh -c work                   # Claude Code for this run
+Or env prefixes:
   SPRINTMD_CLI=codex ./sprint.sh work   # exec a specific CLI standalone
   SPRINTMD_MODE=emit ./sprint.sh work   # force prompt emit for any agent
 
