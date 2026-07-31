@@ -55,9 +55,16 @@ an empty `next/` reports and exits without spending a token.
 With a STAGE FOLDER name (`blocked`, `next`, or `backlog`), `chat` sweeps that
 whole folder one task at a time — an express, verdict-first sort that absorbed
 the old `triage` command. For each task it gives a fast verdict (status, a
-one-line summary, a recommendation) on a cheap model, then lets you decide:
+one-line summary, a recommendation) on a cheap model, then lets you decide.
+Verdict **BLOCKED** / **UNDEFINED** means unworkable as written (needs define) —
+not “has an open Depends on.” Ordinary deps are pipeline ordering; `work` holds
+until they finish. A dep that sits in the `blocked/` *folder* is different
+(undefined limbo) and is called out separately.
 
-  - [w] work it   — promote (`blocked`/`backlog` → `next/`) or start (`next/` → `doing/`)
+  - [w] work it   — from `next/`: start it (`doing/`). From `blocked/` or
+                    `backlog/`: **commit to sprint via the shared workability
+                    gate** (READY → `next/`, BLOCKED → `blocked/` with a reason,
+                    COMPLETE → `review/`). Never a raw promote into `next/`.
   - [d] define it — go deep: hand the task to the full `chat <id>` conversation
                     (the strongest model), the only step that escalates past the
                     fast verdict — this two-tier split keeps the rip-through tempo
@@ -78,7 +85,8 @@ Conversation Method and writes only the plan file: Goal, ordered member task
 IDs (from `backlog/`, read-only — no task moves or edits), parallelism notes
 (recorded, not acted on), and `**Status:** DRAFT → READY` when you confirm.
 `chat backlog` mutates task files; `chat plan` only records IDs into the plan.
-Commit the plan into the sprint later with `plan start` (task 245) — not here.
+After authoring: optional `./sprint.sh plan think <id>` (dual-persona critique),
+then `./sprint.sh plan start <id>` to commit members into the sprint — not here.
 
 With `bugs`, `chat` sweeps the bug inbox (`docs/bugs/`) — the same verdict-first
 tempo, but bug-shaped. A bug report is not a task: it lives flat, has no
@@ -127,10 +135,11 @@ What it does:
     altitude — technologies and reasons, plus references to repo files and
     external docs; never code snippets
   - Closes the loop on a blocked task: when the conversation genuinely
-    resolves one that `gate` parked in blocked/, it stamps the task
-    **Status: READY**, drops the stale ## BLOCKED section, and moves it
-    back to next/ — ready to run with `./sprint.sh work`. If a real
-    question still remains, it leaves the task in blocked/ and says so.
+    resolves one that `gate` parked in blocked/, it re-enters the sprint
+    only through the shared workability gate (same review as `plan start`
+    / folder `[w]`) — READY → next/, or kick back BLOCKED with a reason.
+    Never a raw move into next/. If a real question still remains, it
+    leaves the task in blocked/ and says so.
   - Chains to the next undefined dependency in a *fresh* context so a long
     definition session doesn't pile up tokens: it seeds the next task's
     file with a short "Context from chat" note (the decisions that flow

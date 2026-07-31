@@ -110,26 +110,23 @@ else
   _STAGE_MOVE="Each child is created in backlog/, but the original lives in ${STAGE}/ — move every finished child there with: git mv docs/tasks/backlog/<child-file> $TASK_DIR/<child-file> || mv docs/tasks/backlog/<child-file> $TASK_DIR/<child-file>  so this work stays in ${STAGE}/. "
 fi
 
-# ── Close-the-loop: a blocked task that chat fully defines goes straight back
-# into the sprint. Only meaningful when the task is in blocked/ (that's where
-# gate parked it); for any other stage there is no loop to close, so this is
-# empty and the closing section reads clean. A human-supervised chat is a
-# stronger readiness signal than gate's automated pass, so chat stamps the
-# READY verdict itself instead of bouncing the task through another gate run.
+# ── Close-the-loop: a blocked task that chat fully defines re-enters the sprint
+# only through the shared workability gate (same as plan start / chat-folder [w]).
+# Chat sharpens the definition; gate stamps READY or kicks back BLOCKED with a
+# reason. Never raw-mv into next/ and never self-stamp READY as a shortcut.
 if [ "$STAGE" = "blocked" ]; then
   _CLOSE_LOOP_INSTR="
 1b. CLOSE THE LOOP (this task is in blocked/):
 gate parked this task in blocked/ because it wasn't defined enough to work.
 If — and ONLY if — the conversation has genuinely resolved it (no open decision
-remains and it now reads as fully defined), close the loop so it can be worked:
-1. Make the file END with a '## Questions' section whose first line is EXACTLY:
-     **Status: READY**
-   Keep the brief '### Already complete / ### Remaining work / ### Questions for
-   the developer' structure under it; if nothing is open write 'None — task is
-   fully defined.' Replace any earlier '## Questions' section, don't add a second.
-2. DELETE any '## BLOCKED' section — it no longer applies.
-3. Move it into the sprint queue:  git mv $TASK_FILE docs/tasks/next/$TASK_NAME || mv $TASK_FILE docs/tasks/next/$TASK_NAME
-Then tell the user it's back in next/ and runnable with ./sprint.sh work.
+remains and it now reads as fully defined), promote it via the shared gate — do
+NOT raw git mv into next/ and do NOT write **Status: READY** yourself as a
+shortcut:
+1. DELETE any stale '## BLOCKED' section if the open questions are resolved.
+2. Run the promote helper (project root):
+     bash docs/sprintmd/scripts/promote-to-sprint.sh $TASK_FILE
+   That runs the workability gate: READY → next/, BLOCKED → blocked/ (reason in
+   file), COMPLETE → review/. Tell the user the one-line result.
 If ANY open question remains, do NONE of this: leave the file in blocked/ and say
 plainly what still needs deciding."
 else

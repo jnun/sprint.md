@@ -2,7 +2,7 @@
 
 **Created**: 2026-07-30
 **Updated**: 2026-07-30
-**Status:** READY
+**Status:** STARTED
 
 > A plan is a **relational index, not a container.** Member tasks stay in their
 > lifecycle folders. Plan `**Status:**` is **DRAFT | READY | STARTED** only —

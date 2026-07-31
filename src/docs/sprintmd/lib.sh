@@ -13,6 +13,7 @@
 #   move_file SRC DEST         — git mv SRC DEST || mv SRC DEST (lifecycle rule)
 #   sprintmd_move_rule         — one-line move rule for AI prompts (same behavior)
 #   run_with_timeout SECS CMD… — portable timeout (coreutils, gtimeout, or shell)
+#   run_with_timeout_dots SECS CMD… — same, with progress dots on the TTY while waiting
 #   kebab_case STRING          — lowercase, hyphenated slug
 #   sprintmd_slug NAME [MAX]    — kebab_case + length cap + empty guard (returns 1)
 #   sprintmd_cfg KEY            — read a value from docs/sprintmd/config
@@ -26,7 +27,7 @@
 #       (two-path choice, demote inline for B, hand off to chat for A). Shared
 #       by chat-sprint.sh and the chat-next folder walk so the logic is written once.
 #   sprintmd_find_task ID [dirs…] — resolve a task file by numeric ID
-#   sprintmd_review_verdict FILE — READY/BLOCKED/DONE stamp from a gate review
+#   sprintmd_review_verdict FILE — READY/BLOCKED/COMPLETE stamp from a gate review
 #   sprintmd_log_path KIND NAME — timestamped log path under docs/tmp
 #   sprintmd_load_profile [cli] — source the provider profile (sprintmd_provider_exec)
 #   sprintmd_ai_tier            — capability tier: claude-code|grok-build|cursor|openai|generic
@@ -130,6 +131,50 @@ run_with_timeout() {
     kill "$watcher" 2>/dev/null
     pkill -P "$watcher" 2>/dev/null
     return $ret
+}
+
+# run_with_timeout_dots SECONDS CMD [ARGS…]
+# Same timeout contract as run_with_timeout, plus a simple progress ticker so
+# long headless AI calls (chat backlog verdicts, etc.) do not look hung.
+# Dots go to /dev/tty (or stderr) so they stay visible under
+#   out=$(run_with_timeout_dots …)
+# Command stdout is captured and replayed on this function's stdout when the
+# command finishes — callers still parse the real result. Command stderr is
+# discarded during the wait (triage callers already silenced it); banners that
+# write /dev/tty (sprintmd_announce_provider) still show.
+run_with_timeout_dots() {
+    local secs="$1"; shift
+    local tmp pid ret n=0 out
+
+    tmp=$(mktemp "${TMPDIR:-/tmp}/sprintmd-wait.XXXXXX") || return 1
+
+    run_with_timeout "$secs" "$@" >"$tmp" 2>/dev/null &
+    pid=$!
+
+    out=/dev/tty
+    if ! { true >"$out"; } 2>/dev/null; then
+        out=/dev/stderr
+    fi
+
+    while kill -0 "$pid" 2>/dev/null; do
+        # Plain dots, wrapping so they "cross" the terminal over long waits.
+        printf '.' >"$out" 2>/dev/null || true
+        n=$((n + 1))
+        if [ $((n % 48)) -eq 0 ]; then
+            printf '\n' >"$out" 2>/dev/null || true
+        fi
+        sleep 1
+    done
+    wait "$pid" 2>/dev/null
+    ret=$?
+
+    if [ "$n" -gt 0 ]; then
+        printf '\n' >"$out" 2>/dev/null || true
+    fi
+
+    cat "$tmp"
+    rm -f "$tmp"
+    return "$ret"
 }
 
 # kebab_case "Some Title!" -> "some-title"
@@ -290,7 +335,7 @@ A next/ task that depends on a task still sitting in blocked/ can NEVER run: the
 
 PATH A — DEFINE THE BLOCKED DEPENDENCY <B> (choose when the dependency is real and still needed):
 ${path_a}
-Either way, chat's own close-the-loop branch stamps <B> '**Status: READY**' and moves it back into next/ with git mv … || mv …, which makes <D> runnable — you do not rebuild that machinery here, you point at it.
+Either way, chat's own close-the-loop branch re-enters the sprint only through the shared gate (bash docs/sprintmd/scripts/promote-to-sprint.sh <B-file>) — READY → next/, BLOCKED stays with a reason — which makes <D> runnable when gate grades READY. You do not rebuild that machinery here; you point at chat <B>.
 
 PATH B — DEMOTE THE DEPENDENT TASK <D> BACK TO backlog/ (choose to pull it out of the sprint):
 On the user's OK, action this INLINE: move <D> out of the sprint so next/ holds no work blocked on an undefined task —  git mv docs/tasks/next/<D-file> docs/tasks/backlog/<D-file> || mv docs/tasks/next/<D-file> docs/tasks/backlog/<D-file>. THEN RE-SCAN next/ for any OTHER task that also depends on <B>: the preflight already emitted a SEPARATE BLOCKER finding for each (next task, blocked dep) pair, so <B>'s other dependents are already in the findings list — recognize them by the same blocked id <B>, do not run a fresh board scan. Only when NONE remain may you say 'the sprint no longer contains work blocked on <B>.' If siblings remain, name them and offer to resolve each in turn (A or B).
@@ -348,16 +393,21 @@ task_feature() {
     { grep -m1 '\*\*Feature\*\*:' "$1" 2>/dev/null || true; } | sed 's/.*\*\*Feature\*\*: *//'
 }
 
-# sprintmd_review_verdict FILE -> READY | BLOCKED | DONE | "" (no verdict).
+# sprintmd_review_verdict FILE -> READY | BLOCKED | COMPLETE | "" (no verdict).
 # Reads only the LAST "## Questions" section and requires the line-anchored
 # bold stamp gate's review writes. A loose grep for "Status: BLOCKED"
 # anywhere in the file once mis-routed a READY task to blocked/ because its
 # body *quoted* the verdict vocabulary — this helper exists so no script
 # ever parses the stamp loosely again.
+# COMPLETE = work already in the codebase (moves to review/). Not the done/
+# lifecycle folder. Legacy **Status: DONE** stamps normalize to COMPLETE.
 sprintmd_review_verdict() {
-    awk '/^## Questions[[:space:]]*$/{s=""; f=1} f{s=s $0 "\n"} END{printf "%s", s}' "$1" 2>/dev/null \
-        | { grep -m1 -oE '^\*\*Status: (READY|BLOCKED|DONE)\*\*' || true; } \
-        | sed 's/\*//g; s/Status: //'
+    local v
+    v=$(awk '/^## Questions[[:space:]]*$/{s=""; f=1} f{s=s $0 "\n"} END{printf "%s", s}' "$1" 2>/dev/null \
+        | { grep -m1 -oE '^\*\*Status: (READY|BLOCKED|COMPLETE|DONE)\*\*' || true; } \
+        | sed 's/\*//g; s/Status: //')
+    [ "$v" = "DONE" ] && v="COMPLETE"
+    printf '%s' "$v"
 }
 
 # sprintmd_meta_value FILE FIELD -> value of '**FIELD**:' (empty if absent).

@@ -23,9 +23,11 @@ both work. Omit them to pick interactively from `backlog/`: a plan is the
 *defining period*, where you choose the tasks you want before work starts.
 
 Member IDs are references only. Moving or working a member task needs no edit to
-the plan file. To commit a plan into the sprint, run `./sprint.sh plan start <id>`
-(or move its members `backlog/ → next/` with `git mv SRC DEST || mv SRC DEST`);
-the plan file itself never moves.
+the plan file. After scaffolding: author with `./sprint.sh chat plan <id>`,
+optionally critique with `./sprint.sh plan think <id>`, then commit with
+`./sprint.sh plan start <id>` (gates each member; READY → next/). Single-task
+promote: `bash docs/sprintmd/scripts/promote-to-sprint.sh <task-file>`. The
+plan file itself never moves.
 
 `./sprint.sh status` and `./sprint.sh context` roll up each plan by
 resolving its member IDs to their current folders — a live view of the clump's

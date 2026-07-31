@@ -11,18 +11,19 @@ is the READY-gate. Pass a folder to report quality on backlog, doing, or blocked
 without moving anything.
 
 On **next/** (default) gate:
-  - Checks which action items are already done (and verifies quality)
+  - Checks which action items are already complete (and verifies quality)
   - Identifies remaining work
   - Asks clarifying questions with suggestions when decisions are needed
   - Writes a ## Questions section into the task file
 
-Verdicts on next/:
-  READY   — task stays in next/, ready for execution
-  BLOCKED — task moves to blocked/, needs developer answers first
-  DONE    — task moves to review/, all work is already complete
+Verdicts on next/ (workability stamps — **not** lifecycle folders):
+  READY    — task stays in next/, ready for execution
+  BLOCKED  — task moves to blocked/, needs developer answers first
+  COMPLETE — work already present in the codebase; task moves to **review/**
+             (not `docs/tasks/done/`; you approve and move to done/ later)
 
 On **backlog/**, **doing/**, or **blocked/** gate reports only (read-only):
-  DONE      — work already present in the codebase
+  COMPLETE  — work already present in the codebase (not the done/ folder)
   OUTDATED  — references files/patterns that no longer exist
   UNDEFINED — too vague to be actionable
   KEEP      — still relevant, well-defined, not yet completed
@@ -46,8 +47,15 @@ re-pay to review the whole queue each run. --force re-reviews all of them.
 
 After running on next/:
   - READY tasks: run ./sprint.sh work to execute them
-  - BLOCKED tasks: answer questions in the file, move back to next/
-  - DONE tasks: verify in review/, then move to done/
+  - BLOCKED tasks: answer questions (or `./sprint.sh chat <id>`), then re-enter
+    next/ only via the shared gate again — never raw `git mv` into next/
+  - COMPLETE tasks: verify in review/, then move to done/ when you approve
+
+**Invariant:** nothing enters `next/` without this workability review. Surfaces
+that promote (`plan start`, `chat backlog`/`blocked` `[w]`, `chat` close-loop,
+`polish` REOPEN, `loop --retry`) all call the same gate-lib path. Agent helper:
+`bash docs/sprintmd/scripts/promote-to-sprint.sh <task-file>`. Escape hatch:
+`plan start --commit-only` (explicit, unvetted).
 
 Provider for this run only (leading flags; does not rewrite config):
   ./sprint.sh -g gate                # Grok Build

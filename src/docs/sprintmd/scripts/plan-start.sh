@@ -7,7 +7,7 @@
 # next/ IS the sprint, so workability is decided BEFORE a member enters it: each
 # backlog member is run through the shared workability gate (gate-lib.sh — same
 # code `./sprint.sh gate` runs) while still in backlog/ — READY is promoted into
-# next/, BLOCKED lands in blocked/ (never visits next/), DONE goes to review/.
+# next/, BLOCKED lands in blocked/ (never visits next/), COMPLETE goes to review/.
 # --commit-only skips the gate and does the pure, deterministic backlog→next mv
 # (power users, tests, non-AI environments).
 #
@@ -248,7 +248,7 @@ fi
 
 READY_MOVED=0   # READY members that reached next/
 BLOCKED_CT=0    # graded BLOCKED, landed in blocked/
-DONE_CT=0       # graded DONE, landed in review/
+COMPLETE_CT=0  # graded COMPLETE, landed in review/
 ERR_CT=0        # gate errored, member left in backlog/
 EMITTED=0       # a review prompt was emitted for the surrounding agent to run
 
@@ -274,7 +274,7 @@ if [ "$COMMIT_ONLY" -eq 1 ]; then
 elif [ ${#MOVE_PATHS[@]} -gt 0 ]; then
   mkdir -p docs/tmp
   # READY_DIR = next/: a member that grades READY is promoted into the sprint;
-  # BLOCKED → blocked/, DONE → review/ (handled inside the shared gate).
+  # BLOCKED → blocked/, COMPLETE → review/ (handled inside the shared gate).
   sprintmd_gate_init plan "$NEXT_DIR" "$NEXT_DIR"
 
   # Orchestration-capable emit fast path: one subagent per member, in parallel.
@@ -293,7 +293,7 @@ elif [ ${#MOVE_PATHS[@]} -gt 0 ]; then
         EMIT)    EMITTED=1 ;;
         READY)   READY_MOVED=$((READY_MOVED + 1)); echo "  ✓ READY → next/: $name" ;;
         BLOCKED) BLOCKED_CT=$((BLOCKED_CT + 1));   echo "  ⊘ BLOCKED → blocked/: $name" ;;
-        DONE)    DONE_CT=$((DONE_CT + 1));         echo "  ✓ DONE → review/: $name" ;;
+        COMPLETE) COMPLETE_CT=$((COMPLETE_CT + 1)); echo "  ✓ COMPLETE → review/: $name" ;;
         NOSTAMP|FAILED)
           ERR_CT=$((ERR_CT + 1))
           echo "  ✗ gate $SPRINTMD_GATE_VERDICT: $name — left in backlog/"
@@ -308,11 +308,11 @@ fi
 echo ""
 if [ "$EMITTED" -eq 1 ]; then
   echo "▸ Plan $PLAN_ID: gating ${#MOVE_PATHS[@]} backlog member(s) — run the review prompt(s) above."
-  echo "  Each READY member is promoted into next/; BLOCKED → blocked/, DONE → review/."
+  echo "  Each READY member is promoted into next/; BLOCKED → blocked/, COMPLETE → review/."
 elif [ "$COMMIT_ONLY" -eq 1 ]; then
   echo "▸ Plan $PLAN_ID committed (--commit-only): moved $READY_MOVED task(s) into next/ (gate skipped — not vetted)"
 else
-  echo "▸ Plan $PLAN_ID started: $READY_MOVED ready → next/, $BLOCKED_CT blocked, $DONE_CT done"
+  echo "▸ Plan $PLAN_ID started: $READY_MOVED ready → next/, $BLOCKED_CT blocked, $COMPLETE_CT complete"
   [ "$ERR_CT" -gt 0 ] && echo "  ($ERR_CT gate error(s) — left in backlog/)"
 fi
 [ ${#SKIP_NEXT[@]} -gt 0 ] && echo "  (already queued: ${#SKIP_NEXT[@]})"

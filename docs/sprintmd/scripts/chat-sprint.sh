@@ -257,7 +257,7 @@ EOF
     if [ "$verdict" != "BLOCKED" ] && ! grep -qE '^## Questions[[:space:]]*$' "$file"; then
       add_finding 3 ORDERING "$id" "$file" \
         "sits in blocked/ with no '**Status: BLOCKED**' and no '## Questions' — parked but invisible, almost certainly mis-filed" \
-        "move it to backlog/ to be reconsidered (the safe default for a mis-parked file); only record a BLOCKED reason or promote to next/ if there is a clear one"
+        "move it to backlog/ to be reconsidered (the safe default for a mis-parked file); only record a BLOCKED reason, or commit to sprint via bash docs/sprintmd/scripts/promote-to-sprint.sh <file> (never raw mv into next/)"
     fi
   fi
 done
@@ -426,7 +426,7 @@ For EACH finding:
 2. STATE in one or two sentences what is wrong and why it matters for running the sprint.
 3. RECOMMEND a specific fix (findings carry one) and OFFER TO ACT. Acting is only these, inside the task pipeline:
    - fix a metadata edge (Depends on / Blocks / Parent);
-   - mis-parked blocked/ (no '**Status: BLOCKED**', no '## Questions'): DEFAULT move to backlog/ (git mv $BLOCKED_DIR/<file> docs/tasks/backlog/<file> || mv $BLOCKED_DIR/<file> docs/tasks/backlog/<file>); only stamp BLOCKED or promote to next/ with a clear stated reason;
+   - mis-parked blocked/ (no '**Status: BLOCKED**', no '## Questions'): DEFAULT move to backlog/ (git mv $BLOCKED_DIR/<file> docs/tasks/backlog/<file> || mv $BLOCKED_DIR/<file> docs/tasks/backlog/<file>); only stamp BLOCKED, or commit to sprint via bash docs/sprintmd/scripts/promote-to-sprint.sh <file> (gate: READY→next/; never raw mv into next/);
    - stamp or correct a '**Status:**' marker;
    - next→blocked BLOCKER: two-path choice under 'RESOLVING A next→blocked BLOCKER' below — do NOT drop Depends on to paper over it;
    - real definition work: CHAIN OUT to './sprint.sh chat <id>' in a fresh window — do not redefine inline.

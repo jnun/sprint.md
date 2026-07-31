@@ -4,11 +4,11 @@ Picks up READY tasks from docs/tasks/next/ in order (by leading number)
 and works each one in a fresh AI context window.
 
 Readiness gate: only tasks stamped 'Status: READY' are executed. The
-stamp comes from the workability gate — plan start applies it as it
-promotes members into next/, and gate re-applies it on demand. A
-headless run can't ask clarifying questions, so unvetted tasks are
-skipped (left in next/) rather than run half-understood. Override
-with --force.
+stamp comes from the workability gate — every path into next/ (plan start,
+chat folder commit, chat close-loop, polish REOPEN, loop --retry) runs that
+gate; standalone `gate` re-applies it on demand. A headless run can't ask
+clarifying questions, so unvetted tasks are skipped (left in next/) rather
+than run half-understood. Override with --force.
 
 Dependency-aware: a task's '**Depends on**:' prerequisites are honored
 within a single run. A task waiting on another queued in the same pass

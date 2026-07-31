@@ -86,18 +86,47 @@ check:
   prints the prompt for a surrounding agent; `MODE=exec` always spawns the CLI;
   empty auto-detects. If you set it, make sure it matches how you actually run.
 
+## Folder sweeps (`chat backlog` / `next` / `blocked`) — not a conversation
+
+`./sprint.sh chat <folder>` is a **fast verdict-first sort**, not the
+give-and-take of `chat <id>`:
+
+- In a plain terminal (**exec**), each task gets a headless one-shot verdict
+  (progress dots while you wait), then a shell menu: `[w] [d] [k] [s] [q]`.
+- Only **`[d] Define it`** opens the full interactive chat on that task.
+- Inside an agent session (**emit**), the surrounding agent walks the queue.
+
+Verdict labels (not lifecycle folders):
+
+| Status | Meaning |
+|--------|---------|
+| **COMPLETE** | Work may already be in the codebase — triage is advisory; **`[w]` still gates** |
+| **READY** | Clear enough to try; open **Depends on** is normal ordering (`work` holds) |
+| **BLOCKED** / **UNDEFINED** | Unworkable *as written* (needs define) — **not** “has an open dep” |
+| **STALE** | Low value / superseded |
+
+From `backlog/` or `blocked/`, **`[w]` commits to the sprint only through the
+shared workability gate** (READY → `next/`, BLOCKED → `blocked/` with a reason,
+COMPLETE → `review/`). Never a raw promote into `next/`. From `next/`, `[w]`
+starts the task (`doing/`).
+
+A dep sitting in the **`blocked/` folder** (undefined limbo) is called out
+separately; a dep still in backlog/next is not a block.
+
+For CLI help on the same surface: `./sprint.sh help chat`.
+
 ## What happens when the task is defined
 
 `chat` doesn't just refine and leave you to clean up — it closes the loop and,
 when there's more to define, keeps the chain moving without ballooning context.
 
-- **A blocked task goes straight back into the sprint.** When you chat through
+- **A blocked task re-enters the sprint through the gate.** When you chat through
   a task that `gate` had parked in `blocked/` and the conversation genuinely
-  resolves it, `chat` stamps it `**Status: READY**`, removes the stale
-  `## BLOCKED` section, and moves it back to `next/`. It's immediately runnable
-  with `./sprint.sh work` — no manual lifecycle move, no second `gate` pass. If a
-  real open question remains, `chat` does none of this: the task stays in
-  `blocked/` and it tells you what still needs deciding.
+  resolves it, `chat` runs the same workability promote as `plan start` /
+  folder `[w]` (not a raw move, not a self-stamped READY shortcut). READY →
+  `next/` and runnable with `./sprint.sh work`; otherwise the gate kicks back
+  BLOCKED with a reason. If a real open question remains, `chat` does none of
+  this: the task stays in `blocked/` and it tells you what still needs deciding.
 
 - **The next dependency is picked up in a fresh context.** Defining one task
   often reveals it depends on another task that isn't defined yet. Rather than

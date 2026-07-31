@@ -5,17 +5,19 @@
 # and must have sourced lib.sh first. This is NOT a CLI command: there is no
 # registry row, no dispatch arm, no help page. It is a library of gate functions.
 #
-# The gate runs the READY/BLOCKED/DONE workability review on task files. For each
+# The gate runs the READY/BLOCKED/COMPLETE workability review on task files. For each
 # file it runs the invariant review contract, writes the ## Questions section +
 # stamp, applies the dependency-vs-definition rules, and routes the file by
-# verdict (BLOCKED → blocked/, DONE → review/, READY stays where it is — or moves
+# verdict (BLOCKED → blocked/, COMPLETE → review/, READY stays where it is — or moves
 # to a caller-supplied READY_DIR, e.g. `plan start` promoting a vetted backlog
-# member into next/).
+# member into next/). COMPLETE means work is already in the codebase — not the
+# docs/tasks/done/ lifecycle folder.
 #
-# Two surfaces share this one implementation so their verdicts, questions, and
-# rules can never drift: `gate` (next/ mode CLI) and `plan start` (gating members
-# before they enter the sprint). The logic here is the next/ workability gate,
-# shared so verdicts never drift.
+# Every surface that may send a task into next/ (the sprint) shares this one
+# implementation so verdicts never drift: `gate` (next/ CLI), `plan start`,
+# `chat` folder promote, `chat` close-the-loop from blocked/, and `polish`
+# REOPEN. The only supported promote is sprintmd_promote_to_sprint (or the
+# same READY_DIR=next/ init + review plan start uses in bulk).
 #
 # Requires from lib.sh: sprintmd_run, sprintmd_ai_mode, sprintmd_ai_tier,
 # sprintmd_resolve_model, sprintmd_profile_line, sprintmd_review_verdict,
@@ -25,9 +27,10 @@
 #   sprintmd_gate_init [KIND] [STAY_DIR] [READY_DIR]  # once — invariant context
 #   sprintmd_gate_review FILE              # one task: run + route; sets outputs
 #   sprintmd_gate_parallel FILE...         # emit-mode orchestration fan-out
+#   sprintmd_promote_to_sprint FILE [KIND] # gate then READY→next/ (only entry)
 #
 # sprintmd_gate_review sets, on return:
-#   SPRINTMD_GATE_VERDICT  READY | BLOCKED | DONE | EMIT | NOSTAMP | FAILED
+#   SPRINTMD_GATE_VERDICT  READY | BLOCKED | COMPLETE | EMIT | NOSTAMP | FAILED
 #     EMIT    — emit mode: the surrounding agent runs the review and moves the
 #               file itself; nothing to count here.
 #     NOSTAMP — the review ran but wrote no verdict stamp; file left in place.
@@ -99,7 +102,8 @@ sprintmd_gate_init() {
 After writing the verdict, act on it. Always move with: git mv SRC DEST || mv SRC DEST
 (git mv first; plain mv finishes when the file is untracked).
 - BLOCKED → git mv the task file to $SPRINTMD_GATE_BLOCKED_DIR/ || mv it there
-- DONE    → git mv the task file to $SPRINTMD_GATE_REVIEW_DIR/ || mv it there
+- COMPLETE → git mv the task file to $SPRINTMD_GATE_REVIEW_DIR/ || mv it there
+  (COMPLETE = work already in the codebase; not docs/tasks/done/)
 $ready_instr"
   fi
 
@@ -134,7 +138,7 @@ Your job:
 1. Read the task file at $1.
 2. Read the actual source files referenced by this task. Thoroughly check the current state of the code for every action item.
 3. Classify each action item into one of three categories:
-   - DONE: Already implemented in the current code.
+   - COMPLETE: Already implemented in the current code.
    - REMAINING: Not yet done, and the action item is clear enough to execute.
    - UNCLEAR: Not yet done, but requires a decision or clarification before work can start.
    Before you mark anything UNCLEAR because the code it builds on is missing,
@@ -143,10 +147,11 @@ Your job:
    and record the dependency (see "Dependencies on other tasks" below).
 4. Produce an overall verdict: READY or BLOCKED.
 
-How to handle DONE items:
+How to handle COMPLETE items (already implemented in code):
 - Do NOT suggest removing them. They are context for the developer.
-- Briefly note that they're done and whether the implementation looks correct and clean.
+- Briefly note that they're complete and whether the implementation looks correct and clean.
 - If the implementation has issues (bugs, missing edge cases, inelegant code), flag that as remaining work.
+- COMPLETE is a workability verdict, not the docs/tasks/done/ folder.
 
 A task is READY if:
 - There is remaining work to do
@@ -163,7 +168,7 @@ A task is BLOCKED only if:
   because a sibling or backlog task hasn't run yet is NOT a contradiction — it is
   a dependency. Only treat a conflict with current code as a blocker when nothing
   in the next/backlog index would produce what the task assumes.
-- The task is entirely done and there is nothing left to do (mark as DONE instead of BLOCKED)
+- The task is entirely implemented already and there is nothing left to do (mark as COMPLETE instead of BLOCKED — stamp **Status: COMPLETE**, which routes to review/, not done/)
 
 Dependencies on other tasks:
 Do NOT block a task merely because another task must be completed first — that is
@@ -174,7 +179,7 @@ not a reason to block. If executing this task requires other tasks to be finishe
 first, ensure the task file records them in a bold '**Depends on**:' field near
 the top (after the title), listing the task numbers, e.g.
 '**Depends on**: 900-920, 922'. Add the field if it is missing, or update it
-if it is incomplete. An unmet dependency keeps the task READY (or DONE if already
+if it is incomplete. An unmet dependency keeps the task READY (or COMPLETE if already
 implemented): the task runner holds it in next/ until those dependencies reach
 review/ or done/, then runs it automatically — no one has to babysit the order.
 A prerequisite task being *itself* rough, undefined, or not-yet-reviewed is STILL
@@ -196,8 +201,10 @@ Structure the ## Questions section exactly like this:
 
 **Status: READY**
 
-(or **Status: BLOCKED** / **Status: DONE** — write the stamp exactly in
-that bold form, on its own line, directly under the ## Questions heading)
+(or **Status: BLOCKED** / **Status: COMPLETE** — write the stamp exactly in
+that bold form, on its own line, directly under the ## Questions heading.
+COMPLETE = work already in the codebase → review/. Never use DONE for this stamp;
+done/ is only a lifecycle folder after human approval.)
 
 ### Already complete
 Items that are implemented and verified in the current code. Note any quality concerns.
@@ -253,7 +260,7 @@ $(sprintmd_gate_contract "<the task file assigned to this subagent>")${SPRINTMD_
 Task files to review (one subagent each):${_parallel_files}
 
 When every subagent has finished, print a summary table: one row per task with
-its file name and final verdict (READY / BLOCKED / DONE)."
+its file name and final verdict (READY / BLOCKED / COMPLETE)."
 }
 
 # If the review stamped BLOCKED but didn't write a ## BLOCKED section, synthesize
@@ -285,7 +292,7 @@ _sprintmd_gate_ensure_blocked_section() {
 # sprintmd_gate_review FILE
 # Run the gate on ONE task file in the current AI mode, apply its verdict, and
 # report the outcome via the SPRINTMD_GATE_* output variables (see header).
-# In exec mode the file is moved here (BLOCKED → blocked/, DONE → review/); in
+# In exec mode the file is moved here (BLOCKED → blocked/, COMPLETE → review/); in
 # emit mode the surrounding agent performs the move per the folded-in instruction.
 # shellcheck disable=SC2034  # SPRINTMD_GATE_VERDICT/LOG/ERROR are outputs read by callers
 sprintmd_gate_review() {
@@ -328,9 +335,9 @@ sprintmd_gate_review() {
         _sprintmd_gate_ensure_blocked_section "$SPRINTMD_GATE_BLOCKED_DIR/$task_name"
         SPRINTMD_GATE_VERDICT="BLOCKED"
         ;;
-      DONE)
+      COMPLETE)
         move_file "$task_file" "$SPRINTMD_GATE_REVIEW_DIR/$task_name"
-        SPRINTMD_GATE_VERDICT="DONE"
+        SPRINTMD_GATE_VERDICT="COMPLETE"
         ;;
       READY)
         # Default (gate): READY stays put. With READY_DIR set (plan start),
@@ -350,4 +357,47 @@ sprintmd_gate_review() {
     SPRINTMD_GATE_VERDICT="FAILED"
   fi
   return 0
+}
+
+# sprintmd_promote_to_sprint FILE [KIND]
+# The only supported way to move a task into next/ (the sprint). Runs the shared
+# workability gate; routes by verdict:
+#   READY    → next/   (stamped workable)
+#   BLOCKED  → blocked/ (reason written into the file)
+#   COMPLETE → review/ (work already in the codebase)
+# Never raw-mv into next/. KIND is the log-file kind (default: promote).
+# Sets SPRINTMD_GATE_* like sprintmd_gate_review. Returns 0 after a completed
+# review attempt; non-zero only when the file is missing.
+sprintmd_promote_to_sprint() {
+  local task_file="${1:?sprintmd_promote_to_sprint: file required}"
+  local kind="${2:-promote}"
+  if [ ! -f "$task_file" ]; then
+    SPRINTMD_GATE_VERDICT="FAILED"
+    SPRINTMD_GATE_ERROR="file not found: $task_file"
+    SPRINTMD_GATE_LOG=""
+    return 1
+  fi
+  mkdir -p docs/tasks/next "$SPRINTMD_GATE_BLOCKED_DIR" "$SPRINTMD_GATE_REVIEW_DIR"
+  # Always re-init so READY_DIR is next/ even if a prior stay-in-place gate init
+  # ran in this process.
+  sprintmd_gate_init "$kind" "docs/tasks/next" "docs/tasks/next"
+  sprintmd_gate_review "$task_file"
+}
+
+# Human one-liner for a promote/gate verdict (stdout). Safe when VERDICT unset.
+sprintmd_promote_summary() {
+  local name="${1:-task}"
+  case "${SPRINTMD_GATE_VERDICT:-}" in
+    READY)    echo "✓ READY → next/: $name" ;;
+    BLOCKED)  echo "⊘ BLOCKED → blocked/: $name" ;;
+    COMPLETE) echo "✓ COMPLETE → review/: $name" ;;
+    EMIT)     echo "▸ Gate review emitted for $name — run the prompt above (READY → next/)." ;;
+    NOSTAMP)  echo "✗ gate NOSTAMP: $name — left in place (no verdict written)" ;;
+    FAILED)
+      echo "✗ gate FAILED: $name — left in place"
+      [ -n "${SPRINTMD_GATE_ERROR:-}" ] && echo "  ${SPRINTMD_GATE_ERROR}"
+      [ -n "${SPRINTMD_GATE_LOG:-}" ] && echo "  log: $SPRINTMD_GATE_LOG"
+      ;;
+    *)        echo "? gate ${SPRINTMD_GATE_VERDICT:-unknown}: $name" ;;
+  esac
 }

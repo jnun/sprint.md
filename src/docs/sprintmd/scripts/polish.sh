@@ -3,7 +3,8 @@
 #
 #   polish [limit] [--rounds N] [--max] [--force]
 #       Sweep review/: judge each finished task; reopen ones worth another
-#       pass to next/. Protocol: docs/sprintmd/ai/refine.md
+#       pass into next/ via the shared workability gate (never raw promote).
+#       Protocol: docs/sprintmd/ai/refine.md
 #
 #   polish <file|task.md> [file...]
 #       Deep-judge ONE finished piece; file enhancement tasks to backlog/.
@@ -19,6 +20,7 @@
 set -euo pipefail
 
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/lib.sh"
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/gate-lib.sh"
 
 # ── Mode selection ───────────────────────────────────────────────────
 # Modes: sweep | judge | code
@@ -931,16 +933,17 @@ $_RULES\"
 2. When it returns, read the task file and route by the subagent's verdict:
    - REOPEN (it appended a '## Rework (round N)' section) → increment the
      '**Reworked**:' header integer by 1 (seed the field as 1 if the task
-     lacks it), then: git mv <path> $NEXT_DIR/ || mv <path> $NEXT_DIR/
+     lacks it), then COMMIT TO SPRINT via the shared gate ONLY:
+       bash docs/sprintmd/scripts/promote-to-sprint.sh <path>
+     NEVER raw git mv into $NEXT_DIR/. Gate routes READY → next/, BLOCKED →
+     blocked/, COMPLETE → review/.
    - PASS    → leave it in $REVIEW_DIR/
    - BLOCKER → leave it in $REVIEW_DIR/ (note it for the human)
-
-Always move with: git mv SRC DEST || mv SRC DEST (git mv first; plain mv finishes when untracked).
 
 Tasks (in order):$_task_list
 
 When every task is routed, report a one-line summary: how many reopened to
-next/ vs left in review/ (and any blockers)."
+next/ (gate READY) vs left in review/ (and any blockers)."
   else
     sprintmd_run -p "You are running the sprint.md polish queue: $COUNT finished
 task(s) in review/ to judge. CLAUDE.md is auto-loaded.${_profile_line}
@@ -955,16 +958,17 @@ $_RULES
 2. Route by your verdict:
    - REOPEN (you appended a '## Rework (round N)' section) → increment the
      '**Reworked**:' header integer by 1 (seed the field as 1 if the task
-     lacks it), then: git mv <path> $NEXT_DIR/ || mv <path> $NEXT_DIR/
+     lacks it), then COMMIT TO SPRINT via the shared gate ONLY:
+       bash docs/sprintmd/scripts/promote-to-sprint.sh <path>
+     NEVER raw git mv into $NEXT_DIR/. Gate routes READY → next/, BLOCKED →
+     blocked/, COMPLETE → review/.
    - PASS    → leave it in $REVIEW_DIR/
    - BLOCKER → leave it in $REVIEW_DIR/ (note it for the human)
-
-Always move with: git mv SRC DEST || mv SRC DEST (git mv first; plain mv finishes when untracked).
 
 Tasks (in order):$_task_list
 
 When every task is routed, report a one-line summary: how many reopened to
-next/ vs left in review/ (and any blockers)."
+next/ (gate READY) vs left in review/ (and any blockers)."
   fi
   exit 0
 fi
@@ -1008,9 +1012,21 @@ for ((i=0; i<COUNT; i++)); do
     REOPEN)
       if [ "$AFTER_SECTIONS" -gt "$BEFORE_SECTIONS" ]; then
         _bump_reworked "$TASK_FILE"
-        move_file "$TASK_FILE" "$NEXT_DIR/$TASK_NAME"
-        REOPENED=$((REOPENED + 1))
-        echo "  ↩ Reopened → $NEXT_DIR/$TASK_NAME (round $NEXT_ROUND queued for work)"
+        # Re-enter next/ only through the shared gate (same as plan start / chat).
+        sprintmd_promote_to_sprint "$TASK_FILE" polish
+        case "${SPRINTMD_GATE_VERDICT:-}" in
+          READY|EMIT)
+            REOPENED=$((REOPENED + 1))
+            echo "  ↩ Reopened — $(sprintmd_promote_summary "$TASK_NAME") (round $NEXT_ROUND)"
+            ;;
+          BLOCKED|COMPLETE)
+            echo "  ↩ Rework written — $(sprintmd_promote_summary "$TASK_NAME") (not queued in next/)"
+            ;;
+          *)
+            echo "  ⚠ Rework written but gate did not promote: $(sprintmd_promote_summary "$TASK_NAME")"
+            [ -n "${SPRINTMD_GATE_LOG:-}" ] && echo "    Log: $SPRINTMD_GATE_LOG"
+            ;;
+        esac
       else
         PASSED=$((PASSED + 1))
         echo "  ⚠ Verdict REOPEN but no '## Rework' section was written — left in review/"

@@ -266,6 +266,10 @@ for i in "${!all_files[@]}"; do
 
   bugname=$(basename "$file")
 
+  # Headless one-shot can take a while with no CLI output until it returns.
+  echo ""
+  echo -e "${DIM}[$idx/$total] $bugname — thinking, wait just a minute…${NC}"
+
   # ── Fast verdict — cheap TRIAGE model, single shot ─────────────────
   _verdict_prompt="You are sweeping a BUG REPORT (not a task) from $BUGS_DIR/.
 
@@ -292,8 +296,8 @@ Rules:
 - Keep SUMMARY and RECOMMENDATION each to ONE sentence
 - Do not output anything else"
 
-  verdict=$(run_with_timeout "$timeout_sec" sprintmd_run -p "$_verdict_prompt" \
-    ${_verdict_model_args[@]+"${_verdict_model_args[@]}"} --max-turns "$MAX_TURNS" --skip-permissions 2>/dev/null) || true
+  verdict=$(run_with_timeout_dots "$timeout_sec" sprintmd_run -p "$_verdict_prompt" \
+    ${_verdict_model_args[@]+"${_verdict_model_args[@]}"} --max-turns "$MAX_TURNS" --skip-permissions) || true
 
   status=$(echo "$verdict" | grep -oE '^STATUS: (REPRODUCIBLE|FIXED|UNDEFINED|DUPLICATE|STALE)' | head -1 | sed 's/^STATUS: //' || true)
   if [ -z "$status" ]; then

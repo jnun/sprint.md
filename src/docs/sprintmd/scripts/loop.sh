@@ -54,6 +54,7 @@ REVIEW_DIR="docs/tasks/review"
 BACKLOG_DIR="docs/tasks/backlog"
 
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/lib.sh"
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/gate-lib.sh"
 
 # ── State ───────────────────────────────────────────────────────────
 COMPLETED=0
@@ -118,6 +119,8 @@ for dir in "$NEXT_DIR" "$DOING_DIR" "$BLOCKED_DIR" "$REVIEW_DIR"; do
 done
 
 # ── Recover orphaned doing/ tasks ───────────────────────────────────
+# Re-queue only: these already entered next/ via the gate before work moved
+# them to doing/. Not a first-time promote — no re-gate (stamp preserved).
 DOING_COUNT=$(count_tasks "$DOING_DIR")
 if [ "$DOING_COUNT" -gt 0 ]; then
   echo "⚠ Found $DOING_COUNT task(s) in doing/ from an interrupted run"
@@ -125,7 +128,7 @@ if [ "$DOING_COUNT" -gt 0 ]; then
     [ -f "$f" ] || continue
     name="${f##*/}"
     move_file "$f" "$NEXT_DIR/$name"
-    echo "  ↻ $name → next/"
+    echo "  ↻ $name → next/ (re-queue interrupted work)"
   done
   echo ""
 fi
@@ -188,7 +191,8 @@ while true; do
 
   NEXT_COUNT=$(count_tasks "$NEXT_DIR")
 
-  # ── Retry: re-queue tasks blocked during this run ───────────────
+  # ── Retry: re-gate tasks blocked during this run ────────────────
+  # Still must pass workability before re-entering next/ (no raw promote).
   if [ "$NEXT_COUNT" -eq 0 ] && [ "$RETRY" -eq 1 ] && [ "$_RETRY_USED" -eq 0 ]; then
     _RETRY_USED=1
     _retried_any=0
@@ -197,10 +201,13 @@ while true; do
       name="${f##*/}"
       # Only retry tasks that weren't already blocked before this run
       if ! grep -qxF "$name" "$_INITIAL_BLOCKED" 2>/dev/null; then
-        move_file "$f" "$NEXT_DIR/$name"
-        RETRIED=$((RETRIED + 1))
-        _retried_any=1
-        echo "  ↻ Retrying: $name"
+        echo "  ↻ Retrying (gate): $name"
+        sprintmd_promote_to_sprint "$f" loop-retry
+        echo "    $(sprintmd_promote_summary "$name")"
+        if [ "${SPRINTMD_GATE_VERDICT:-}" = "READY" ] || [ "${SPRINTMD_GATE_VERDICT:-}" = "EMIT" ]; then
+          RETRIED=$((RETRIED + 1))
+          _retried_any=1
+        fi
       fi
     done
     [ "$_retried_any" -eq 1 ] && echo ""

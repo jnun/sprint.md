@@ -14,7 +14,7 @@ only what grades READY is promoted. Location-aware:
   backlog/  → gate in place, then:
                 READY   → stamp + move to next/
                 BLOCKED → move to blocked/ (never visits next/)
-                DONE    → move to review/
+                COMPLETE → move to review/ (work already in codebase; not done/)
   next/     → leave (idempotent)
   blocked/  → stop; run chat <id>, then re-run plan start
   doing|review|done → skip with a notice

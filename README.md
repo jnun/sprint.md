@@ -108,9 +108,10 @@ Once you have tasks in your backlog, AI can help plan, validate, and execute the
 Happy path (spine): `chat → plan start → work → polish`. `loop` is that spine on autopilot; `gate` / `split` are off-spine. Help groups: **create · chat · plan · work · look · keep** (`./sprint.sh help`).
 
 ```bash
-# Author a plan, then commit its members into next/
+# Author a plan, optionally critique it, then commit members into next/
 ./sprint.sh newplan "Theme" 12 13
 ./sprint.sh chat plan <id>       # author / mark READY
+./sprint.sh plan think <id>      # optional dual-persona critique
 ./sprint.sh plan start <id>      # members → next/ (plan latches STARTED)
 ./sprint.sh plan done <id>       # all members in done/ → delete the plan
 

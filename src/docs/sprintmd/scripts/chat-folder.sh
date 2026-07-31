@@ -11,7 +11,9 @@ set -euo pipefail
 #   chat <folder>   → this: a fast verdict-first sweep of one stage folder
 #
 # It absorbs the retired `triage` verb: auto-assess each task, you decide per
-# task (promote/define/kill/skip/quit), moving briskly through the queue.
+# task (commit-to-sprint/define/kill/skip/quit), moving briskly through the queue.
+# Commit-to-sprint ([w] from backlog/ or blocked/) always runs the shared
+# workability gate before next/ — never a raw promote.
 #
 # TWO-TIER by model to keep triage's fast tempo: the per-task verdict runs on
 # the cheap TRIAGE model (single-shot STATUS/SUMMARY/RECOMMENDATION); only
@@ -28,6 +30,8 @@ set -euo pipefail
 
 # ── Config ───────────────────────────────────────────────────────────
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/lib.sh"
+# Promote into next/ only via the shared gate (never raw mv).
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/gate-lib.sh"
 
 STAGE="${1:-}"
 case "$STAGE" in
@@ -108,17 +112,25 @@ $_file_list
 
 For EACH task in order:
 1. Read the task file and do a QUICK check of the current codebase — a fast size-up, not a deep review.
-2. Give a fast VERDICT: task name, stage ($STAGE/), a STATUS (DONE/BLOCKED/UNDEFINED/READY/STALE), a one-sentence summary, and a one-sentence recommendation. Keep it tight — this is the cheap sort pass.
+2. Give a fast VERDICT: task name, stage ($STAGE/), a STATUS (COMPLETE/BLOCKED/UNDEFINED/READY/STALE), a one-sentence summary, and a one-sentence recommendation. Keep it tight — this is the cheap sort pass.
+   COMPLETE = work already in the codebase (not "file is in done/").
+   READY = clear enough to work. Open **Depends on** alone is NOT a block — work holds ordered tasks until deps finish; that is normal.
+   BLOCKED / UNDEFINED = unworkable as written (needs define): missing/unclear problem or success criteria, or references dead files/APIs. Never mark BLOCKED only because another task is still open.
 3. Offer the developer the choice:
-   [w] work it   — promote (blocked|backlog → next/) or start (next/ → doing/): git mv SRC DEST || mv SRC DEST
+   [w] work it   — depends on stage:
+                   next/ → start it (git mv next/ → doing/)
+                   blocked|backlog → COMMIT TO SPRINT via the shared gate only:
+                     bash docs/sprintmd/scripts/promote-to-sprint.sh <file>
+                     That runs the workability gate: READY → next/, BLOCKED → blocked/
+                     (reason in file), COMPLETE → review/. NEVER raw git mv into next/.
    [d] define it — go DEEP: run './sprint.sh chat <id>' so the full chat conversation (strongest model) refines the task and closes the loop. This is the only step that escalates past the fast verdict.
    [k] kill it   — delete after confirming: git rm -f PATH || rm -f PATH
    [s] skip      — leave it where it is
    [q] quit      — stop the sweep
-4. Act on the choice within the task pipeline. Always move with: git mv SRC DEST || mv SRC DEST (git mv first; plain mv finishes when untracked). Always delete with: git rm -f PATH || rm -f PATH. Then continue to the next task.
+4. Act on the choice within the task pipeline. Entry into next/ is ONLY via promote-to-sprint.sh (gate). Other moves: git mv SRC DEST || mv SRC DEST. Always delete with: git rm -f PATH || rm -f PATH. Then continue to the next task.
 
-DEPENDENCY RESOLUTION — intrinsic to chat, applied to EVERY task you sweep (not only on [d]):
-When a swept task's '**Depends on**:' names a task that currently sits in blocked/, that dependent task can NEVER be worked until the dependency is defined and leaves blocked/. Do not just note it — resolve it, following the shared rule below. The folder you are sweeping only chose WHICH files to open; what you do to each is the same as 'chat <id>'.
+DEPENDENCY RESOLUTION — only when a dep sits in blocked/ (undefined limbo), not for ordinary open deps:
+When a swept task's '**Depends on**:' names a task that currently sits in blocked/, that dependency is undefined and must be lifted before the dependent can run. Resolve it per the shared rule below. A dep that is merely still in backlog/next/doing is normal ordering — do not treat it as BLOCKED and do not force a define on the dependent.
 
 $NEXT_BLOCKED_RESOLUTION
 
@@ -134,7 +146,7 @@ defined=0
 killed=0
 skipped=0
 
-mkdir -p docs/tasks/next docs/tasks/doing
+mkdir -p docs/tasks/next docs/tasks/doing docs/tasks/review
 
 for i in "${!all_files[@]}"; do
   file="${all_files[$i]}"
@@ -148,6 +160,10 @@ for i in "${!all_files[@]}"; do
 
   taskname=$(basename "$file")
 
+  # Headless one-shot can take a while with no CLI output until it returns.
+  echo ""
+  echo -e "${DIM}[$idx/$total] $taskname — thinking, wait just a minute…${NC}"
+
   # ── Fast verdict — cheap TRIAGE model, single shot ─────────────────
   _verdict_prompt="You are sweeping a task file from $STAGE/.
 
@@ -158,29 +174,32 @@ Then do a quick check of the current codebase to assess the task's status.
 
 Output EXACTLY three lines in this format:
 
-STATUS: <one of: DONE, BLOCKED, UNDEFINED, READY, STALE>
+STATUS: <one of: COMPLETE, BLOCKED, UNDEFINED, READY, STALE>
 SUMMARY: <one sentence describing what this task is about>
 RECOMMENDATION: <one sentence telling the user what to do with it>
 
 Status definitions:
-- DONE: The work described in this task is already present in the codebase
-- BLOCKED: The task references files/APIs/patterns that no longer exist or has unmet dependencies
-- UNDEFINED: The task lacks a clear problem statement or actionable success criteria
-- READY: The task is well-defined, relevant, and ready to be worked
+- COMPLETE: Work has already been completed on this task (already present in the codebase). Not the same as the done/ folder — the file may still sit in $STAGE/ until the developer moves it.
+- BLOCKED: Unworkable as written — needs define. Use when the task is unclear or its problem/success criteria are missing or hollow, OR it references files/APIs/patterns that no longer exist. Being undefined is blocked. An open **Depends on** line alone is NOT blocked.
+- UNDEFINED: Same family as BLOCKED — lacks a clear problem statement or actionable success criteria (prefer UNDEFINED when the issue is thin/ambiguous writing; BLOCKED when the task is structurally dead against the codebase).
+- READY: The task is well-defined, relevant, and ready to be worked. Unfinished prerequisites listed under **Depends on** are normal pipeline ordering — ./sprint.sh work holds the task until those deps finish. Still say READY.
 - STALE: The task is not wrong but feels low-priority or superseded by other work
 
 Rules:
 - Be conservative: if in doubt, say READY
+- NEVER choose BLOCKED or UNDEFINED only because **Depends on** names another open task
 - Keep SUMMARY and RECOMMENDATION each to ONE sentence
 - Do not output anything else"
 
-  verdict=$(run_with_timeout "$timeout_sec" sprintmd_run -p "$_verdict_prompt" \
-    ${_model_args[@]+"${_model_args[@]}"} --max-turns "$MAX_TURNS" --skip-permissions 2>/dev/null) || true
+  verdict=$(run_with_timeout_dots "$timeout_sec" sprintmd_run -p "$_verdict_prompt" \
+    ${_model_args[@]+"${_model_args[@]}"} --max-turns "$MAX_TURNS" --skip-permissions) || true
 
-  status=$(echo "$verdict" | grep -oE '^STATUS: (DONE|BLOCKED|UNDEFINED|READY|STALE)' | head -1 | sed 's/^STATUS: //' || true)
+  status=$(echo "$verdict" | grep -oE '^STATUS: (COMPLETE|DONE|BLOCKED|UNDEFINED|READY|STALE)' | head -1 | sed 's/^STATUS: //' || true)
   if [ -z "$status" ]; then
-    status=$(echo "$verdict" | grep -oE '\b(DONE|BLOCKED|UNDEFINED|READY|STALE)\b' | head -1 || true)
+    status=$(echo "$verdict" | grep -oE '\b(COMPLETE|DONE|BLOCKED|UNDEFINED|READY|STALE)\b' | head -1 || true)
   fi
+  # Legacy model slip: older prompts used DONE for the same meaning.
+  [ "$status" = "DONE" ] && status="COMPLETE"
   [ -z "$status" ] && status="UNKNOWN"
 
   summary=$(echo "$verdict" | grep '^SUMMARY:' | head -1 | sed 's/^SUMMARY: //' || true)
@@ -200,24 +219,29 @@ Rules:
   echo -e "  Stage:  ${BLUE}$STAGE/${NC}"
   if [ "$status" = "UNKNOWN" ]; then
     echo -e "  Status: ${DIM}(timed out)${NC}"
-  elif [ "$status" = "DONE" ]; then
-    echo -e "  Status: ${CYAN}$status${NC}"
-  elif [ "$status" = "BLOCKED" ] || [ "$status" = "UNDEFINED" ]; then
-    echo -e "  Status: ${RED}$status${NC}"
+  elif [ "$status" = "COMPLETE" ]; then
+    echo -e "  Status: ${CYAN}COMPLETE${NC} — work already completed on this task"
+  elif [ "$status" = "BLOCKED" ]; then
+    echo -e "  Status: ${RED}BLOCKED${NC} — unworkable as written (needs define), not merely waiting on a dep"
+  elif [ "$status" = "UNDEFINED" ]; then
+    echo -e "  Status: ${RED}UNDEFINED${NC} — needs define before it can be worked"
   elif [ "$status" = "STALE" ]; then
     echo -e "  Status: ${YELLOW}$status${NC}"
+  elif [ "$status" = "READY" ]; then
+    echo -e "  Status: ${GREEN}READY${NC}"
   else
     echo -e "  Status: $status"
   fi
   echo "  $summary"
   echo -e "  ${DIM}$recommendation${NC}"
   if [ -n "$bdeps" ]; then
-    echo -e "  ${RED}⚠ depends on $bdeps (in blocked/) — can't be worked until defined; [d] lifts it${NC}"
+    # Dep in the blocked/ *folder* (undefined limbo) — not ordinary open Depends on.
+    echo -e "  ${RED}⚠ depends on $bdeps (in blocked/ — undefined limbo); [d] lifts it${NC}"
   fi
   echo ""
   case "$STAGE" in
     next) _w_label="Start it" ;;
-    *)    _w_label="Promote" ;;
+    *)    _w_label="Commit to sprint (gate)" ;;
   esac
   echo -e "  ${BOLD}[w]${NC} $_w_label  ${BOLD}[d]${NC} Define it (go deep)  ${BOLD}[k]${NC} Kill it  ${BOLD}[s]${NC} Skip  ${BOLD}[q]${NC} Quit"
   printf "  > "
@@ -228,8 +252,13 @@ Rules:
     w|W)
       case "$STAGE" in
         blocked|backlog)
-          move_file "$file" "docs/tasks/next/$taskname"
-          echo -e "  ${CYAN}-> Moved to next/${NC}"
+          # Invariant: nothing enters next/ without the shared workability gate.
+          # Triage STATUS is advisory only — gate decides READY / BLOCKED / COMPLETE.
+          echo -e "  ${BLUE}-> Gating before next/…${NC}"
+          sprintmd_promote_to_sprint "$file" "chat-${STAGE}"
+          echo -e "  ${CYAN}$(sprintmd_promote_summary "$taskname")${NC}"
+          [ -n "${SPRINTMD_GATE_LOG:-}" ] && [ "${SPRINTMD_GATE_VERDICT:-}" = "FAILED" ] \
+            && echo -e "  ${DIM}log: $SPRINTMD_GATE_LOG${NC}"
           ;;
         next)
           move_file "$file" "docs/tasks/doing/$taskname"

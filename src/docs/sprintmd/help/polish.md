@@ -30,8 +30,8 @@ review/ queue never blows one context window.
 
 Verdicts (last line of each task's report):
   PASS     — meets the bar; stays in review/
-  REOPEN   — a '## Rework (round N)' section is appended; task moves to next/
-             (git mv SRC DEST || mv SRC DEST)
+  REOPEN   — a '## Rework (round N)' section is appended; task re-enters next/
+             only via the shared workability gate (READY → next/, else kickback)
   BLOCKER  — work fails its own goal and needs a human; stays in review/
 
 Round cap: keyed on the '**Reworked**:' header counter, which ONLY polish

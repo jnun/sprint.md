@@ -644,14 +644,14 @@ If the task is OUTDATED, try to fix it:
 
 Output EXACTLY ONE of these verdicts on the LAST line of your response:
 
-DONE - The task has already been completed (nothing to do)
+COMPLETE - The work is already present in the codebase (nothing left to implement; not the done/ folder)
 FIXED - The task was outdated but you updated the file with corrections
 OUTDATED - The task is outdated and you cannot resolve the drift
 PROCEED - The task is still relevant and ready to work
 
 Rules:
 - Be conservative: if in doubt, say PROCEED
-- DONE means the specific work is clearly already present in the codebase
+- COMPLETE means the specific work is clearly already present in the codebase (not docs/tasks/done/)
 - FIXED means you edited the task file to account for codebase drift
 - OUTDATED means the drift is too severe for you to fix — needs human rewrite
 - Before your verdict, list any fixes you made as bullet points (for FIXED)"
@@ -662,13 +662,14 @@ Rules:
       --skip-permissions \
       --max-turns 20 2>/dev/null) || true
 
-    _drift_action=$(echo "$DRIFT_VERDICT" | grep -oE '\b(DONE|FIXED|OUTDATED|PROCEED)\b' | tail -1 || true)
+    _drift_action=$(echo "$DRIFT_VERDICT" | grep -oE '\b(COMPLETE|DONE|FIXED|OUTDATED|PROCEED)\b' | tail -1 || true)
+    [ "$_drift_action" = "DONE" ] && _drift_action="COMPLETE"
     [ -z "$_drift_action" ] && _drift_action="PROCEED"
 
     case "$_drift_action" in
-      DONE)
-        _drift_reason=$(echo "$DRIFT_VERDICT" | grep -i 'done' | head -1)
-        echo "  ✓ Drift check: already done — $_drift_reason"
+      COMPLETE)
+        _drift_reason=$(echo "$DRIFT_VERDICT" | grep -iE 'complete|done' | head -1)
+        echo "  ✓ Drift check: COMPLETE (work already in codebase) — $_drift_reason"
         echo "    → Moving to review/"
         move_file "$WORKING_DIR/$TASK_NAME" "$REVIEW_DIR/$TASK_NAME"
         COMPLETED=$((COMPLETED + 1))

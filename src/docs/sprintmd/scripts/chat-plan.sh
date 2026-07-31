@@ -150,7 +150,7 @@ HOW TO WALK
 3. MEMBERS: propose an ordered set of backlog tasks that serve the goal. Prefer existing backlog items over inventing work. Name trade-offs (scope too wide, missing prereq, conflict). On agreement, write the member list by ID + title. Re-read task files when titles alone are not enough.
 4. ORDER + CONFLICTS: walk dependency edges between members; put prerequisites first. Flag file-overlap / independence as parallelism annotations (recorded only).
 5. STATUS: keep DRAFT until the user confirms the plan is ready to start; then set **Status:** READY exactly (same READY word tasks use). Never invent other status values.
-6. STOP when READY and the member list is ordered and non-conflicting — show the final plan state and remind: './sprint.sh plan start $PLAN_ID' commits members into next/ (or move them by hand). The plan file itself never moves.
+6. STOP when READY and the member list is ordered and non-conflicting — show the final plan state and remind: optional './sprint.sh plan think $PLAN_ID' (dual-persona critique), then './sprint.sh plan start $PLAN_ID' gates members and commits READY ones into next/. The plan file itself never moves.
 
 RULES
 - One question at a time; wait for the answer.

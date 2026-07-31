@@ -144,6 +144,7 @@ else
     echo "  No members yet — edit the file to add '- #ID — title' lines."
 fi
 echo ""
-echo "Next: fill in the Goal, then commit with ./sprint.sh plan start <id>"
-echo "(or move members backlog/ → next/ with: git mv SRC DEST || mv SRC DEST)."
+echo "Next: author with ./sprint.sh chat plan <id>, optionally critique with"
+echo "./sprint.sh plan think <id>, then commit with ./sprint.sh plan start <id>"
+echo "(or commit one member via: bash docs/sprintmd/scripts/promote-to-sprint.sh <task-file>)."
 echo "The plan file itself never moves."

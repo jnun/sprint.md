@@ -3,7 +3,7 @@
 # gate.sh — Vet task quality. See: ./sprint.sh help gate
 #
 # Two modes, one command (off-spine; happy path is plan start → work):
-#   next/ (default) — deep READY-gate: write ## Questions, move BLOCKED/DONE
+#   next/ (default) — deep READY-gate: write ## Questions, move BLOCKED/COMPLETE
 #   backlog|doing|blocked — quality report only: per-task verdict, no writes/moves
 set -euo pipefail
 
@@ -14,7 +14,7 @@ FORCE=0
 _usage() {
   echo "Usage: ./sprint.sh gate [folder] [limit] [--force]" >&2
   echo "  folder: backlog|next|doing|blocked (default: next)" >&2
-  echo "  On next/: stamps READY/BLOCKED/DONE and moves unready tasks." >&2
+  echo "  On next/: stamps READY/BLOCKED/COMPLETE and moves unready tasks." >&2
   echo "  On other folders: quality report only — no writes, no moves." >&2
   exit 1
 }
@@ -49,7 +49,7 @@ AI_MODE="$(sprintmd_ai_mode)"
 
 # ═════════════════════════════════════════════════════════════════════
 # Quality-report mode (non-next folders): classify each task, report only.
-# Preserves audit's DONE/OUTDATED/UNDEFINED/KEEP verdicts without mutations.
+# Preserves audit's COMPLETE/OUTDATED/UNDEFINED/KEEP verdicts without mutations.
 # ═════════════════════════════════════════════════════════════════════
 if [ "$FOLDER" != "next" ]; then
   timeout_sec=120
@@ -100,7 +100,7 @@ READ-ONLY: do not edit, move, or delete any task file. Report only.
 For EACH task file in order:
 1. Read the task file, then check the current codebase.
 2. Decide EXACTLY ONE verdict:
-   - DONE      — the work described is already present in the codebase
+   - COMPLETE  — the work described is already present in the codebase (not the done/ folder)
    - OUTDATED  — it references files/patterns/features that no longer exist
    - UNDEFINED — it is too vaguely defined to be actionable
    - KEEP      — still relevant, well-defined, and not yet completed
@@ -137,14 +137,14 @@ or if the task is too vaguely defined to be actionable.
 Your job is to output EXACTLY ONE of these verdicts on the first line, followed by
 a brief one-line reason on the second line:
 
-DONE - The task has already been completed (the features/fixes described exist in the codebase)
+COMPLETE - The work described is already present in the codebase (verdict COMPLETE, not the done/ folder)
 OUTDATED - The task references files, patterns, or features that no longer exist or are unrecognizable
 UNDEFINED - The task is not defined well enough to work (missing problem statement, success criteria, or actionable details)
 KEEP - The task is still relevant, well-defined, and not yet completed
 
 Rules:
 - Be conservative: if in doubt, say KEEP
-- DONE means the specific work described is clearly present in the codebase
+- COMPLETE means the specific work described is clearly present in the codebase — not that the file is in docs/tasks/done/
 - OUTDATED means the task cannot be worked because its context is gone
 - UNDEFINED means someone would need to rewrite the task before working it
 - Only output the verdict line and reason line, nothing else
@@ -153,10 +153,11 @@ Rules:
     verdict=$(run_with_timeout "$timeout_sec" sprintmd_run -p "$_report_prompt" \
       ${_model_args[@]+"${_model_args[@]}"} --max-turns "$MAX_TURNS" --skip-permissions 2>/dev/null) || true
 
-    action=$(echo "$verdict" | grep -oE '^(DONE|OUTDATED|UNDEFINED|KEEP)' | head -1 || true)
+    action=$(echo "$verdict" | grep -oE '^(COMPLETE|DONE|OUTDATED|UNDEFINED|KEEP)' | head -1 || true)
     if [ -z "$action" ]; then
-      action=$(echo "$verdict" | grep -oE '\b(DONE|OUTDATED|UNDEFINED|KEEP)\b' | head -1 || true)
+      action=$(echo "$verdict" | grep -oE '\b(COMPLETE|DONE|OUTDATED|UNDEFINED|KEEP)\b' | head -1 || true)
     fi
+    [ "$action" = "DONE" ] && action="COMPLETE"
     [ -z "$action" ] && action="TIMEOUT"
 
     reason=$(echo "$verdict" | tail -1)
@@ -171,7 +172,7 @@ Rules:
   echo "=== Quality report complete (read-only — no files changed) ==="
   echo ""
   echo "--- Summary (this run) ---"
-  echo "  DONE:      $(echo "$run_log" | grep -c '^DONE' || true)"
+  echo "  COMPLETE:  $(echo "$run_log" | grep -cE '^(COMPLETE|DONE)' || true)"
   echo "  OUTDATED:  $(echo "$run_log" | grep -c '^OUTDATED' || true)"
   echo "  UNDEFINED: $(echo "$run_log" | grep -c '^UNDEFINED' || true)"
   echo "  KEEP:      $(echo "$run_log" | grep -c '^KEEP' || true)"
@@ -208,7 +209,7 @@ TASK_FILES=()
 SKIPPED_REVIEWED=0
 while IFS= read -r f; do
   [ -n "$f" ] || continue
-  # Only READY skips: a BLOCKED/DONE-stamped task sitting in next/ means the
+  # Only READY skips: a BLOCKED/COMPLETE-stamped task sitting in next/ means the
   # user re-queued it after addressing the questions — re-review it.
   if [ "$FORCE" -ne 1 ] && [ "$(sprintmd_review_verdict "$f")" = "READY" ]; then
     SKIPPED_REVIEWED=$((SKIPPED_REVIEWED + 1))
@@ -346,7 +347,7 @@ _chat_queue() {
 
 READY=0
 BLOCKED=0
-DONE=0
+COMPLETE=0
 BLOCKED_TASKS=()
 ERROR_TASKS=()
 TOTAL_START=$SECONDS
@@ -383,10 +384,10 @@ for i in $(seq 0 $((COUNT - 1))); do
       echo "    ./sprint.sh chat ${TASK_NAME%%-*}"
       echo "    git mv $BLOCKED_DIR/$TASK_NAME $NEXT_DIR/ || mv $BLOCKED_DIR/$TASK_NAME $NEXT_DIR/"
       ;;
-    DONE)
-      DONE=$((DONE + 1))
+    COMPLETE)
+      COMPLETE=$((COMPLETE + 1))
       echo ""
-      echo "✓ Already done → $REVIEW_DIR/$TASK_NAME"
+      echo "✓ COMPLETE (work already in codebase) → $REVIEW_DIR/$TASK_NAME"
       ;;
     READY)
       READY=$((READY + 1))
@@ -416,7 +417,7 @@ done
 TOTAL_ELAPSED=$((SECONDS - TOTAL_START))
 ERRS=${#ERROR_TASKS[@]}
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "▸ Done: $READY ready, $DONE done, $BLOCKED blocked, $ERRS errors — total $((TOTAL_ELAPSED / 60))m $((TOTAL_ELAPSED % 60))s"
+echo "▸ Done: $READY ready, $COMPLETE complete, $BLOCKED blocked, $ERRS errors — total $((TOTAL_ELAPSED / 60))m $((TOTAL_ELAPSED % 60))s"
 
 if [ "$BLOCKED" -gt 0 ]; then
   echo ""
