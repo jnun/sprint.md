@@ -30,8 +30,7 @@ curl -fsSL https://raw.githubusercontent.com/jnun/sprint.md/main/install.sh | ba
 Already cloned this repo?
 
 ```bash
-./setup.sh .                 # install into cwd
-./setup.sh ~/code/my-app     # or any project path
+./setup.sh ~/code/my-app     # your project path
 ```
 
 ---
