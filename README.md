@@ -2,10 +2,11 @@
 
 <img src="https://github.com/jnun/sprint.md/releases/download/demo-assets/sprint-md-logo.gif" alt="sprint.md" width="720">
 
-# Agent task lists die with the chat.
-### Put the board in the repo.
+# Plans live in git.
 
-**Folders = status. Markdown = work. Git = history.**  
+### Folders are status. Markdown is the work. History is free.
+
+**One board your agents and your team can both see.**  
 No database. No SaaS. No login.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-black.svg)](LICENSE)
@@ -14,13 +15,13 @@ No database. No SaaS. No login.
 
 </div>
 
-## Install (into *your* project)
+## Install into your project
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/jnun/sprint.md/main/install.sh | bash
 ```
 
-That drops `./sprint.sh`, the folder board, templates, and docs into the **current directory**. Prefer a path?
+That adds `./sprint.sh`, the folder board, templates, and docs to the **current directory**. Prefer a path?
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/jnun/sprint.md/main/install.sh | bash -s -- /path/to/your/project
@@ -35,58 +36,50 @@ Already cloned this repo?
 
 ---
 
-<div align="center">
-<img src="https://github.com/jnun/sprint.md/releases/download/demo-assets/sprint_demo_min.gif" alt="sprint.md in action" width="820">
-</div>
-
----
-
-## Why this sticks
-
-| Session agent todos | **sprint.md** |
-|---------------------|---------------|
-| Die when the chat ends | **Survive every session** |
-| Invisible to the next agent | **Same board for every agent & human** |
-| Trapped in one tool | **Plain files in your repo** |
-| Vendor lock-in | **Delete the tool — work stays in git** |
-
-- **Folder = status** — `git mv docs/tasks/doing/… docs/tasks/review/` *is* the state change  
-- **Agents already speak this** — markdown + paths, no API, no login  
-- **Zero lock-in** — remove `sprint.sh` and the work is still there  
-
-> Session tools are useful *inside* a work session. **sprint.md is how the work persists between them.**
-
----
-
-## 60-second start
+## Try it
 
 ```bash
-./sprint.sh profile                         # teach the AI your stack (once)
+./sprint.sh profile                         # once — teach the AI your stack
 ./sprint.sh newtask "Reject empty password on login"
 ./sprint.sh status                          # see the board
-./sprint.sh work                            # execute next ready task
+./sprint.sh work                            # do the next ready task
 ```
 
-Happy path for a plan:
+That’s the whole loop: capture work, see it, ship it.
 
-```text
-chat  →  plan start  →  work  →  polish
-```
+Group related tasks when you’re ready:
 
 ```bash
 ./sprint.sh newplan "Auth" 12 13
 ./sprint.sh plan start <id>
 ./sprint.sh work
-# or unattended:
+# or keep going:
 ./sprint.sh loop --refill --retry
 ```
 
-**Providers:** Claude Code (`-c`) and Grok Build (`-g`) are first-class.
+**Claude Code** (`-c`) and **Grok Build** (`-g`) are first-class:
 
 ```bash
 ./sprint.sh -g work
 ./sprint.sh -c chat 12
 ```
+
+---
+
+## Why it feels light
+
+| What you get | How |
+|--------------|-----|
+| Work that lasts past one chat | Plain files in the repo |
+| One board for agents and humans | Same folders, same markdown |
+| Status you can see in `git status` | Move a file = change state |
+| Easy exit | Remove the tool — the work stays in git |
+
+- **Folder = status** — `git mv docs/tasks/doing/… docs/tasks/review/` *is* the state change  
+- **Agents already speak this** — markdown and paths, no API, no login  
+- **Yours to keep** — delete `sprint.sh` anytime; tasks, plans, and history remain  
+
+> Session tools help *inside* a chat. **sprint.md is how the work stays when the chat ends.**
 
 ---
 
@@ -105,23 +98,23 @@ The sprint is whatever sits in `next/` right now. No special file — the folder
 
 ---
 
-## Proof, not pitch
+## Live here
 
-This repository **is managed with sprint.md**. Browse [`docs/tasks/`](docs/tasks/) for a live board.
+This repository **runs on sprint.md**. Browse [`docs/tasks/`](docs/tasks/) for a real board.
 
-Full manual: **[DOCUMENTATION.md](DOCUMENTATION.md)** · New here: **[GETSTARTED.md](GETSTARTED.md)**
+**[GETSTARTED.md](GETSTARTED.md)** · full manual: **[DOCUMENTATION.md](DOCUMENTATION.md)**
 
 ---
 
 ## For AI agents
 
-Read **[DOCUMENTATION.md](DOCUMENTATION.md)**. Create work with `./sprint.sh`, never by hand. Folder = status. Don’t edit `docs/sprintmd/`.
+Read **[DOCUMENTATION.md](DOCUMENTATION.md)**. Create work with `./sprint.sh`, not by hand. Folder = status. Don’t edit `docs/sprintmd/`.
 
 ---
 
 ## Contributing
 
-Issues and PRs welcome — **[CONTRIBUTING.md](CONTRIBUTING.md)**. If this saves you a session of lost context, a ⭐ helps the next developer find it.
+Issues and PRs welcome — **[CONTRIBUTING.md](CONTRIBUTING.md)**. If this helps your next session start where the last left off, a ⭐ helps someone else find it.
 
 <div align="center">
 
