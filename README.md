@@ -15,23 +15,15 @@ No database. No SaaS. No login.
 
 </div>
 
-## Install into your project
+## Get it
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/jnun/sprint.md/main/install.sh | bash
-```
-
-That adds `./sprint.sh`, the folder board, templates, and docs to the **current directory**. Prefer a path?
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/jnun/sprint.md/main/install.sh | bash -s -- /path/to/your/project
-```
-
-Already cloned this repo?
-
-```bash
+git clone git@github.com:jnun/sprint.md.git
+cd sprint.md
 ./setup.sh ~/code/my-app     # your project path
 ```
+
+That puts the board into **your project** — not into this repo. Then, from your project:
 
 ---
 
