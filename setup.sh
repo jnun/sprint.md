@@ -1,7 +1,13 @@
 #!/usr/bin/env bash
 # setup.sh - sprint.md unified installer and updater
-# Usage: ./setup.sh
-#   Prompts for target project path and sets up/updates sprint.md structure there
+# Usage:
+#   ./setup.sh                  # prompt (default: current directory)
+#   ./setup.sh /path/to/project # install/update into that path
+#   ./setup.sh .                # install into cwd
+#   SPRINT_TARGET=./my-app ./setup.sh
+#
+# One-liner from any project (fetches source, then runs this):
+#   curl -fsSL https://raw.githubusercontent.com/jnun/sprint.md/main/install.sh | bash
 #
 # This script handles both fresh installations and updates with version migrations.
 # Distribution: src/ mirrors the deployed layout — setup.sh walks it recursively.
@@ -158,10 +164,17 @@ echo "================================================"
 echo "  Version: $CURRENT_VERSION"
 echo ""
 
-# Ask for target project path
-echo "Enter the path to your project where sprint.md should be installed:"
-echo "(e.g., /Users/yourname/myproject or ../myproject)"
-read -r TARGET_PATH
+# Target project path: $1, SPRINT_TARGET, or prompt (default: current directory)
+if [ -n "${1:-}" ]; then
+    TARGET_PATH="$1"
+elif [ -n "${SPRINT_TARGET:-}" ]; then
+    TARGET_PATH="$SPRINT_TARGET"
+else
+    echo "Enter the path to your project where sprint.md should be installed:"
+    echo "(default: current directory — press Enter for .)"
+    read -r TARGET_PATH
+    TARGET_PATH="${TARGET_PATH:-.}"
+fi
 
 # Expand tilde and resolve relative paths
 TARGET_PATH="${TARGET_PATH/#\~/$HOME}"
@@ -237,9 +250,10 @@ fi
 if $UPDATE_MODE; then
     # Remember for the final summary only — never used as a migration gate.
     ORIGINAL_VERSION="$INSTALLED_VERSION"
-    echo "Do you want to continue with the update? (y/n)"
+    echo "Do you want to continue with the update? [Y/n]"
     read -r CONFIRM
-    if [[ ! "$CONFIRM" =~ ^[Yy]$ ]]; then
+    # Enter (or Y/yes) continues; only an explicit N cancels.
+    if [[ -n "$CONFIRM" && ! "$CONFIRM" =~ ^[Yy]([Ee][Ss])?$ ]]; then
         echo "Update cancelled."
         exit 0
     fi
@@ -293,17 +307,17 @@ fi
 
 if $UPDATE_MODE; then
     echo "Select your platform configuration:"
-    echo "  Current: ${CURRENT_PLATFORM:-github-issues (default)}"
+    echo "  Current: ${CURRENT_PLATFORM:-none (default)}"
 else
     echo "Select your platform configuration:"
 fi
-echo "1) GitHub Issues (default)"
-echo "2) No sync — opt out of GitHub issue tracking"
+echo "1) GitHub Issues"
+echo "2) No sync — opt out of GitHub issue tracking (default)"
 echo ""
-if $UPDATE_MODE; then
+if $UPDATE_MODE && [ -n "$CURRENT_PLATFORM" ]; then
     echo "Enter your choice (1-2, or press Enter to keep current):"
 else
-    echo "Enter your choice (1-2, or press Enter for default):"
+    echo "Enter your choice (1-2, or press Enter for no sync):"
 fi
 read -r PLATFORM_CHOICE
 
@@ -321,13 +335,13 @@ case "$PLATFORM_CHOICE" in
             PLATFORM="$CURRENT_PLATFORM"
             echo "Keeping current: $PLATFORM"
         else
-            PLATFORM="github-issues"
-            echo "Selected: GitHub Issues"
+            PLATFORM="none"
+            echo "Selected: No sync — opting out of issue tracker integration"
         fi
         ;;
     *)
-        PLATFORM="github-issues"
-        echo "Selected: GitHub Issues"
+        PLATFORM="none"
+        echo "Selected: No sync — opting out of issue tracker integration"
         ;;
 esac
 echo ""
@@ -554,18 +568,31 @@ gitignore_merge() {
 # Sets the variable named in $1 to "yes" or "no". $2 is the prompt text.
 # On EOF (closed stdin, e.g. piped/CI install) defaults to "no" so we never
 # mutate user files without an explicit yes, and never hang.
+# prompt_yes_no VARNAME "Prompt text" [default]
+# default is "yes" or "no" (defaults to "no"). Empty answer / EOF accepts it.
+# Shows [Y/n] or [y/N] so Enter advances without typing.
 prompt_yes_no() {
     local __varname="$1"
     local __prompt="$2"
+    local __default="${3:-no}"
     local __answer
+    local __hint
+    case "$__default" in
+        yes|y|Y) __default="yes"; __hint="[Y/n]" ;;
+        *)       __default="no";  __hint="[y/N]" ;;
+    esac
     while true; do
-        echo "$__prompt (yes/no)"
+        echo "$__prompt $__hint"
         if ! read -r __answer; then
-            echo "  (no input — defaulting to no)"
-            printf -v "$__varname" "no"
+            echo "  (no input — defaulting to $__default)"
+            printf -v "$__varname" "%s" "$__default"
             return 0
         fi
         case "$__answer" in
+            "")
+                printf -v "$__varname" "%s" "$__default"
+                return 0
+                ;;
             [Yy]|[Yy][Ee][Ss])  printf -v "$__varname" "yes"; return 0 ;;
             [Nn]|[Nn][Oo])      printf -v "$__varname" "no";  return 0 ;;
             *) echo "Please answer yes or no." ;;
@@ -808,7 +835,7 @@ rm -f "$_find_fifo" && rmdir "$(dirname "$_find_fifo")" 2>/dev/null
 # Skipped in the walk above (SKIP_FILES); placed only when the user opts in.
 if [ -f "$SRC_DIR/GETSTARTED.md" ]; then
     echo ""
-    prompt_yes_no GETSTARTED_CHOICE "Place the GETSTARTED.md in the project to help me get started?"
+    prompt_yes_no GETSTARTED_CHOICE "Add a GETSTARTED.md quickstart at the project root?" "no"
     if [ "$GETSTARTED_CHOICE" = "yes" ]; then
         if safe_copy "$SRC_DIR/GETSTARTED.md" "GETSTARTED.md" "GETSTARTED.md"; then
             ((FILES_COPIED++))
@@ -863,6 +890,7 @@ if [ ${#PENDING_PREPEND[@]} -gt 0 ]; then
     if [ ${#MENU_ENTRIES[@]} -gt 0 ]; then
         echo ""
         echo "Which AI instruction files would you like to create?"
+        echo "(Existing files that already point at DOCUMENTATION.md are left alone.)"
         echo ""
         for i in "${!MENU_ENTRIES[@]}"; do
             entry="${MENU_ENTRIES[$i]}"
@@ -873,7 +901,7 @@ if [ ${#PENDING_PREPEND[@]} -gt 0 ]; then
         echo ""
         printf "  A) All of the above\n"
         echo ""
-        echo "Enter choices (e.g. 1 3, or A for all, Enter to skip):"
+        echo "Enter choices (e.g. 1 3, or A for all). Press Enter to skip:"
         read -r AI_MENU_CHOICE
 
         # Parse selection
@@ -952,12 +980,11 @@ docs/designs/*.fig"
 fi
 
 if [ ! -f ".gitignore" ]; then
-    # No .gitignore exists
+    # No .gitignore exists — opt-in only (Enter = skip)
     echo ""
-    echo "No .gitignore found. Would you like to create one with sprint.md recommended entries? (y/n)"
-    read -r GITIGNORE_CHOICE
+    prompt_yes_no GITIGNORE_CREATE "No .gitignore found. Create one with sprint.md recommended entries?" "no"
 
-    if [[ "$GITIGNORE_CHOICE" =~ ^[Yy]$ ]]; then
+    if [ "$GITIGNORE_CREATE" = "yes" ]; then
         if echo "$GITIGNORE_CONTENT" > .gitignore 2>/dev/null; then
             msg_success "Created .gitignore"
         else
@@ -979,12 +1006,12 @@ else
         msg_step ".gitignore already contains all recommended entries"
     else
         echo ""
-        echo "Existing .gitignore found. Would you like to add sprint.md recommended entries?"
+        echo "Existing .gitignore found. Add sprint.md recommended entries?"
         echo "1) Prepend (add at the beginning)"
         echo "2) Append (add at the end)"
-        echo "3) Skip"
+        echo "3) Skip (default)"
         echo ""
-        echo "Enter your choice (1-3):"
+        echo "Enter your choice (1-3, or press Enter to skip):"
         read -r GITIGNORE_CHOICE
 
         case "$GITIGNORE_CHOICE" in
@@ -1257,56 +1284,25 @@ if $UPDATE_MODE && [ -f "$CONFIG_FILE" ]; then
     fi
 fi
 
-echo ""
-echo "Which AI CLI do you use?"
-if $UPDATE_MODE && [ -n "$CURRENT_CLI" ]; then
-    echo "  Current: $CURRENT_CLI"
-fi
-echo "  1) Claude"
-echo "  2) Grok Build"
-echo "  3) Cursor"
-echo "  4) OpenAI / Codex"
-echo "  5) Gemini"
-echo "  6) Mistral"
-echo "  7) Other"
-echo ""
-if $UPDATE_MODE && [ -n "$CURRENT_CLI" ]; then
-    echo "Enter your choice (1-7, or press Enter to keep current):"
-else
-    echo "Enter your choice (1-7, or press Enter for Claude):"
-fi
-read -r CLI_CHOICE
-
-case "$CLI_CHOICE" in
-    1)  SELECTED_CLI="claude"       ;;
-    2)  SELECTED_CLI="grok"         ;;
-    3)  SELECTED_CLI="cursor-agent" ;;
-    4)  SELECTED_CLI="codex"        ;;
-    5)  SELECTED_CLI="gemini"       ;;
-    6)  SELECTED_CLI="mistral"      ;;
-    7)
-        echo "Enter the CLI binary name:"
-        read -r CUSTOM_CLI
-        if [ -z "$CUSTOM_CLI" ]; then
-            msg_warning "No binary name entered, defaulting to claude"
-            SELECTED_CLI="claude"
-        else
-            SELECTED_CLI="$CUSTOM_CLI"
-        fi
-        ;;
-    "")
-        if $UPDATE_MODE && [ -n "$CURRENT_CLI" ]; then
-            SELECTED_CLI="$CURRENT_CLI"
-            echo "Keeping current: $SELECTED_CLI"
-        else
-            SELECTED_CLI="claude"
-        fi
-        ;;
-    *)
-        msg_warning "Invalid choice, defaulting to claude"
-        SELECTED_CLI="claude"
-        ;;
-esac
+# Proven providers only for now — choice must be intentional (no Enter default).
+SELECTED_CLI=""
+while [ -z "$SELECTED_CLI" ]; do
+    echo ""
+    echo "Which AI CLI do you use?"
+    if $UPDATE_MODE && [ -n "$CURRENT_CLI" ]; then
+        echo "  Current: $CURRENT_CLI"
+    fi
+    echo "  1) Claude Code"
+    echo "  2) Grok Build"
+    echo ""
+    echo "Enter your choice (1-2):"
+    read -r CLI_CHOICE
+    case "$CLI_CHOICE" in
+        1) SELECTED_CLI="claude" ;;
+        2) SELECTED_CLI="grok"   ;;
+        *) echo "Please enter 1 or 2." ;;
+    esac
+done
 
 # Derive the capability tier from the chosen CLI binary. This mirrors the
 # inference in lib.sh:sprintmd_ai_tier exactly, so config and library agree.
@@ -1333,7 +1329,47 @@ if [ -f "$CONFIG_FILE" ]; then
             fi
         done
     fi
+    # Drop model pins that belong to the other provider so a claude→grok
+    # (or reverse) switch never leaves MODEL_GATE=opus against CLI=grok.
+    # Runtime also coerces foreign ids (sprintmd_coerce_model); this cleans
+    # the file so config stays honest.
+    _model_keys="MODEL_DEFAULT MODEL_FEATURE MODEL_IDEA MODEL_CHAT MODEL_GATE MODEL_SPLIT MODEL_SPRINT MODEL_WORK MODEL_PROFILE MODEL_CODE_AUDIT MODEL_EXCELLENCE MODEL_POLISH MODEL_AUDIT MODEL_DEPS MODEL_TRIAGE MODEL_PLAN_THINK MODEL_DRIFT"
+    _cleared=0
+    for _mk in $_model_keys; do
+        _mv=""
+        if declare -F sprintmd_cfg >/dev/null 2>&1; then
+            _mv="$(sprintmd_cfg "$_mk")"
+        else
+            _mv="$(grep -m1 "^${_mk}=" "$CONFIG_FILE" 2>/dev/null | sed "s/^${_mk}=//" || true)"
+        fi
+        [ -n "$_mv" ] || continue
+        _foreign=0
+        case "$SELECTED_PROVIDER" in
+            grok-build)
+                case "$_mv" in
+                    opus|sonnet|haiku|OPUS|SONNET|HAIKU|claude*|Claude*|CLAUDE*) _foreign=1 ;;
+                esac
+                ;;
+            claude-code)
+                case "$_mv" in
+                    grok*|Grok*|GROK*) _foreign=1 ;;
+                esac
+                ;;
+        esac
+        if [ "$_foreign" -eq 1 ]; then
+            if declare -F sprintmd_cfg_set >/dev/null 2>&1; then
+                sprintmd_cfg_set "$_mk" ""
+            else
+                sed -i '' "s|^${_mk}=.*|${_mk}=|" "$CONFIG_FILE"
+            fi
+            _cleared=$((_cleared + 1))
+        fi
+    done
     msg_success "AI CLI set to: $SELECTED_CLI (provider tier: $SELECTED_PROVIDER)"
+    if [ "$_cleared" -gt 0 ]; then
+        msg_success "Cleared $_cleared provider-foreign MODEL_* pin(s) from config"
+    fi
+    unset _model_keys _cleared _mk _mv _foreign
 else
     msg_warning "Config file not found: $CONFIG_FILE"
 fi
