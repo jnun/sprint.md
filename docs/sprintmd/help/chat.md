@@ -8,8 +8,9 @@ then routes to the right depth:
   - Several jobs bundled together → proposes a breakdown, and on your OK
     creates the sub-tasks with `./sprint.sh newtask` (real IDs, standard
     template, **Parent** linked back so `plan <n> parent:N` still gathers
-    them), then chats through each to add real detail. The original is
-    retired once its children exist.
+    them), then chats through each to add real detail. Edges are kept
+    reciprocal — the parent is folded into its first child so nothing points
+    at a deleted id — and the original is retired once its children exist.
   - Genuinely one rough job → refines it in place, one detail at a time:
     ask a question, polish your answer with you, edit the file right then,
     move to the next gap.
@@ -31,10 +32,11 @@ preflight (no AI, so cost scales with problems found, not sprint size)
 checks dependency integrity, stage correctness, and stale markers, then the
 conversation walks what it found one finding at a time, most-blocking first:
 
-  - broken dependency edges (a Depends on / Blocks id with no task on disk;
-    a one-way edge where A depends on B but B's Blocks omits A)
+  - broken dependency edges (a Depends on / Dependents id with no task on disk;
+    a one-way edge where A depends on B but B's Dependents omits A)
   - dependency-stage violations (a `next/` task depending on something still
-    in `backlog/` — an ordering gap — or in `blocked/` — a hard block)
+    in `backlog/` — ordering gap — or in `blocked/` — dependent on hold while
+    the prerequisite is undefined)
   - blocked-limbo (a `blocked/` task with no `**Status: BLOCKED**` and no
     `## Questions` — almost always mis-filed; the default fix is to move it
     back to `backlog/` to reconsider)
@@ -47,19 +49,21 @@ conversation walks what it found one finding at a time, most-blocking first:
 It opens with a ≤3-line summary (queued count, runnable frontier, findings
 count) and offers to act on each finding — fix an edge, move a mis-parked
 file, stamp a marker — or chain into `chat <id>` for anything that needs
-real definition work. This is a health pass ("is the sprint internally
-consistent and unblocked?"), distinct from `plan think`, which is a dual-persona
-planning critique of a *plan* ("is this the right grouping?"). A clean board or
-an empty `next/` reports and exits without spending a token.
+real definition work. This is a health pass ("are dependencies sound and is
+every task in the right condition?"), distinct from `plan think`, which is a
+dual-persona planning critique of a *plan* ("is this the right grouping?"). A
+clean board or an empty `next/` reports and exits without spending a token.
 
 With a STAGE FOLDER name (`blocked`, `next`, or `backlog`), `chat` sweeps that
 whole folder one task at a time — an express, verdict-first sort that absorbed
 the old `triage` command. For each task it gives a fast verdict (status, a
 one-line summary, a recommendation) on a cheap model, then lets you decide.
-Verdict **BLOCKED** / **UNDEFINED** means unworkable as written (needs define) —
-not “has an open Depends on.” Ordinary deps are pipeline ordering; `work` holds
-until they finish. A dep that sits in the `blocked/` *folder* is different
-(undefined limbo) and is called out separately.
+Verdict **BLOCKED** means a decision or clarification is needed on *this* task —
+not “has an open Depends on.” **UNDEFINED** means too thin to act on yet.
+Ordinary deps are pipeline ordering: the task is **dependent** (on hold); `work`
+holds it until prerequisites finish. A dep that sits in the `blocked/` *folder*
+is different (that prerequisite needs a decision) and is called out separately —
+the dependent stays on hold; the prerequisite is the blocked one.
 
   - [w] work it   — from `next/`: start it (`doing/`). From `blocked/` or
                     `backlog/`: **commit to sprint via the shared workability
@@ -67,7 +71,9 @@ until they finish. A dep that sits in the `blocked/` *folder* is different
                     COMPLETE → `review/`). Never a raw promote into `next/`.
   - [d] define it — go deep: hand the task to the full `chat <id>` conversation
                     (the strongest model), the only step that escalates past the
-                    fast verdict — this two-tier split keeps the rip-through tempo
+                    fast verdict — this two-tier split keeps the rip-through tempo.
+                    When define is done, type `/quit` (or `quit`) to leave the
+                    nested session and return to the next task in the sweep
   - [k] kill it   — delete after confirming
   - [s] skip / [q] quit
 
@@ -103,6 +109,7 @@ then lets you decide:
                     sharpen `## Problem`, `## Steps to reproduce`, the severity,
                     and `## Success criteria` until anyone could reproduce and
                     verify the fix. The only step that escalates past the verdict.
+                    When done, `/quit` (or `quit`) returns you to the bug sweep
   - [a] close     — already fixed or obsolete, no task → **delete** the report
   - [k] kill it   — not a real bug: delete after confirming
   - [s] skip / [q] quit
@@ -118,11 +125,19 @@ Usage:
   ./sprint.sh chat plan [id]    # author a plan (plan id; bare = pick one)
   ./sprint.sh chat bugs         # sweep the bug inbox → fix tasks
   ./sprint.sh chat              # walk the whole sprint's structural health
+  ./sprint.sh chat <id> --model <id>   # pin the model for this run only
 
 Provider for this run only (leading flags; does not rewrite config):
   ./sprint.sh -g chat <id>      # Grok Build
   ./sprint.sh -c chat <id>      # Claude Code
 Default comes from docs/sprintmd/config (CLI / PROVIDER) or setup.sh.
+
+Model for this run only: add --model <id> anywhere in the args, e.g.
+  ./sprint.sh chat 42 --model opus
+Precedence, highest first:
+  --model flag / SPRINTMD_MODEL_CHAT env
+    → config MODEL_CHAT → config MODEL_DEFAULT → tier default → CLI default
+See and set persistent pins with ./sprint.sh model (help model).
 
 What it does:
   - Sizes the task up first, then splits or refines accordingly
@@ -134,14 +149,14 @@ What it does:
   - Fills ## Problem, ## Success criteria, and ## Notes at a summary
     altitude — technologies and reasons, plus references to repo files and
     external docs; never code snippets
-  - Closes the loop on a blocked task: when the conversation genuinely
-    resolves one that `gate` parked in blocked/, it re-enters the sprint
-    only through the shared workability gate (same review as `plan start`
-    / folder `[w]`) — READY → next/, or kick back BLOCKED with a reason.
-    Never a raw move into next/. If a real question still remains, it
-    leaves the task in blocked/ and says so.
-  - Chains to the next undefined dependency in a *fresh* context so a long
-    definition session doesn't pile up tokens: it seeds the next task's
+  - Closes the loop on a blocked task: when the conversation settles the
+    decision or clarification that `gate` parked in blocked/, it re-enters
+    the sprint only through the shared workability gate (same review as
+    `plan start` / folder `[w]`) — READY → next/, or kick back BLOCKED if a
+    decision is still needed. Never a raw move into next/. If a real
+    question still remains, it leaves the task in blocked/ and says so.
+  - Chains to the next dependency that still needs work in a *fresh* context
+    so a long session doesn't pile up tokens: it seeds the next task's
     file with a short "Context from chat" note (the decisions that flow
     downstream), then — inside an agent — spins up a new agent for it, or
     in a plain terminal prints the `./sprint.sh chat <id>` to run next.

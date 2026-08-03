@@ -1,5 +1,5 @@
-# sprint.md Reusable Workflow - Label to GitHub Project Status Sync
-# https://github.com/jnun/sprint.md
+# SprintBias Reusable Workflow - Label to GitHub Project Status Sync
+# https://github.com/jnun/sprintbias
 #
 # When a label is applied to an issue, this workflow checks if it matches a
 # task folder name (docs/tasks/backlog/, docs/tasks/next/, etc.) and updates
@@ -20,7 +20,7 @@
 #   - sync-status-to-label.yml (thin caller wrapper)
 #   - docs/guides/github-label-project-sync.md (end-user setup guide)
 
-name: sprint.md Label Sync (Reusable)
+name: SprintBias Label Sync (Reusable)
 
 on:
   workflow_call:
@@ -51,7 +51,7 @@ on:
         required: true
 
 concurrency:
-  group: sprint.md-label-sync-${{ github.repository }}-${{ inputs.issue_number }}
+  group: SprintBias-label-sync-${{ github.repository }}-${{ inputs.issue_number }}
   cancel-in-progress: true
 
 jobs:

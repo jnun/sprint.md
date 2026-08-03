@@ -85,7 +85,7 @@ fi
 # ── Allocate the plan ID (serialized, like newtask/newbug) ───────────
 sprintmd_lock
 
-NEW_ID=$(alloc_id sprint_PLAN_ID) || {
+NEW_ID=$(alloc_id sprint_PLAN_ID 'docs/plans/[0-9]*-*.md') || {
     echo -e "${RED}ERROR: Invalid or missing plan ID in DOC_STATE.md${NC}"
     echo "Please fix docs/sprintmd/DOC_STATE.md manually. Expected: '**sprint_PLAN_ID**: NUMBER'"
     exit 1
@@ -94,9 +94,17 @@ NEW_ID=$(alloc_id sprint_PLAN_ID) || {
 FILENAME=$(printf "%d-%s.md" "$NEW_ID" "$SLUG")
 DEST="docs/plans/$FILENAME"
 
-if [ -e "$DEST" ]; then
-    echo -e "${RED}ERROR: $DEST already exists!${NC}"
-    echo "DOC_STATE.md's sprint_PLAN_ID may be out of sync with the files on disk."
+# No plan file may already own this ID, whatever its slug. alloc_id reconciles
+# the counter with disk, so this should never fire — if it does, DOC_STATE.md
+# is corrupt or two files share a numeric prefix by hand.
+# Glob-loop (not `ls | head`) so an unmatched pattern can't trip pipefail.
+DUP=""
+for existing in docs/plans/"${NEW_ID}"-*.md; do
+    [ -e "$existing" ] && { DUP="$existing"; break; }
+done
+if [ -n "$DUP" ]; then
+    echo -e "${RED}ERROR: plan ID ${NEW_ID} already exists: ${DUP}${NC}"
+    echo "DOC_STATE.md's sprint_PLAN_ID is out of sync with the files on disk."
     exit 1
 fi
 
@@ -127,6 +135,15 @@ sed_inplace '/^- #ID — short title$/d' "$DEST"
         fi
     done
 } >> "$DEST"
+
+# ── Refresh each member's **Plan** reverse index ─────────────────────
+# The plan file (now written) is the membership authority; mirror it onto each
+# member task's **Plan** field so single-file readers see the plan. Migrate on
+# touch: reconcile derives the primary (lowest) plan from all plan files, so a
+# member already in a lower-numbered plan keeps that id. done/ is left alone.
+for id in ${MEMBER_IDS[@]+"${MEMBER_IDS[@]}"}; do
+    sprintmd_reconcile_task_plan "$id" >/dev/null || true
+done
 
 # Update DOC_STATE.md — only the fields that changed.
 bump_doc_state sprint_PLAN_ID "$NEW_ID"

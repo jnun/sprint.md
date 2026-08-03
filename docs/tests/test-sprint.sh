@@ -33,7 +33,7 @@ setup() {
     cp "$SCRIPT_UNDER_TEST" "$TMPDIR/sprint.sh"
 
     cat > "$TMPDIR/docs/sprintmd/DOC_STATE.md" << 'EOF'
-# sprint.md Documentation State
+# SprintBias Documentation State
 
 **Last Updated**: 2026-01-01
 **sprint_VERSION**: 2.2.0
@@ -75,7 +75,7 @@ echo "=== test-sprint.sh ==="
 echo "Test 1: No args shows help"
 setup
 output=$(bash "$TMPDIR/sprint.sh" 2>&1) || true
-assert_contains "Shows CLI title" "$output" "sprint.md CLI"
+assert_contains "Shows CLI title" "$output" "SprintBias CLI"
 assert_contains "Shows commands" "$output" "newtask"
 
 # Test 2: help command

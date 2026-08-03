@@ -82,7 +82,7 @@ Assume the bet fails. The AI's job here is adversarial — name at least one rea
 Ask:
 - Imagine it's six months from now and this completely failed. What went wrong?
 - What are you assuming that might not be true?
-- What external dependencies could block this?
+- What does this depend on that has to exist first?
 
 After the user responds, push back: "You said [assumption] — how confident are you? What would change your mind?" The goal is not to kill the idea but to find its weak points while the cost of pivoting is low.
 

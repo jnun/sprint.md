@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Test: no stale legacy references after the sprint.md rename.
+# Test: no stale legacy references after the SprintBias rename.
 #
 # Guards the class of bug that slipped through the docs/5day -> docs/sprint ->
 # docs/sprintmd rename: a reference in a form the search didn't anticipate
@@ -8,11 +8,18 @@
 # runtime in a user's install.
 #
 # Scope: functional + distributable surfaces only. The file list comes from git
-# (tracked + untracked-but-not-ignored), which excludes .git, the sprint.md
+# (tracked + untracked-but-not-ignored), which excludes .git, the SprintBias
 # submodule's internals, and gitignored paths (docs/tmp) for free. We further
 # drop the src/ mirror (ship.sh regenerates it from docs/sprintmd and verifies
 # it) and dev-internal work-item narratives (tasks/ideas/features/bugs/plans)
 # that legitimately discuss project history.
+#
+# Allowlist rule: checks for retired *config keys* are anchored to an assignment
+# form (^\s*KEY=) rather than a bare name, so intentional migration blocks that
+# must name a retired key to strip it from an upgrading user's config — comments,
+# arrays, and alternation regexes in setup.sh — do not trip the suite, while a
+# real retired KEY=value line still fails. Prefer this anchor over deleting the
+# historical migration code.
 #
 # Written for bash 3.2 (macOS default): indexed arrays only, no mapfile.
 
@@ -91,6 +98,34 @@ check '(^|[^m])sprint/([[:space:]]|$)' \
 # Old brand prose (display names).
 check '5DayDocs|Five Day Docs|5 Day Docs' "no legacy brand prose"
 
+# Pre-SprintBias product name. Live surface must say SprintBias (product) while
+# keeping ./sprint.sh, alias sprint, and docs/sprintmd/ paths. Dual-compat
+# markers in setup/install and the unit tests that pin them are allowlisted;
+# so is the retired help path review-sprint.md (filename, not product brand).
+if [ ${#FILES[@]} -eq 0 ]; then
+    echo "  FAIL: no pre-SprintBias product name (sprint.md) (no files to scan — not a git repo?)"
+    FAIL=$((FAIL + 1))
+else
+    # Allow dual-compat: setup/install markers, unit tests, GitHub sync legacy
+    # issue tags (sprint.md-task-id), and the retired review-sprint.md filename.
+    _hits=$(grep -InE 'sprint\.md' "${FILES[@]}" 2>/dev/null \
+        | grep -vE '(^|/)(ship|test-no-stale-refs|setup|install|test-setup-detection)\.sh:' \
+        | grep -vE 'docs/guides/command-matrix\.md:' \
+        | grep -vE 'docs/plans/' \
+        | grep -vE 'review-sprint\.md' \
+        | grep -vE 'METADATA_TAG_LEGACY|sprint\.md-task-id' \
+        || true)
+    if [ -n "$_hits" ]; then
+        echo "  FAIL: no pre-SprintBias product name (sprint.md)"
+        echo "$_hits" | sed 's/^/        /'
+        FAIL=$((FAIL + 1))
+    else
+        echo "  PASS: no pre-SprintBias product name (sprint.md)"
+        PASS=$((PASS + 1))
+    fi
+    unset _hits
+fi
+
 # Pre-rebrand symbol namespace (task 237). Functions were fiveday_*; env vars
 # and shell vars were FIVEDAY_*. Both are now sprintmd_ / SPRINTMD_. ship.sh is
 # excluded above — its LEGACY_RE patterns deliberately mention the old paths
@@ -152,8 +187,15 @@ fi
 check '\./sprint\.sh (talk|tasks|define|checkfeatures|ai-context|audit-deps)\b' \
     "no retired ./sprint.sh command invocations on live surface"
 
-# Config keys renamed with the surface (hard cut).
-check 'MODEL_TALK|MODEL_DEFINE|MODEL_TASKS|BUDGET_TASKS' \
+# Config keys renamed with the surface (hard cut). Anchored to an assignment
+# form (line-start + optional indent + KEY=) so it fires only on a real live
+# config line, never on prose. This is deliberate: setup.sh carries a migration
+# block that must NAME these retired keys — in comments, in a _dead_keys array,
+# and in a _dead_re alternation — to strip them from an upgrading user's config.
+# Those references are bare names or alternations (KEY|KEY|…), not KEY= lines, so
+# the assignment anchor scopes the whole block out while a planted MODEL_TALK=foo
+# in docs/sprintmd/config still fails the check.
+check '^[[:space:]]*(MODEL_TALK|MODEL_DEFINE|MODEL_TASKS|BUDGET_TASKS)=' \
     "no retired MODEL_TALK/DEFINE/TASKS or BUDGET_TASKS config keys"
 
 echo ""

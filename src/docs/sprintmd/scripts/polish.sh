@@ -56,6 +56,11 @@ while [ $# -gt 0 ]; do
       ;;
     --max)   _NO_LIMITS=1; shift ;;
     --force) FORCE=1; shift ;;
+    --model)
+      # Pin the model for THIS run only via the resolver's per-run lever
+      # (SPRINTMD_MODEL_DEFAULT) — no config edit. See ./sprint.sh model.
+      [ $# -ge 2 ] && [ -n "$2" ] || { echo "✗ --model needs a model id" >&2; exit 1; }
+      export SPRINTMD_MODEL_DEFAULT="$2"; shift 2 ;;
     --)
       shift
       [ $# -gt 0 ] && MAX_PASSES="$1"
@@ -132,7 +137,7 @@ fi
 # MODE: code — fixer/verifier code-diff audit (formerly review-code)
 # ═════════════════════════════════════════════════════════════════════
 if [ "$MODE" = "code" ]; then
-  MODEL="$(sprintmd_resolve_model CODE_AUDIT)"
+  MODEL="$(sprintmd_tier_model CODE_AUDIT)"
   TOOLS_FIXER="Read,Edit,Write,Bash,Grep,Glob,Agent"
   TOOLS_VERIFIER="Read,Bash,Grep,Glob,Agent"
   PERMISSIONS="auto"
@@ -571,7 +576,7 @@ fi
 # MODE: judge — deep single-piece judgment (formerly excellence)
 # ═════════════════════════════════════════════════════════════════════
 if [ "$MODE" = "judge" ]; then
-  MODEL="$(sprintmd_resolve_model EXCELLENCE)"
+  MODEL="$(sprintmd_tier_model EXCELLENCE)"
   TOOLS="Read,Grep,Glob,Bash,Edit,Agent"
   PERMISSIONS="auto"
   MAX_TURNS=30
@@ -738,7 +743,7 @@ fi
 # ═════════════════════════════════════════════════════════════════════
 # MODE: sweep — serialized refine pass over review/ (original polish)
 # ═════════════════════════════════════════════════════════════════════
-MODEL="$(sprintmd_resolve_model POLISH)"
+MODEL="$(sprintmd_tier_model POLISH)"
 TOOLS="Read,Edit,Grep,Glob,Bash,Agent"
 PERMISSIONS="auto"
 MAX_TURNS=30
@@ -920,15 +925,16 @@ Success criteria, ## Completed, and '**Status: READY**' stamp untouched. End
 with: VERDICT: PASS | REOPEN — <n> | BLOCKER — <reason>."
 
   if sprintmd_orchestration_capable; then
-    sprintmd_run -p "You are running the sprint.md polish queue: $COUNT finished
+    sprintmd_run -p "You are running the SprintBias polish queue: $COUNT finished
 task(s) in review/ to judge. CLAUDE.md / AGENTS.md is auto-loaded when present.${_profile_line}
 
-Judge each task in $(sprintmd_subagent_own_fresh) so contexts never mix.
+Judge each task in $(sprintmd_subagent_own_fresh polish) so contexts never mix.
 You are the orchestrator — the subagents judge and rewrite; you move the files.
 
 For EACH task file below:
 1. Launch a subagent whose entire instruction is:
      \"Refine ONE finished task. Read the task file at <path> and judge it.
+$(sprintmd_subagent_no_nest)
 $_RULES\"
 2. When it returns, read the task file and route by the subagent's verdict:
    - REOPEN (it appended a '## Rework (round N)' section) → increment the
@@ -945,7 +951,7 @@ Tasks (in order):$_task_list
 When every task is routed, report a one-line summary: how many reopened to
 next/ (gate READY) vs left in review/ (and any blockers)."
   else
-    sprintmd_run -p "You are running the sprint.md polish queue: $COUNT finished
+    sprintmd_run -p "You are running the SprintBias polish queue: $COUNT finished
 task(s) in review/ to judge. CLAUDE.md is auto-loaded.${_profile_line}
 
 Work the tasks ONE AT A TIME, in the listed order. You have no subagent tool,

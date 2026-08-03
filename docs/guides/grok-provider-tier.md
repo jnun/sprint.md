@@ -1,6 +1,6 @@
 # Grok Provider Tier (as built)
 
-How sprint.md runs when the AI provider is **Grok Build** — a peer to the
+How SprintBias runs when the AI provider is **Grok Build** — a peer to the
 Claude tier, not a generic passthrough. Capability matrix:
 `docs/sprintmd/ai/provider-capabilities.md`. Claude peer:
 `docs/guides/claude-provider-tier.md`.
@@ -77,6 +77,13 @@ names fail open (omit allowlist).
 | Glob | `list_dir` |
 | Task / Agent (subagent) | prompt language `spawn_subagent` (not a `--tools` entry) |
 
+**Verified shell id:** live `grok` **0.2.117** registers the shell tool as
+`run_terminal_command` in its `available_commands` tool registry, and accepts
+**both** `run_terminal_command` and `run_terminal_cmd` as `--tools` input
+(exit 0). We emit `run_terminal_command`; the map accepts either. Headless docs
+still say `run_terminal_cmd` (Grok-side doc drift). Verified 2026-07-30;
+re-check on next Grok minor.
+
 ## Subagents (Grok native)
 
 | Concept | Grok |
@@ -87,8 +94,25 @@ names fail open (omit allowlist).
 | Planning only | `plan` |
 | Nesting | depth one — children cannot spawn children |
 
+**Role → `subagent_type`.** The wording helpers source the Grok type from one
+seam, `sprintmd_subagent_type_for <role>`. Every role resolves to
+`general-purpose` today, and the mapping records why:
+
+| Role | Caller | Type | Why |
+|------|--------|------|-----|
+| `work` | `work.sh` | `general-purpose` | implements product code — full toolset |
+| `gate` | `gate-lib.sh` | `general-purpose` | must Edit/Write the task file **and** `git mv` it (shell); no restricted mode grants both (read-write = edits, no shell; execute = shell, no edits), so `explore` / `read-write` / `execute` all break the contract |
+| `polish` | `polish.sh` | `general-purpose` | reads and rewrites the task file only; the one role where `capability_mode: read-write` would be a safe future restriction — its entry in the seam is where to add it |
+| `chain` | `chat.sh`, `sprintmd_next_blocked_resolution` | `general-purpose` | hands a task toward READY in a fresh context — defines/edits task files |
+
+A future specialization is a one-line change in `sprintmd_subagent_type_for`, not
+edits across the four call sites.
+
 Emit prompts get wording from `sprintmd_subagent_*` helpers in `lib.sh` so Claude
-says "Task tool" and Grok says `spawn_subagent`.
+says "Task tool" and Grok says `spawn_subagent`. Because nesting is depth-one,
+every spawned worker's instruction carries `sprintmd_subagent_no_nest` — a
+tier-worded line telling the worker it is a worker, not an orchestrator, and must
+not re-spawn. It rides in the `work`, `gate`, and `polish` emit fan-outs.
 
 ## Orchestration
 
@@ -105,9 +129,12 @@ Shared helper: `sprintmd_orchestration_capable` is true for `claude-code` and
 
 | Source | Behavior |
 |--------|----------|
-| `MODEL_*` config | Honored via `--model` |
-| Empty + tier model | `grok-4.5` on grok-build |
+| `MODEL_*` config | Honored via `--model` after coerce |
+| Empty + tier model | Every AI command uses `sprintmd_tier_model` → `grok-4.5` |
+| Claude-only pins (`opus`/`sonnet`/…) | Coerced to `grok-4.5` (lib + `cli/grok.sh`) |
+| Grok profile exec/interactive | Always passes `--model` (never omits; default `grok-4.5`) |
 | Per-script pins | `MODEL_CHAT` / `MODEL_WORK` / `MODEL_GATE` / … |
+| Per-run provider | `./sprint.sh -g …` → `CLI=grok` + `PROVIDER=grok-build` for that run |
 
 ## Setup
 
@@ -138,6 +165,7 @@ profiles.
 
 | Path | Role |
 |------|------|
+| `docs/guides/dual-provider-smoke.md` | Pre-release smoke ritual for both hosts |
 | `docs/guides/claude-provider-tier.md` | As-built peer tier |
 | `docs/guides/command-matrix.md` | Live command names |
 | `docs/plans/5-grok-build-first-class-provider.md` | Plan + member tasks |

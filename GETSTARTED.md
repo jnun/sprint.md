@@ -1,6 +1,7 @@
-# Getting Started with sprint.md
+<!-- SprintBias v0.0.61 -->
+# Getting Started with SprintBias
 
-sprint.md carries an idea all the way to shipped, tested work in five short steps. Run `./sprint.sh help` any time to see every command.
+SprintBias carries an idea all the way to shipped, tested work in five short steps. Run `./sprint.sh help` any time to see every command.
 
 ## The loop
 
@@ -145,7 +146,7 @@ purpose: each one stops so you can fix whatever it reveals before moving on.
 | Step | Command | What it does | You stop to… |
 |------|---------|--------------|--------------|
 | **1. Author** | `./sprint.sh newplan` · `chat plan` · `plan think` (optional) · `plan start` | group work into a plan, optionally critique it, then commit members into `next/` | review the plan before start |
-| **2. Gate** | `./sprint.sh gate` | vets each task in `next/`, marks it `READY` | answer questions, fix blocked tasks |
+| **2. Gate** | `./sprint.sh gate` | vets each task in `next/`, marks it `READY` | answer questions / supply clarifications for blocked tasks |
 | **3. Work** | `./sprint.sh work` | works the `READY` tasks, each in a fresh AI context → `review/` | review the diffs before you commit |
 
 `plan think` is an optional dual-persona critique of the grouping before you

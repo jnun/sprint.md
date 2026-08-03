@@ -30,7 +30,7 @@ else
 fi
 echo ""
 
-echo "## Blocked (requires attention to unblock sprint)"
+echo "## Blocked (need decision or clarification)"
 if [ -d "$DOCS_DIR/tasks/blocked" ]; then
     blocked_files=$(_list_md "$DOCS_DIR/tasks/blocked" "")
     if [ -n "$blocked_files" ]; then
@@ -113,8 +113,8 @@ doing_count=$(find "$DOCS_DIR/tasks/doing" -maxdepth 1 -name '*.md' 2>/dev/null 
 next_count=$(find "$DOCS_DIR/tasks/next" -maxdepth 1 -name '*.md' 2>/dev/null | wc -l | tr -d ' ')
 
 if [ "$blocked_count" -gt 0 ]; then
-    echo "Blocked tasks need attention first — they are holding up the sprint."
-    echo "Run './sprint.sh chat <task-id>' on a blocked task to work out why it's stuck."
+    echo "Tasks in blocked/ need a decision or clarification before work can start."
+    echo "Run './sprint.sh chat <task-id>' on a blocked task to resolve open questions."
 elif [ "$doing_count" -gt 0 ]; then
     echo "Focus on completing the active task in 'doing/'."
 elif [ "$next_count" -gt 0 ]; then

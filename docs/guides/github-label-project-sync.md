@@ -47,7 +47,7 @@ Note the project number from the output URL (e.g., `https://github.com/users/you
 1. Go to: https://github.com/settings/tokens?type=beta
 2. Click **Generate new token** (fine-grained)
 3. Configure:
-   - **Token name**: `sprint.md-project-automation`
+   - **Token name**: `SprintBias-project-automation`
    - **Expiration**: Your preference
    - **Repository access**: Select your repo
    - **Permissions**:

@@ -59,7 +59,7 @@ setup
 cat > "$TMPDIR/docs/sprintmd/project.md" << 'EOF'
 # Project Profile
 **Language:** Bash
-**Framework:** sprint.md
+**Framework:** SprintBias
 **Tests:** docs/tests
 **Style:** shellcheck
 **Error handling:** set -euo pipefail

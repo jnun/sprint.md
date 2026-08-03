@@ -1,4 +1,4 @@
-# sprint.md Configuration
+# SprintBias Configuration
 # Edit freely. Changes preserved across updates. Format: KEY=VALUE
 
 # AI CLI binary for exec mode. Verified first-class profiles: claude, grok.
@@ -27,12 +27,14 @@ MODE=
 
 # Default model. Empty = let the CLI pick its own default (or a strong tier
 # default on claude-code / grok-build via sprintmd_tier_model).
+# Use a model id your CLI understands (grok models / claude docs). Claude-only
+# names (opus, sonnet, haiku) on grok-build are auto-remapped to grok-4.5.
 MODEL_DEFAULT=
 
 # Per-script models. Empty = fall back to MODEL_DEFAULT.
-# Interactive, reasoning-heavy flows (newfeature Q&A, newidea protocol, chat):
-# when left empty on claude-code they default to opus; on grok-build to
-# grok-4.5. Set a value here to pin a specific model instead.
+# Interactive + spine flows (chat, gate, work, polish, …): when left empty on
+# claude-code they default to opus; on grok-build to grok-4.5. Set a value here
+# to pin a specific model instead.
 MODEL_FEATURE=
 MODEL_IDEA=
 MODEL_CHAT=

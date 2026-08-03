@@ -1,6 +1,6 @@
 # GitHub Projects Kanban Board Setup
 
-This guide shows you how to set up the automated GitHub Projects kanban board for sprint.md task management.
+This guide shows you how to set up the automated GitHub Projects kanban board for SprintBias task management.
 
 ## What This Does
 
@@ -72,7 +72,7 @@ The board columns come straight from your task folders under `docs/tasks/` — *
 1. **`backlog`** — Tasks defined but not yet scheduled
 2. **`next`** — Tasks queued for the current sprint
 3. **`doing`** — Tasks actively being worked on
-4. **`blocked`** — Tasks that can't proceed given the current state
+4. **`blocked`** — Tasks that need a decision or clarification (not merely waiting on a dependency)
 5. **`review`** — Tasks in testing and review
 6. **`done`** — Completed tasks (their issues are closed)
 
@@ -119,9 +119,9 @@ GitHub Actions workflows need a Personal Access Token to interact with GitHub Pr
 1. Go to: https://github.com/settings/tokens?type=beta
 2. Click **"Generate new token"** → **"Generate new token (fine-grained)"**
 3. Configure the token:
-   - **Token name**: `sprint.md-project-automation`
+   - **Token name**: `SprintBias-project-automation`
    - **Expiration**: Choose your preference (90 days, 1 year, or custom)
-   - **Repository access**: Select "Only select repositories" → Choose your repo (e.g., `sprint.md`)
+   - **Repository access**: Select "Only select repositories" → Choose your repo (e.g., `SprintBias`)
    - **Permissions**:
      - **Repository permissions**:
        - Issues: Read and write

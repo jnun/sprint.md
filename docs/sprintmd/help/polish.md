@@ -78,14 +78,17 @@ Usage:
   ./sprint.sh polish file1.py file2  # deep-judge explicit files
   ./sprint.sh polish --code <task.md> [max-passes]
   ./sprint.sh polish --code f1 f2 -- 3
+  ./sprint.sh polish --model <id>    # pin the model for this run only
 
 Provider for this run only (leading flags; does not rewrite config):
   ./sprint.sh -g polish              # Grok Build
   ./sprint.sh -c polish --code f.py  # Claude Code
 
-Model selection uses docs/sprintmd/config (MODEL_POLISH / MODEL_EXCELLENCE /
-MODEL_CODE_AUDIT, else MODEL_DEFAULT). Override per run with the matching
-SPRINTMD_MODEL_* env var.
+Model for this run only: add --model <id> (e.g. ./sprint.sh polish --model opus)
+to pin every mode's model without editing config. Precedence, highest first:
+  --model flag / matching SPRINTMD_MODEL_* env (POLISH / EXCELLENCE / CODE_AUDIT)
+    → config MODEL_<ROLE> → config MODEL_DEFAULT → tier default → CLI default
+See and set persistent pins with ./sprint.sh model (help model).
 
 Full loop:
   ./sprint.sh work                   # execute the sprint → review/

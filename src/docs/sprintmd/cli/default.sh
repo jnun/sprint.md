@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# docs/sprintmd/cli/default.sh — Bare-minimum CLI profile for sprint.md
+# docs/sprintmd/cli/default.sh — Bare-minimum CLI profile for SprintBias
 #
 # Fallback profile used when SPRINTMD_CLI is set to an unsupported provider
 # or when no provider-specific profile exists.  Passes only the prompt via
@@ -37,7 +37,7 @@ sprintmd_provider_exec() {
   if [ ${#dropped[@]} -gt 0 ] && [ -z "${_SPRINTMD_DROP_WARNED:-}" ]; then
     local list
     list=$(printf '%s, ' "${dropped[@]}"); list="${list%, }"
-    printf 'sprint.md: %s has no profile — %s unsupported, running without them.\n' \
+    printf 'SprintBias: %s has no profile — %s unsupported, running without them.\n' \
       "$SPRINTMD_CLI" "$list" >&2
     _SPRINTMD_DROP_WARNED=1
   fi

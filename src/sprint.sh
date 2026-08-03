@@ -10,7 +10,7 @@ fi
 
 set -euo pipefail
 
-# sprint.md CLI
+# SprintBias CLI
 
 # Colors — blanked when NO_COLOR is set (matches docs/sprintmd/lib.sh).
 if [ -n "${NO_COLOR:-}" ]; then
@@ -70,13 +70,15 @@ run_script() {
 REGISTRY="$PROJECT_ROOT/docs/sprintmd/help/_registry"
 
 # Print the registry rows for one group as aligned "  cmd usage   summary"
-# lines. Every row is exactly 4 pipe-delimited fields (no field contains a
-# pipe — see the registry header), so IFS splitting is safe.
+# lines. Rows are 4 pipe-delimited fields plus an optional 5th demo-name (no
+# field contains a pipe — see the registry header), so IFS splitting is safe.
+# The 5th field is read into `demo` and discarded here so it never spills into
+# `summary`.
 print_command_group() {
     local want="$1"
     [ -f "$REGISTRY" ] || { echo "  (command registry missing: $REGISTRY)"; return; }
-    local cmd group usage summary left
-    while IFS='|' read -r cmd group usage summary; do
+    local cmd group usage summary demo left
+    while IFS='|' read -r cmd group usage summary demo; do
         cmd="${cmd//[[:space:]]/}"
         case "$cmd" in ''|'#'*) continue ;; esac
         group="${group//[[:space:]]/}"
@@ -88,8 +90,25 @@ print_command_group() {
     done < "$REGISTRY"
 }
 
+# Resolve the demo mapped to a command — the 5th registry field, trimmed of
+# whitespace — or print nothing when unmapped. Single source of truth for both
+# the `--demo` intercept and the `--help` demo-pointer line. First matching row
+# with a non-empty demo field wins (multi-row commands like validate are fine).
+demo_for_cmd() {
+    local want="$1" cmd group usage summary demo
+    [ -f "$REGISTRY" ] || return 0
+    while IFS='|' read -r cmd group usage summary demo; do
+        cmd="${cmd//[[:space:]]/}"
+        case "$cmd" in ''|'#'*) continue ;; esac
+        [ "$cmd" = "$want" ] || continue
+        demo="${demo//[[:space:]]/}"
+        [ -n "$demo" ] && { printf '%s' "$demo"; return 0; }
+    done < "$REGISTRY"
+    return 0
+}
+
 show_help() {
-    echo -e "${CYAN}sprint.md CLI${NC}"
+    echo -e "${CYAN}SprintBias CLI${NC}"
     echo ""
     echo "Usage: ./sprint.sh [-c|-g] <command> [options]"
     echo ""
@@ -133,6 +152,15 @@ show_command_help() {
     echo -e "${CYAN}./sprint.sh $cmd${NC}"
     echo ""
     cat "$helpfile"
+    # Symmetric affordance: when this command has a demo mapped, point at it
+    # right here in --help. Runtime-generated (not stored in the .md), so it
+    # stays a single source of truth and never drifts in validate --docs.
+    local demo
+    demo="$(demo_for_cmd "$cmd")"
+    if [ -n "$demo" ]; then
+        echo ""
+        echo -e "${BLUE}Demo:${NC}  ./sprint.sh $cmd --demo   (see how it works)"
+    fi
 }
 
 cmd_newidea() {
@@ -162,18 +190,24 @@ cmd_status() {
     echo ""
 
     echo -e "${BLUE}Tasks:${NC}"
+    local review_count
+    review_count=$(count_files "$tasks/review")
     echo "  Backlog:  $(count_files "$tasks/backlog")"
     echo "  Next:     $(count_files "$tasks/next")"
     echo "  Doing:    $(count_files "$tasks/doing")"
     echo "  Blocked:  $(count_files "$tasks/blocked")"
-    echo "  Review:   $(count_files "$tasks/review")"
+    if [ "$review_count" -gt 0 ]; then
+        echo "  Review:   $review_count  ← requires human review"
+    else
+        echo "  Review:   0"
+    fi
     echo "  Done:     $(count_files "$tasks/done")"
 
     local blocked_count doing_count
     blocked_count=$(count_files "$tasks/blocked")
     if [ "$blocked_count" -gt 0 ]; then
         echo ""
-        echo -e "${RED}Blocked (needs attention to unblock sprint):${NC}"
+        echo -e "${RED}Blocked (needs decision or clarification):${NC}"
         for task in "$tasks"/blocked/*.md; do
             [ -f "$task" ] && echo "  $(basename "$task" .md)"
         done
@@ -185,6 +219,33 @@ cmd_status() {
         echo -e "${YELLOW}In progress:${NC}"
         for task in "$tasks"/doing/*.md; do
             [ -f "$task" ] && echo "  $(basename "$task" .md)"
+        done
+    fi
+
+    if [ "$review_count" -gt 0 ]; then
+        echo ""
+        echo -e "${YELLOW}Requires human review (in review/ — not blocked/):${NC}"
+        echo "  Close with eyes → done/, or ./sprint.sh promote when **Tests** is set."
+        local _tf _tests _id _shown=0
+        for _tf in "$tasks"/review/*.md; do
+            [ -f "$_tf" ] || continue
+            _shown=$((_shown + 1))
+            if [ "$_shown" -gt 8 ]; then
+                echo "  … and $((review_count - 8)) more in docs/tasks/review/"
+                break
+            fi
+            _id=$(basename "$_tf" | grep -oE '^[0-9]+' || true)
+            _tests=$( { grep -m1 -iE '^\*\*Tests\*\*:' "$_tf" 2>/dev/null || true; } \
+                | sed 's/^[^:]*://; s/^[[:space:]]*//; s/[[:space:]]*$//' )
+            if [ -z "$_tests" ]; then
+                _tests=$( { grep -m1 -iE '^\*\*Proven by\*\*:' "$_tf" 2>/dev/null || true; } \
+                    | sed 's/^[^:]*://; s/^[[:space:]]*//; s/[[:space:]]*$//' )
+            fi
+            if [ -z "$_tests" ] || [ "$(printf '%s' "$_tests" | tr '[:upper:]' '[:lower:]')" = "none" ]; then
+                echo "  $(basename "$_tf" .md)  (Tests: none — sign off to done/)"
+            else
+                echo "  $(basename "$_tf" .md)  (Tests set — ./sprint.sh promote ${_id})"
+            fi
         done
     fi
 
@@ -324,8 +385,17 @@ cmd_deps() {
     run_script "deps.sh" "$@"
 }
 
+# model: show/list/set the AI model per role (keep family, no AI).
+cmd_model() {
+    run_script "model.sh" "$@"
+}
+
 cmd_polish() {
     run_script "polish.sh" "$@"
+}
+
+cmd_promote() {
+    run_script "promote.sh" "$@"
 }
 
 cmd_validate() {
@@ -348,6 +418,11 @@ cmd_align() {
 # context: AI context summary.
 cmd_context() {
     run_script "context.sh"
+}
+
+# learn: play a sandboxed demo (or list them). Read-only theater — look family.
+cmd_learn() {
+    run_script "learn.sh" "$@"
 }
 
 # Global provider flags (leading only). This-run env override — does not rewrite
@@ -393,6 +468,33 @@ if [ -n "$CMD" ] && [ "$CMD" != "help" ] && [ "$CMD" != "--help" ] && [ "$CMD" !
     done
 fi
 
+# Intercept --demo on any command: ./sprint.sh gate --demo → play gate's mapped
+# demo through the same engine as `learn`. Mirrors the --help intercept above, so
+# subcommand scripts never parse --demo themselves. Soft-fails when unmapped.
+# `learn` owns the catalog and plays by name, so it is exempt.
+if [ -n "$CMD" ] && [ "$CMD" != "help" ] && [ "$CMD" != "learn" ]; then
+    _want_demo=0
+    for arg in "$@"; do [ "$arg" = "--demo" ] && _want_demo=1; done
+    if [ "$_want_demo" -eq 1 ]; then
+        _demo_name="$(demo_for_cmd "$CMD")"
+        if [ -z "$_demo_name" ]; then
+            echo -e "${YELLOW}No demo for '$CMD'.${NC}"
+            echo "Browse and play the available demos with:  ./sprint.sh learn"
+            exit 0
+        fi
+        # Replay through the learn engine: mapped demo name + any pass-through
+        # flags (--fast, --no-color), dropping CMD and the --demo flag itself.
+        shift
+        _demo_pass=()
+        for arg in "$@"; do
+            [ "$arg" = "--demo" ] && continue
+            _demo_pass+=("$arg")
+        done
+        cmd_learn "$_demo_name" ${_demo_pass[@]+"${_demo_pass[@]}"}
+        exit $?
+    fi
+fi
+
 # Main
 case "$CMD" in
     newidea)       shift; cmd_newidea "$@" ;;
@@ -404,6 +506,7 @@ case "$CMD" in
     status)        cmd_status ;;
     profile)       shift; cmd_profile "$@" ;;
     search)        shift; cmd_search "$@" ;;
+    learn)         shift; cmd_learn "$@" ;;
     chat)          shift; cmd_chat "$@" ;;
     plan)          shift; cmd_plan "$@" ;;
     gate)          shift; cmd_gate "$@" ;;
@@ -411,7 +514,9 @@ case "$CMD" in
     loop)          shift; cmd_loop "$@" ;;
     split)         shift; cmd_split "$@" ;;
     deps)          shift; cmd_deps "$@" ;;
+    model)         shift; cmd_model "$@" ;;
     polish)        shift; cmd_polish "$@" ;;
+    promote)       shift; cmd_promote "$@" ;;
     sync)          shift; cmd_sync "$@" ;;
     validate)      shift; cmd_validate "$@" ;;
     cleanup)       shift; cmd_cleanup "$@" ;;

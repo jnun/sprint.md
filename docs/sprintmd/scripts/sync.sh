@@ -48,7 +48,7 @@ if [ "$FORCE_ALL" = "true" ] && ! command -v gh >/dev/null 2>&1; then
     exit 1
 fi
 
-echo -e "${CYAN}=== sprint.md GitHub Sync ===${NC}"
+echo -e "${CYAN}=== SprintBias GitHub Sync ===${NC}"
 echo ""
 
 # Stage task files from all pipeline folders

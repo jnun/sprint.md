@@ -1,4 +1,5 @@
-# sprint.md
+<!-- SprintBias v0.0.61 -->
+# SprintBias
 
 Project management in markdown files. Folders and plain text.
 
@@ -69,17 +70,34 @@ This file governs `docs/`. Read it before modifying any task, bug, or feature.
 | `backlog/` | Planned, not started |
 | `next/` | Queued for current sprint |
 | `doing/` | Actively being worked on |
-| `blocked/` | Not fully defined — can't be worked until its own problem, scope, or success criteria are resolved |
+| `blocked/` | Needs a decision or clarification before work can start — not merely waiting on another task |
 | `review/` | Done, awaiting approval |
 | `done/` | Shipped/complete |
 
-**Blocked vs. dependent — don't conflate them:**
-- **Blocked = a definition failure.** The task can't be worked because *it itself* is unclear: open questions, fuzzy scope, an unresolved decision. Fix by defining, not by waiting. Lives in `blocked/`.
-- **Dependent = a sequencing fact.** The task is fully defined and workable; it just needs another task done first. A task waiting its turn behind another in the same plan is **not blocked** — it stays in `next/`, and the order is expressed by its `**Depends on**:` / `**Blocks**:` fields. A whole chain of dependent tasks has *zero* blocked tasks even when only one can start right now.
+**Lexicon — blocked vs. dependent (do not conflate them):**
+
+| | **Blocked** / `**Status: BLOCKED**` | **Dependent / on hold** |
+|---|---|---|
+| **Means** | A **decision or clarification** must be made about *this* task before anyone can work it | Fully clear and workable; sequentially waiting on another task |
+| **Cause** | Unresolved choice, open question, contradiction, or missing clarification *on this task* | A prerequisite task has not finished yet |
+| **Where it lives** | `blocked/` folder | Stays in `next/` (or wherever it was); no folder move |
+| **How `work` treats it** | Never runs it (it is not READY in the queue) | Holds it until every `**Depends on**` prerequisite reaches `review/` or `done/`, then releases it |
+| **How you fix it** | Answer the questions (`chat <id>`), then re-enter through the gate | Finish the prerequisite — or record the edge if it was missing |
+
+The software analogy: you would not say an app is *blocked by* a Python module. You would say it **depends on** that module and **requires** it to be installed. Same here — a task that lists `**Depends on**: 42` is **dependent** (on hold until 42 lands), not blocked. A whole chain of dependent tasks has *zero* blocked tasks even when only one can start right now.
+
+**Task dependency fields** (graph edges, not lifecycle status):
+- **`Depends on`** — prerequisite task IDs that must finish before this one can start.
+- **`Dependents`** — the reverse edge: task IDs that wait on *this* one. Graph metadata only — it does **not** put those tasks in `blocked/`, and it does not mean this task is blocked. (Older files may say **Blocks**; readers still accept that alias.)
+- **`Plan`** — which `docs/plans/N-…` this task belongs to (`none` or the plan id). Reverse index; the plan file remains the membership list.
+- **`Tests`** — suite scripts under `docs/tests/` that prove the success criteria. `./sprint.sh promote` runs them and, all green, moves `review/ → done/`. `none` means a human signs off. Product test loops (`newtest`) are not this field. (Legacy alias: **Proven by**.)
+
+Reserve **blocked** / **BLOCKED** for “a decision or clarification is needed.” For sequencing, say **depends on**, **dependent**, **on hold**, or **waiting on**.
 
 **COMPLETE vs. `done/` — don't conflate them either:**
 - **COMPLETE** is a *workability verdict* (gate, plan start, folder sweep, drift check): the work is already present in the codebase. The stamp is `**Status: COMPLETE**` under `## Questions` (or a sweep status line). Routing is to **`review/`** for human approval — never a silent leap into `done/`.
 - **`docs/tasks/done/`** is a *lifecycle folder*: you (or an explicit move) put the task there after approving review. Folder location is status; COMPLETE is not a folder name and is not written as a plan status.
+- The one **automated** `review/ → done/` move is `./sprint.sh promote`: a task with **Tests** naming suite scripts that all run green closes itself; work with `none` stays in `review/` for a human. That is how a plan whose tasks are all suite-backed reaches "every member in `done/`" without hand-moves, ready for `./sprint.sh plan done <id>`.
 
 **Plans vs. the folders above — don't conflate them either:**
 - The six folders above are **lifecycle status**: a task lives in exactly one, and moving it *is* how status changes.
@@ -104,7 +122,7 @@ docs/
 │   ├── backlog/        # Planned
 │   ├── next/           # Sprint queue
 │   ├── doing/          # In progress
-│   ├── blocked/        # Not fully defined (not merely waiting on another task)
+│   ├── blocked/        # Needs decision or clarification (not a dependency wait)
 │   ├── review/         # Awaiting approval
 │   └── done/           # Complete
 ├── plans/              # Named groupings that LIST task IDs (relational index, not a stage)
@@ -169,13 +187,14 @@ Help groups: **create · chat · plan · work · look · keep**.
 ./sprint.sh --claude chat 12          # This run: Claude Code (same as -c)
 ./sprint.sh profile [show]            # Create/update project profile (show: print only, no AI)
 ./sprint.sh chat [target]             # id: task · folder: sweep · plan [id]: author a plan · bugs: inbox · nothing: sprint health
-./sprint.sh work [limit] [--fast]     # Execute READY tasks from next/ (--force to skip the gate; --audit --excellence to chain quality audits)
+./sprint.sh work [N] [count N] [--fast] # Execute READY tasks from next/ — `work N` works one task by id; `count N` caps how many run (--force skips the gate; --audit --excellence chain quality audits)
 ./sprint.sh loop [--refill] [--retry] # Autopilot — plan start (gates as it commits) then work, drain the queue
 ./sprint.sh gate [folder] [limit]     # Off-spine quality gate: re-gate next/ (--force) or report on backlog/doing/blocked
 ./sprint.sh split <path>              # Split a large task into subtasks
 ./sprint.sh polish [limit] [--rounds N]  # Sweep review/: reopen tasks worth another pass
 ./sprint.sh polish <file>             # Deep-judge one finished piece; file enhancements to backlog/
 ./sprint.sh polish --code <file>      # Code-diff audit (fixer/verifier); may fix issues inline
+./sprint.sh promote [id] [--dry-run]  # Test-gated close: run each review/ task's **Tests**, all green → done/
 ./sprint.sh deps                      # File a backlog task auditing outdated/vulnerable deps
 
 # Look (read-only — surface state, no mutation)
@@ -183,6 +202,7 @@ Help groups: **create · chat · plan · work · look · keep**.
 ./sprint.sh align                     # Analyze feature alignment
 ./sprint.sh context                   # Generate AI context summary
 ./sprint.sh search <keyword>          # Search tasks by keyword
+./sprint.sh learn [demo]              # Watch the flow run — play a sandboxed demo (no name lists them)
 
 # Keep — sync
 ./sprint.sh sync [--all]              # Push task changes to GitHub
@@ -190,6 +210,8 @@ Help groups: **create · chat · plan · work · look · keep**.
 # Keep — maintenance
 ./sprint.sh validate [--fix] [--dry-run]  # Integrity-check task IDs + deps (--docs: help/ flag drift; --commands: catalog completeness)
 ./sprint.sh cleanup [--delete|--force|--all]  # Clean stale files from docs/tmp/
+./sprint.sh model show/list/set [k v] # See/list/set the AI model per role (no AI)
+                                      #   pin one run: work/chat/gate/polish --model <id>
 ./sprint.sh help                      # Show all commands
 ```
 
@@ -215,8 +237,8 @@ Lifecycle path:
 ```bash
 git mv docs/tasks/backlog/ID-name.md docs/tasks/next/    || mv docs/tasks/backlog/ID-name.md docs/tasks/next/     # Queue
 git mv docs/tasks/next/ID-name.md docs/tasks/doing/      || mv docs/tasks/next/ID-name.md docs/tasks/doing/       # Start
-git mv docs/tasks/doing/ID-name.md docs/tasks/blocked/   || mv docs/tasks/doing/ID-name.md docs/tasks/blocked/    # Under-defined
-git mv docs/tasks/blocked/ID-name.md docs/tasks/next/    || mv docs/tasks/blocked/ID-name.md docs/tasks/next/     # Re-queue
+git mv docs/tasks/doing/ID-name.md docs/tasks/blocked/   || mv docs/tasks/doing/ID-name.md docs/tasks/blocked/    # Needs decision/clarification
+git mv docs/tasks/blocked/ID-name.md docs/tasks/next/    || mv docs/tasks/blocked/ID-name.md docs/tasks/next/     # Re-queue (via gate)
 git mv docs/tasks/doing/ID-name.md docs/tasks/review/    || mv docs/tasks/doing/ID-name.md docs/tasks/review/     # Submit
 git mv docs/tasks/review/ID-name.md docs/tasks/done/     || mv docs/tasks/review/ID-name.md docs/tasks/done/      # Complete
 ```
@@ -267,15 +289,23 @@ Use templates in each folder:
 - `docs/bugs/.TEMPLATE-bug.md`
 - `docs/tests/.TEMPLATE-test.md`
 
-## Updating sprint.md
+## Updating SprintBias
 
-To update to a newer version, re-run setup from the sprint.md repo:
+Website: [sprintbias.com](https://sprintbias.com) · Source: [github.com/jnun/sprintbias](https://github.com/jnun/sprintbias)
+
+To update to a newer version, re-run setup from the SprintBias repo:
 
 ```bash
-cd /path/to/sprint.md
+cd /path/to/sprintbias
 git pull
 ./setup.sh
 # Enter your project path when prompted
+```
+
+Or from your project:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/jnun/sprintbias/main/install.sh | bash
 ```
 
 Your DOC_STATE.md values (task IDs, bug IDs) are preserved during updates.

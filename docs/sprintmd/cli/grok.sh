@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# docs/sprintmd/cli/grok.sh — Grok Build CLI profile for sprint.md
+# docs/sprintmd/cli/grok.sh — Grok Build CLI profile for SprintBias
 #
 # Defines sprintmd_provider_exec() and sprintmd_provider_interactive(), mapping
-# the provider-neutral interface used by sprint.md scripts to Grok Build's CLI.
+# the provider-neutral interface used by SprintBias scripts to Grok Build's CLI.
 #
 # Sourced automatically by lib.sh when SPRINTMD_CLI=grok.
 #
@@ -84,7 +84,7 @@ sprintmd_provider_exec() {
   if [ ${#dropped[@]} -gt 0 ] && [ -z "${_SPRINTMD_GROK_DROP_WARNED:-}" ]; then
     local list
     list=$(printf '%s, ' "${dropped[@]}"); list="${list%, }"
-    printf 'sprint.md: grok profile — %s not supported by Grok CLI; running without them.\n' \
+    printf 'SprintBias: grok profile — %s not supported by Grok CLI; running without them.\n' \
       "$list" >&2
     _SPRINTMD_GROK_DROP_WARNED=1
   fi
@@ -94,19 +94,31 @@ sprintmd_provider_exec() {
   if [ -n "$tools" ]; then
     if ! mapped_tools="$(_sprintmd_grok_map_tools "$tools")"; then
       if [ -z "${_SPRINTMD_GROK_TOOLS_WARNED:-}" ]; then
-        printf 'sprint.md: grok profile — unmapped tools in allowlist; omitting --tools (fail-open).\n' >&2
+        printf 'SprintBias: grok profile — unmapped tools in allowlist; omitting --tools (fail-open).\n' >&2
         _SPRINTMD_GROK_TOOLS_WARNED=1
       fi
       mapped_tools=""
     fi
   fi
 
+  # Always pin a Grok-native model id. Coerce Claude-only aliases (opus/sonnet/…)
+  # when a caller bypassed lib resolve; empty → grok-4.5. No grok exec omits
+  # --model, and none ever forwards an unknown Claude id.
+  if declare -F sprintmd_coerce_model >/dev/null 2>&1; then
+    model="$(sprintmd_coerce_model "$model")"
+  else
+    case "$model" in
+      opus|sonnet|haiku|OPUS|SONNET|HAIKU|claude*|Claude*|CLAUDE*) model="grok-4.5" ;;
+    esac
+  fi
+  [ -n "$model" ] || model="grok-4.5"
+
   # ── Build command ─────────────────────────────────────────────────
   local -a cmd=("$SPRINTMD_CLI")
 
   [ -n "$system_prompt" ] && cmd+=(--rules "$system_prompt")
   [ -n "$prompt" ]        && cmd+=(-p "$prompt")
-  [ -n "$model" ]         && cmd+=(--model "$model")
+  cmd+=(--model "$model")
   [ -n "$max_turns" ]     && cmd+=(--max-turns "$max_turns")
   [ -n "$mapped_tools" ]  && cmd+=(--tools "$mapped_tools")
   [ -n "$output_format" ] && cmd+=(--output-format "$output_format")
@@ -157,9 +169,19 @@ sprintmd_provider_interactive() {
   # Interactive TUI ignores --tools (and may warn); omit rather than pass.
   : "${tools:=}" "${name:=}"
 
+  # Same model pin as exec: coerce Claude-only aliases; empty → grok-4.5.
+  if declare -F sprintmd_coerce_model >/dev/null 2>&1; then
+    model="$(sprintmd_coerce_model "$model")"
+  else
+    case "$model" in
+      opus|sonnet|haiku|OPUS|SONNET|HAIKU|claude*|Claude*|CLAUDE*) model="grok-4.5" ;;
+    esac
+  fi
+  [ -n "$model" ] || model="grok-4.5"
+
   local -a cmd=("$SPRINTMD_CLI")
   [ -n "$system_prompt" ] && cmd+=(--rules "$system_prompt")
-  [ -n "$model" ]         && cmd+=(--model "$model")
+  cmd+=(--model "$model")
   if [ "$skip_permissions" -eq 1 ]; then
     cmd+=(--always-approve)
   elif [ -n "$permissions" ]; then

@@ -1,6 +1,6 @@
 # AI provider capability matrix
 
-sprint.md speaks one provider-neutral interface (`sprintmd_run` / the `cli/*.sh`
+SprintBias speaks one provider-neutral interface (`sprintmd_run` / the `cli/*.sh`
 profiles) but providers are not equal. This table is the single source of
 truth for what each tier can do, so scripts can exploit Claude Code and Grok
 Build strengths and degrade honestly everywhere else instead of coding to a

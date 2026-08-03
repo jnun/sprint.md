@@ -1,27 +1,56 @@
-# Contributing to sprint.md
+# Contributing to SprintBias
+
+SprintBias is a file-based project-management system that installs into other
+people's projects. **You are working on the system itself, not on a project
+that uses it.** This repo happens to use SprintBias to manage its own
+development — but that dogfooding is incidental. The product is what ships in
+`src/`, not the task files we keep in `docs/`.
 
 ## Quick start
 
 ```bash
-git clone <repo-url> && cd sprint.md
+git clone git@github.com:jnun/sprintbias.git && cd sprintbias
 ```
 
-No build step. The project is shell scripts and markdown.
+No build step, no dependencies. The project is Bash scripts and Markdown. If
+you can run `bash`, you can develop it.
 
 ## Development workflow
 
-1. **Edit in `docs/`** — this is the live environment. Changes take effect immediately.
-2. **Test your changes** — run `./sprint.sh` commands to verify behavior.
-3. **Mirror to `src/`** — run `./ship.sh` (preview first with `./ship.sh --dry-run`). It rsyncs the live tree into `src/` and bumps the version. Never hand-copy files into `src/`.
-4. **Verify install** — run `./setup.sh` against a temp directory (see below).
-5. **Commit.**
+The one rule that governs everything: **edit `docs/` → test in place → `./ship.sh`.**
+
+1. **Edit in `docs/`** — the live environment. Scripts in
+   `docs/sprintmd/scripts/` run the moment you invoke `./sprint.sh`. Changes
+   take effect immediately, no mirror step needed to test.
+2. **Test your change** — run the real `./sprint.sh` command it affects, then
+   the platform suite. Full ladder (unit → emit smoke → live dual-provider):
+   **[docs/guides/running-tests.md](docs/guides/running-tests.md)**. Quick unit
+   pass: `bash docs/tests/run-all.sh`.
+3. **Run `./sprint.sh validate`** — integrity-checks task IDs and dependency
+   links. Add `--commands` if you touched a command's help, dispatch, or the
+   manual (it enforces that all four surfaces agree), and `--docs` if you
+   changed a script's flags.
+4. **Mirror to `src/`** — run `./ship.sh` (preview first with
+   `./ship.sh --dry-run`). It rsyncs the live tree into `src/`, bumps the
+   version, and byte-verifies the mirror. Patch bump by default;
+   `./ship.sh minor` / `major` for larger changes. **Never hand-copy files
+   into `src/`.**
+5. **Verify a fresh install** (see below).
+6. **Commit** — the maintainer handles commits and releases unless you're asked
+   to. `ship.sh` prints the suggested `git commit -m "ship: vX.Y.Z"` line.
 
 ### The two trees
 
-- **`docs/`** is where you develop. Scripts run from here. Edit here first.
-- **`src/`** is the distribution package — what `setup.sh` installs into user projects. Never edit here first; `./ship.sh` mirrors `docs/` → `src/` after testing.
+- **`docs/`** is where you develop. Scripts run from here. Edit here first,
+  always.
+- **`src/`** is the distribution package — exactly what `setup.sh` installs into
+  a user's project. It is **not** a development environment. Never iterate
+  inside `src/`; `./ship.sh` is the one and only step that mirrors
+  `docs/` → `src/`, after you've tested.
 
-See [LIFECYCLE.md](LIFECYCLE.md) for the full file flow.
+A change that lands only in `docs/` works locally but never reaches users. A
+change that lands only in `src/` ships untested. See [LIFECYCLE.md](LIFECYCLE.md)
+for the full file flow.
 
 ### Verify a fresh install
 
@@ -31,30 +60,65 @@ mkdir /tmp/test-sprint && ./setup.sh
 rm -rf /tmp/test-sprint
 ```
 
-If this breaks, it's a release blocker.
+If this breaks, it's a **release blocker** — it means a user's first experience
+with your change is broken. (`install.sh` at the repo root is the one-line curl
+bootstrap that fetches the tree and runs `setup.sh` for end users; you rarely
+touch it while developing.)
 
 ## What goes where
 
 | I want to change... | Edit here | Reaches `src/` via |
 |---|---|---|
-| A script | `docs/sprintmd/scripts/` | `./ship.sh` |
-| AI guidance | `docs/sprintmd/ai/` | `./ship.sh` |
-| CLI help text / command guides | `docs/sprintmd/{help,cli,guides}/` | `./ship.sh` |
+| A command / script | `docs/sprintmd/scripts/` | `./ship.sh` |
+| AI guidance (`chat`, `plan`, task authoring) | `docs/sprintmd/ai/` | `./ship.sh` |
+| CLI help pages, provider CLIs, guides | `docs/sprintmd/{help,cli,guides}/` | `./ship.sh` |
+| Shared helpers / config | `docs/sprintmd/{lib.sh,config}` | `./ship.sh` |
+| The command catalog | `docs/sprintmd/help/_registry` | `./ship.sh` (the help index is generated from it) |
 | The user manual | `DOCUMENTATION.md` (root) | `./ship.sh` |
-| A template | `docs/{tasks,bugs,features,ideas,tests}/.TEMPLATE-*` | `./ship.sh` (its `TEMPLATE_FILES` list mirrors each to `src/docs/…`) |
-| The installer | `setup.sh` (root) | — (only one copy, not mirrored) |
+| Getting-started guide | `GETSTARTED.md` (root) | `./ship.sh` |
+| A work-item template | `docs/{tasks,bugs,features,ideas,tests,plans}/.TEMPLATE-*` | `./ship.sh` (its `TEMPLATE_FILES` list mirrors each to `src/docs/…`) |
+| The installer | `setup.sh` (root) | — (one copy, not mirrored) |
+| The curl bootstrap | `install.sh` (root) | — (one copy, not mirrored) |
 | The ship tool | `ship.sh` (root) | — (dev-only, never ships) |
 | GitHub issue/PR templates, workflows | `src/.github/` | — (edit `src/` directly; no `docs/` copy) |
 | AI pointer files (`CLAUDE.md`, `AGENTS.md`, `.cursorrules`, …) | `src/CLAUDE.md`, `src/AGENTS.md`, … | — (edit `src/` directly; no `docs/` copy) |
 
-Anything under `docs/sprintmd/` is mirrored wholesale, so a brand-new script, help, or guide file ships automatically — no `ship.sh` edit needed.
+Everything under `docs/sprintmd/` is mirrored **wholesale**, so a brand-new
+script, help page, or guide ships automatically — no `ship.sh` edit needed. You
+touch `ship.sh`'s manifest only when a new distributable path appears *outside*
+the trees it already covers (a new root file, or a whole new `docs/` subtree).
 
-The `src/` AI pointer files are deliberately minimal (a few lines pointing at `DOCUMENTATION.md`). The installer prepends them to a user's existing AI instruction file, so keep them short — don't enrich or templatize them.
+Two traps worth naming:
+
+- **Root files don't ship unless listed.** `README.md`, `CONTRIBUTING.md`,
+  `LIFECYCLE.md`, and this repo's own `CLAUDE.md` support *developing*
+  SprintBias — they never reach users. Only `sprint.sh`, `DOCUMENTATION.md`, and
+  `GETSTARTED.md` are wired into `ship.sh`'s `ROOT_FILES`.
+- **Keep the `src/` AI pointer files minimal.** `src/CLAUDE.md`,
+  `src/AGENTS.md`, and friends are a few lines pointing at `DOCUMENTATION.md`
+  *on purpose*. The installer prepends them to a user's existing AI instruction
+  file (or asks before creating one) and never clobbers. Don't enrich,
+  generate, or templatize them — the user owns those files.
 
 ## Tracking work
 
-This repo uses sprint.md to manage itself. Use `./sprint.sh` commands to create tasks, bugs, and ideas — never create those files manually.
+This repo uses SprintBias to manage itself. Create work items with the CLI —
+never write those files by hand:
+
+```bash
+./sprint.sh newtask "<description>"     # a task
+./sprint.sh newbug  "<description>"     # a bug
+./sprint.sh newidea                     # an idea (AI Q&A if no name)
+./sprint.sh newfeature                  # a feature
+```
+
+Tasks flow through lifecycle folders `backlog → next → doing → review → done`
+(plus `blocked/`). Move a task between folders with `git mv SRC DEST || mv SRC
+DEST` — `git mv` first to keep history, plain `mv` when it isn't tracked yet.
+See `DOCUMENTATION.md` → Moving Tasks. None of `docs/tasks/`, `docs/bugs/`,
+etc. is distributed; users get empty starter folders, not our work.
 
 ## Questions
 
-Read `DOCUMENTATION.md` for how the system works end-to-end.
+`DOCUMENTATION.md` explains the whole system end-to-end. `./sprint.sh help`
+lists every command; `./sprint.sh help <command>` opens its page.

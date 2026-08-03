@@ -15,7 +15,7 @@ set -euo pipefail
 SCRIPTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$(cd "$SCRIPTS_DIR/.." && pwd)/lib.sh"
 
-MODEL="$(sprintmd_resolve_model DEPS)"
+MODEL="$(sprintmd_tier_model DEPS)"
 TOOLS="Read,Grep,Glob,Edit,Bash,Agent"
 PERMISSIONS="auto"
 MAX_TURNS=30

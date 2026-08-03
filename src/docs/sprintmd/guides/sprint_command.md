@@ -39,7 +39,7 @@ what it does.
 The alias points at `./sprint.sh`, not an absolute path. That is deliberate and
 important:
 
-**sprint.md is a file-based tool, not a system app.** Each project carries its
+**SprintBias is a file-based tool, not a system app.** Each project carries its
 own copy of `sprint.sh` at its own version. A relative alias always runs the
 `sprint.sh` of whichever project you are standing in — so one alias works
 correctly across every project you have, and never runs a stale or mismatched
@@ -66,7 +66,7 @@ sprint() {
     fi
     d="$(dirname "$d")"
   done
-  echo "sprint.md not found from $PWD" >&2
+  echo "SprintBias not found from $PWD" >&2
   return 1
 }
 ```
@@ -77,6 +77,6 @@ folders deep.
 
 ## Prefer not to touch your shell config?
 
-Then keep typing `./sprint.sh`. Nothing about sprint.md requires the shortcut —
-it is pure convenience, and sprint.md never installs anything outside the
+Then keep typing `./sprint.sh`. Nothing about SprintBias requires the shortcut —
+it is pure convenience, and SprintBias never installs anything outside the
 project folder unless you ask it to.

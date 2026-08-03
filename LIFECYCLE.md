@@ -13,7 +13,7 @@ This repo has two parallel trees. Always know which one you're touching.
 
 | Tree    | Role                                                        |
 |---------|------------------------------------------------------------|
-| `docs/` | Live dev environment. Edit and test here. `./sprint.sh` runs the scripts in `docs/sprintmd/`. We also dogfood sprint.md to manage our own work in `docs/tasks/`, `docs/features/`, etc. |
+| `docs/` | Live dev environment. Edit and test here. `./sprint.sh` runs the scripts in `docs/sprintmd/`. We also dogfood SprintBias to manage our own work in `docs/tasks/`, `docs/features/`, etc. |
 | `src/`  | The distributable package. `setup.sh` installs from here. Never edit or run anything in `src/` directly. |
 
 ## The flow

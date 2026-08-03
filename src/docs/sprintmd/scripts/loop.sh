@@ -64,7 +64,8 @@ REFILLS=0
 TOTAL_START=$SECONDS
 _RETRY_USED=0
 
-# Snapshot pre-existing blocked tasks so retry only touches new ones
+# Snapshot pre-existing blocked/ tasks so retry only touches ones that landed
+# this run (need a decision or clarification)
 _INITIAL_BLOCKED=$(mktemp)
 trap 'rm -f "$_INITIAL_BLOCKED"' EXIT
 ls "$BLOCKED_DIR"/*.md 2>/dev/null | while read -r f; do basename "$f"; done > "$_INITIAL_BLOCKED" 2>/dev/null || true
@@ -135,7 +136,7 @@ fi
 
 # ── Banner ──────────────────────────────────────────────────────────
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "▸ sprint.md Loop Runner"
+echo "▸ SprintBias Loop Runner"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo "  Queue:      $(count_tasks "$NEXT_DIR") tasks in next/"
 echo "  Blocked:    $(count_tasks "$BLOCKED_DIR") in blocked/"
@@ -144,7 +145,7 @@ echo "  Backlog:    $(count_tasks "$BACKLOG_DIR") in backlog/"
 [ "$MAX_ATTEMPTS" -gt 0 ] && echo "  Task limit: $MAX_ATTEMPTS"
 echo "  Cooldown:   ${COOLDOWN}s"
 [ "$REFILL" -eq 1 ]       && echo "  Refill:     plan start (next READY plan) when empty"
-[ "$RETRY" -eq 1 ]        && echo "  Retry:      re-queue newly-blocked tasks (once)"
+[ "$RETRY" -eq 1 ]        && echo "  Retry:      re-queue tasks that landed in blocked/ this run (once)"
 [ ${#PASSTHROUGH[@]} -gt 0 ] && echo "  Flags:      ${PASSTHROUGH[*]}"
 echo ""
 
@@ -191,7 +192,7 @@ while true; do
 
   NEXT_COUNT=$(count_tasks "$NEXT_DIR")
 
-  # ── Retry: re-gate tasks blocked during this run ────────────────
+  # ── Retry: re-gate tasks that landed in blocked/ during this run ──
   # Still must pass workability before re-entering next/ (no raw promote).
   if [ "$NEXT_COUNT" -eq 0 ] && [ "$RETRY" -eq 1 ] && [ "$_RETRY_USED" -eq 0 ]; then
     _RETRY_USED=1
@@ -199,7 +200,7 @@ while true; do
     for f in "$BLOCKED_DIR"/*.md; do
       [ -f "$f" ] || continue
       name="${f##*/}"
-      # Only retry tasks that weren't already blocked before this run
+      # Only retry tasks that weren't already in blocked/ before this run
       if ! grep -qxF "$name" "$_INITIAL_BLOCKED" 2>/dev/null; then
         echo "  ↻ Retrying (gate): $name"
         sprintmd_promote_to_sprint "$f" loop-retry
@@ -262,14 +263,16 @@ while true; do
   BEFORE_REVIEW=$(count_tasks "$REVIEW_DIR")
   BEFORE_BLOCKED=$(count_tasks "$BLOCKED_DIR")
 
-  bash "$SCRIPT_DIR/work.sh" 1 "${PASSTHROUGH[@]+"${PASSTHROUGH[@]}"}" || true
+  # `count 1` caps this iteration at one task. A bare `1` now means "work task
+  # id 1", so the loop must use the count sub-word to keep one-task-per-iteration.
+  bash "$SCRIPT_DIR/work.sh" count 1 "${PASSTHROUGH[@]+"${PASSTHROUGH[@]}"}" || true
 
   # Rescue any task left in doing/ (crash recovery)
   for f in "$DOING_DIR"/*.md; do
     [ -f "$f" ] || continue
     name="${f##*/}"
     move_file "$f" "$BLOCKED_DIR/$name"
-    echo "  ⚠ $name incomplete → blocked/"
+    echo "  ⚠ $name incomplete → blocked/ (needs decision or clarification)"
   done
 
   AFTER_REVIEW=$(count_tasks "$REVIEW_DIR")

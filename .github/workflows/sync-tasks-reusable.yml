@@ -1,15 +1,15 @@
-# sprint.md Reusable Workflow - Task to GitHub Issue Sync
-# https://github.com/jnun/sprint.md
+# SprintBias Reusable Workflow - Task to GitHub Issue Sync
+# https://github.com/jnun/sprintbias
 #
 # All sync logic lives here. This file exists separately from sync-tasks-to-issues.yml
 # because GitHub requires workflow_call (reusable) and push/workflow_dispatch triggers
 # to be in different files. User projects call this workflow remotely via
-# `uses: jnun/sprint.md/.github/workflows/sync-tasks-reusable.yml@main`, so updates
+# `uses: jnun/sprintbias/.github/workflows/sync-tasks-reusable.yml@main`, so updates
 # here are picked up automatically without users re-copying anything.
 #
 # See also: sync-tasks-to-issues.yml (the thin caller wrapper)
 
-name: sprint.md Sync (Reusable)
+name: SprintBias Sync (Reusable)
 
 on:
   workflow_call:
@@ -43,7 +43,7 @@ on:
         required: false
 
 concurrency:
-  group: sprint.md-sync-${{ github.repository }}
+  group: SprintBias-sync-${{ github.repository }}
   cancel-in-progress: false
 
 jobs:
@@ -83,7 +83,7 @@ jobs:
             exit 1
           fi
 
-          echo "::notice::sprint.md structure validated"
+          echo "::notice::SprintBias structure validated"
 
       - name: Setup labels
         env:
@@ -210,9 +210,14 @@ jobs:
               continue
             fi
 
-            # Idempotent lookup: first try HTML comment metadata, then fall back to title
-            METADATA_TAG="<!-- sprint.md-task-id: $TASK_ID -->"
+            # Idempotent lookup: first try HTML comment metadata (current + legacy
+            # product-name tags), then fall back to title
+            METADATA_TAG="<!-- SprintBias-task-id: $TASK_ID -->"
+            METADATA_TAG_LEGACY="<!-- sprint.md-task-id: $TASK_ID -->"
             EXISTING=$(jq -c "select(.body | contains(\"$METADATA_TAG\"))" /tmp/cache.json 2>/dev/null | head -1 || true)
+            if [ -z "$EXISTING" ]; then
+              EXISTING=$(jq -c "select(.body | contains(\"$METADATA_TAG_LEGACY\"))" /tmp/cache.json 2>/dev/null | head -1 || true)
+            fi
             if [ -z "$EXISTING" ]; then
               # Fallback: title-based lookup for issues created before metadata was added
               EXISTING=$(jq -c "select(.title | startswith(\"Task $TASK_ID:\"))" /tmp/cache.json 2>/dev/null | head -1 || true)
@@ -265,7 +270,7 @@ jobs:
 
             # Build body with HTML comment metadata for idempotent lookup
             BODY=$(printf '%s\n' \
-              "<!-- sprint.md-task-id: $TASK_ID -->" \
+              "<!-- SprintBias-task-id: $TASK_ID -->" \
               "| Field | Value |" \
               "|-------|-------|" \
               "| Status | $STATUS |" \
@@ -396,11 +401,11 @@ jobs:
             state=$(echo "$line" | jq -r '.state')
             labels=$(echo "$line" | jq -r '.labels | join(" ")')
 
-            # Extract task ID from metadata comment or title
+            # Extract task ID from metadata comment (current or legacy) or title
             body=$(echo "$line" | jq -r '.body // ""')
             tid=""
-            if echo "$body" | grep -qoE 'sprint.md-task-id: [0-9]+'; then
-              tid=$(echo "$body" | grep -oE 'sprint.md-task-id: [0-9]+' | grep -oE '[0-9]+')
+            if echo "$body" | grep -qoE '(SprintBias|sprint\.md)-task-id: [0-9]+'; then
+              tid=$(echo "$body" | grep -oE '(SprintBias|sprint\.md)-task-id: [0-9]+' | grep -oE '[0-9]+' | head -1)
             fi
             if [ -z "$tid" ]; then
               tid=$(echo "$title" | grep -oE '^Task ([0-9]+):' | grep -oE '[0-9]+')
@@ -460,7 +465,7 @@ jobs:
               esac
 
               BODY=$(printf '%s\n' \
-                "<!-- sprint.md-task-id: $tid -->" \
+                "<!-- SprintBias-task-id: $tid -->" \
                 "| Field | Value |" \
                 "|-------|-------|" \
                 "| Status | $STATUS |" \

@@ -1,6 +1,6 @@
 # Command Matrix
 
-How every sprint.md command earns its name.
+How every SprintBias command earns its name.
 
 A command that won't sit in one cell is the wrong command — fix the command,
 not the matrix. This file is the **target-state spec**. When live behavior and
@@ -101,11 +101,14 @@ stored DONE status.
 ### work — autonomous transform
 
 Command		Does
-work [limit]	Execute READY tasks in next/ → review/
+work			Execute all READY tasks in next/ → review/
+work \<id\>		Work ONE task by number; auto-gate into next/ if out of frame, else re-run
+work count N	Execute at most N READY tasks (replaces the old bare-number cap)
 loop			Autopilot: plan start refill + work drain
 gate [folder]	READY-gate next/ (default), or quality report on another folder
 split \<path\>	One-shot: one large task → atomic children (no conversation)
 polish …		Post-work quality: sweep review/, deep-judge a file, or --code
+promote [id]	Test-gated close: run each review/ task's **Tests**, all green → done/
 
 Happy path: `plan start` → `work`. `plan start` already gates on commit, so
 `gate` is off-spine — re-gate after edits, or report on backlog/doing/blocked.
@@ -115,16 +118,40 @@ gate step on that spine.
 `polish` is the one post-work quality surface (sweep / deep-judge / code fix).
 Argument shape selects the mode; do not re-split it into sibling commands.
 
+**Completion path — two gates, one lifecycle.** The same dependency edge gates
+both ends of a task's life:
+
+- **`Depends on` gates `work`.** A task does not *run* until every prerequisite
+  reaches `review/` or `done/`. `work` holds a dependent until then.
+- **`Tests` gates `promote`.** A task does not *close* until the suite scripts
+  named in its **Tests** field all pass. `promote` is the one automated
+  `review/ → done/` move; a task with `Tests: none` waits for human sign-off.
+
+When a plan's every member reaches `done/`, `promote` names it for retirement
+via `plan done` (which then deletes the plan file). See
+`docs/guides/running-tests.md` for the suite ladder.
+
+*In flight (plan 15, task #333):* `promote` will also honor `Depends on` —
+closing in dependency order so a dependent never lands in `done/` while its
+prerequisite is still open — and `validate` will guard the **Tests** field so a
+path that is missing or outside `docs/tests/` is reported, never a silent
+never-promote.
+
 ### look — read, don't mutate
 
 Command		Does
-status			Board counts, blocked, in-progress, features, bugs
+status			Board counts, blocked/ (needs decision), in-progress, features, bugs
 search \<kw\>		Find tasks by keyword
+learn [name]	Watch the flow run — catalog (no name) or play a sandboxed demo by name
 align			Feature ↔ task alignment
 context			Project summary for an AI session
 
+`learn` is read-only theater: a demo writes nothing, moves no task files, and
+makes no network calls, so it earns the look family. It is **not on the spine** —
+watching a demo teaches the chat → plan start → work loop; it never runs it.
+
 `status` stays a noun on purpose — universal CLI habit (`git status`), zero
-translation cost. The other three are short verbs or plain nouns that read as
+translation cost. The rest are short verbs or plain nouns that read as
 actions when typed.
 
 ### keep — housekeep
@@ -160,6 +187,27 @@ commands like `work-grok` or a top-level `provider` verb for one-shot switches.
 Last leading flag wins if both are passed. Flags after the command name are
 command-local, not these.
 
+### Per-command flags — `--help` and `--demo`
+
+Trailing flags on any command (**after** the command name). Command-local, not
+the leading launcher flags above.
+
+Flag		Does
+--help / -h	Explain the command — usage, flags, behavior (text explains)
+--demo		Play the walkthrough mapped to this command (theater shows)
+
+`--help` explains; `--demo` shows. The pair is symmetric and data-driven: an
+optional 5th field on `docs/sprintmd/help/_registry` maps a command to a demo
+name. When that field is set, the command's `--help` output ends with a one-line
+pointer (`Demo:  ./sprint.sh <cmd> --demo`) and `<cmd> --demo` plays that demo
+through the same engine as `learn`. Unmapped commands carry **no** pointer (no
+dead affordance) and soft-fail on a bare `--demo` — a one-line "no demo, try
+`learn`" that exits clean. `learn` owns the catalog and plays by name, so it is
+exempt from the `--demo` intercept.
+
+`--demo` is a **flag on a command**, not a command itself and not a leading
+launcher flag. Never mint `demo <cmd>`.
+
 ---
 
 ## Placement rules
@@ -180,6 +228,15 @@ Registry groups, help sections, and this matrix use the **same six labels**:
 `create · chat · plan · work · look · keep`. No parallel taxonomy
 (pipeline / workflow / maint / …). Global provider switches stay **launcher
 flags** (`-c` / `-g`), not a seventh family.
+
+**Demos are data, not a family.** Placement for the `learn` / `--demo` pair:
+
+If the demo...					Then reach it with...
+teaches a host command			registry 5th-field map + `<cmd> --demo`
+has no host command				`learn <name>` only (the catalog)
+
+Never mint `demo <cmd>` and never add a demo family — `--demo` is a per-command
+flag and `learn` is the one look-family catalog.
 
 ---
 

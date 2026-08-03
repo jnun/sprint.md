@@ -127,7 +127,7 @@ Things we believe are established. Burn-down confirms or corrects them.
 | KK-42 | Plan status STARTED is one-way; retirement is `plan done` (delete file) | Progress lives in task folders | plan lifecycle |
 | KK-43 | Unit test `test-grok-provider.sh` covers tier, emit detect, profile, map, helpers | Not a substitute for TUI/emit dogfood | plan 5 #256 |
 | KK-44 | Per-AI product instruction trees are **rejected** as default design | Core doctrine + code adapters | design chat |
-| KK-45 | This repo dogfoods sprint.md; users do not get our tasks/board | Smoke must also use fresh setup | dual tree |
+| KK-45 | This repo dogfoods SprintBias; users do not get our tasks/board | Smoke must also use fresh setup | dual tree |
 
 ---
 
@@ -281,7 +281,7 @@ and real-project work, append under **Surfaced unknowns** below.
 <!-- Append as smoke and real projects hit them.
      Format: - YYYY-MM-DD — short description — disposition (NEW TASK / DEFER / fixed) -->
 
-- 2026-07-30 — Grok `--tools` with **invalid** tool id still allowed shell execution (soft fail / ignore). Disposition: document in #291; not a sprint.md map bug.
+- 2026-07-30 — Grok `--tools` with **invalid** tool id still allowed shell execution (soft fail / ignore). Disposition: document in #291; not a SprintBias map bug.
 - 2026-07-30 — Product docs disagree on shell id (`run_terminal_cmd` vs `run_terminal_command`); both work live. Disposition: COVERED by #291 pin dual-alias + prefer `run_terminal_command`.
 
 ---

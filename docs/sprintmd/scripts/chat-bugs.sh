@@ -38,7 +38,8 @@ AI_MODE="$(sprintmd_ai_mode)"
 
 # Cheap model for the fast verdict pass. The deep "define it" path runs the full
 # refinement conversation on the strong TALK model, chosen at that point.
-_triage_model="$(sprintmd_resolve_model TRIAGE)"
+# Coerce foreign pins; empty → provider strong default (grok-4.5 / opus).
+_triage_model="$(sprintmd_tier_model TRIAGE)"
 _verdict_model_args=()
 [ -n "$_triage_model" ] && _verdict_model_args=(--model "$_triage_model")
 
@@ -343,11 +344,13 @@ Rules:
       ;;
     d|D)
       echo -e "  ${BLUE}-> Going deep: refining the report...${NC}"
+      # Nested TUI owns the terminal until the user leaves it (same as chat-folder [d]).
+      echo -e "  ${DIM}When finished, type /quit (or quit) to return to the sweep.${NC}"
       # Shared Conversation Method — stated once in ai/conversation.md.
       _METHOD="$(sprintmd_conversation_method)" || exit 1
       _define_prompt="Refine this BUG REPORT with the filer until any developer can reproduce and verify the fix.
 
-Bug: $file — read now. NOT a task (## Problem, ## Steps to reproduce, **Severity:**, ## Success criteria, ## Notes). No Depends on/Blocks/Parent/Status.
+Bug: $file — read now. NOT a task (## Problem, ## Steps to reproduce, **Severity:**, ## Success criteria, ## Notes). No Depends on/Dependents/Parent/Status.
 
 $_METHOD
 
@@ -357,14 +360,17 @@ RULES:
 - One question at a time. Observable behaviour only — no code/patches.
 - Steps: numbered, clear start, followable cold.
 - Success: checkboxes (\"User can …\" / \"System shows …\" / \"[x] no longer causes [y]\").
-- WRITES: only $file. When clear: show final state; convert via chat bugs → [w] (creates the fix task and deletes this report)."
+- WRITES: only $file. When clear: show final state; convert via chat bugs → [w] (creates the fix task and deletes this report).
+- LEAVE THE SESSION: when the report is clear, tell the user in one line to type \`/quit\` (or \`quit\` / \`/exit\`) to leave this interactive session and return to the bug sweep. Edits are already on disk. Do not open a new question after that cue."
+      # Real pty slave RDWR — same handoff as chat-folder [d] (see sprintmd_tty).
+      # <>/dev/tty wedges Claude/Grok TUIs after turn 1; </dev/tty is O_RDONLY.
       sprintmd_run_interactive \
         --append-system-prompt "$_define_prompt" \
         ${_chat_model_args[@]+"${_chat_model_args[@]}"} \
         --tools "Read,Edit,Write,Bash,Grep,Glob" \
         --permissions "auto" \
         --name "chat-bug-${bugname%%-*}" \
-        "Read the bug report at $file, size it up, and start refining it — one detail at a time." </dev/tty || true
+        "Read the bug report at $file, size it up, and start refining it — one detail at a time." <>"$(sprintmd_tty)" || true
       echo ""
       echo -e "  ${DIM}Refinement complete. Continuing the sweep...${NC}"
       defined=$((defined + 1))

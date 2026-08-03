@@ -49,6 +49,40 @@ new tasks not yet committed — finish that same move with plain `mv`, then
 continue. Leave commits to the developer unless they asked you to commit.
 Full table: `DOCUMENTATION.md` → Moving Tasks.
 
+## Keep the dependency graph reciprocal (fold / split / retire)
+
+**Depends on** and **Dependents** are the two ends of one edge — they stay in
+sync. When you mint, fold, split, or retire a task, route the edge change
+through the shared lib helpers so both ends move together. Never hand-edit one
+side and trust yourself to remember the other; the helper is the single writer
+so the graph heals under stress instead of accumulating orphans.
+
+Load them once, then call the one that fits (from the repo root):
+
+```bash
+source docs/sprintmd/lib.sh
+```
+
+- **Mint a child that depends on N** — after you write the child's
+  `**Depends on**: N`, make the reverse edge:
+  `sprintmd_ensure_reciprocal N <child-id>` (adds the child to N's
+  **Dependents**). Do this for every id on the child's **Depends on** line.
+- **Fold A into B** — `sprintmd_rewrite_dep_id A B`. Every task that depended
+  on A now depends on B, A's **Dependents** move onto B, and A is stamped with
+  a fold note. Then, for each task that depended on A,
+  `sprintmd_ensure_reciprocal B <that-id>` so B lists them back. Retire A last.
+- **Split** — children get reciprocal edges among themselves (the rule above);
+  then fold the parent into its first child (`sprintmd_rewrite_dep_id <parent>
+  <first-child>`) before retiring the parent, so nothing is left pointing at the
+  deleted id. `split` and `chat`'s SPLIT mode already do this.
+- **Retire without a fold** — do not silently drop a real prerequisite to make a
+  dependent look runnable (the DEPENDENT ON HOLD rules stand). Either fold the
+  edge onto its replacement, or leave the broken edge to be surfaced: `chat`
+  (the sprint walk) and `validate` report a dangling id, and
+  `sprintmd_classify_dep <id>` classifies a missing prereq (broken / folded /
+  archived) rather than assuming it complete. A retired task counts as complete
+  only under the missing-id policy, never by accident.
+
 ## The Q&A Process
 
 Before creating any task, work through these questions with the user:
@@ -71,11 +105,30 @@ Ask:
 
 ### 3. Map the Dependencies and Reuse
 
+Dependencies are sequencing, not a blocked state. A task that needs another
+task finished first is **dependent** (on hold until that prerequisite lands) —
+it is not blocked. **Blocked** / **BLOCKED** means a decision or clarification
+is needed about *this* task.
+
 Ask:
-- "Does anything need to be done first?" (→ **Depends on**)
-- "Will this hold up other work until it's finished?" (→ **Blocks**)
+- "Does anything need to be done first?" (→ **Depends on** — prerequisites)
+- "What other work waits on this one?" (→ **Dependents** — the reverse edge)
+- "Which plan does this belong to?" (→ **Plan** — plan membership)
 - "What existing files or code does this touch?" (→ **References** — reuse, don't reinvent)
 - "Is there a guide or feature spec this follows?" (→ **Docs** / **Feature**)
+- "What suite script proves the success criteria?" (→ **Tests** — or leave `none`)
+
+**Depends on** and **Dependents** are the two ends of the same edge: if A lists
+B under **Depends on**, then B lists A under **Dependents**. Always write
+**Dependents** (legacy files may still say **Blocks**; readers accept that alias).
+Neither field means the `blocked/` folder — that is a decision on *this* task.
+
+**Docs** vs **Tests**: **Docs** is what you read while building; **Tests** is
+what `./sprint.sh promote` runs to close `review/ → done/`. Set **Tests** only
+to real `docs/tests/*.sh` paths that prove the success criteria (comma-separate
+several — all must pass). Leave `none` when a human must sign off. Do not put
+product test loops (`newtest` markdown) in **Tests**. Do not invent a path that
+does not exist yet.
 
 ### 4. Define Success Behaviorally
 
@@ -102,9 +155,11 @@ The header carries the task's place in the larger body of work. Set what applies
 - **Feature** — the feature this builds toward, e.g. `/docs/features/user-auth.md`. `none` if no feature applies.
 - **Created** — date the task was created (`YYYY-MM-DD`). Set automatically by `./sprint.sh newtask`; used for time audits.
 - **Docs** — a guide the implementer should follow, e.g. `docs/guides/script-template-sync.md`. `none` if there is none.
-- **Depends on** — task IDs that must be finished before this one can start.
-- **Blocks** — task IDs that cannot proceed until this one is done.
-- **Parent** — a task that groups this one with related work.
+- **Plan** — the plan this task belongs to, e.g. `15` for `docs/plans/15-…`. Reverse index of plan membership only. `none` if not in a plan. The plan *file* remains the membership authority.
+- **Depends on** — prerequisite task IDs that must finish before this one can start. The runner holds a READY dependent task until those land in review/ or done/ — sequencing, not a block.
+- **Dependents** — reverse edge: task IDs that wait on this one. Graph metadata only — does not put anyone in `blocked/`. Write **Dependents**; readers still accept legacy **Blocks**.
+- **Parent** — a task that groups this one with related work. Task-to-task only; not **Plan**.
+- **Tests** — suite scripts that prove the success criteria so `./sprint.sh promote` may move `review/ → done/` without a human. Paths under `docs/tests/` (typically `test-*.sh`); comma-separate several — **all** must pass. `none` = human sign-off in `review/`. Set only when a real script already proves the criteria; a hopeful path that is missing keeps the task in `review/`. Write **Tests**; readers still accept legacy **Proven by**.
 
 ### Problem Section
 
@@ -148,5 +203,5 @@ docs/features/task-automation.md — spec this serves
 1. Someone unfamiliar with the codebase can understand the problem
 2. Success criteria describe observable behaviors an auditor could check
 3. Success criteria and notes state the desired path — no prohibition-shaped rule list
-4. Header fields set what applies (Feature, Docs, Depends on, Blocks)
+4. Header fields set what applies (Feature, Docs, Plan, Depends on, Dependents, Tests)
 5. References name existing files to reuse; technical HOW lives in `docs/guides/`, `docs/examples/`, or `docs/features/`, not inlined here

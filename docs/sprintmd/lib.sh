@@ -1,5 +1,5 @@
 # shellcheck shell=bash
-# docs/sprintmd/lib.sh — shared helper library for sprint.md scripts
+# docs/sprintmd/lib.sh — shared helper library for SprintBias scripts
 # Sourced (not executed) — no shebang or set -euo pipefail; the caller provides those.
 #
 # Source this once at the top of any script that needs config or AI access:
@@ -14,19 +14,25 @@
 #   sprintmd_move_rule         — one-line move rule for AI prompts (same behavior)
 #   run_with_timeout SECS CMD… — portable timeout (coreutils, gtimeout, or shell)
 #   run_with_timeout_dots SECS CMD… — same, with progress dots on the TTY while waiting
+#   _sprintmd_heartbeat_start / _stop — tick dots on the TTY during a quiet,
+#                                output-captured run so it never looks hung
 #   kebab_case STRING          — lowercase, hyphenated slug
 #   sprintmd_slug NAME [MAX]    — kebab_case + length cap + empty guard (returns 1)
 #   sprintmd_cfg KEY            — read a value from docs/sprintmd/config
 #   sprintmd_cfg_set KEY VALUE  — update or append a value in config
-#   sprintmd_resolve_model SFX  — model resolution: env > config > default
-#   sprintmd_tier_model SFX     — sprintmd_resolve_model; strong default on
+#   sprintmd_resolve_model SFX  — model resolution: env > config > default;
+#       provider-foreign ids remapped (opus on grok → grok-4.5, etc.)
+#   sprintmd_coerce_model MODEL — remap Claude/Grok-only ids for active tier
+#   sprintmd_tier_model SFX     — resolve + strong default on
 #       claude-code (opus) and grok-build (grok-4.5) when config is empty
 #   sprintmd_profile_line       — one-line pointer to project.md (empty if absent)
 #   sprintmd_conversation_method — contents of ai/conversation.md (loud fail if missing)
-#   sprintmd_next_blocked_resolution — prompt block: walk one next→blocked BLOCKER
+#   sprintmd_next_blocked_resolution — prompt: dependent in next/ held on task in blocked/
 #       (two-path choice, demote inline for B, hand off to chat for A). Shared
 #       by chat-sprint.sh and the chat-next folder walk so the logic is written once.
 #   sprintmd_find_task ID [dirs…] — resolve a task file by numeric ID
+#   sprintmd_task_stage ID        — lifecycle stage folder name (or empty)
+#   sprintmd_task_path ID         — path to the task file (or empty)
 #   sprintmd_review_verdict FILE — READY/BLOCKED/COMPLETE stamp from a gate review
 #   sprintmd_log_path KIND NAME — timestamped log path under docs/tmp
 #   sprintmd_load_profile [cli] — source the provider profile (sprintmd_provider_exec)
@@ -34,21 +40,43 @@
 #   sprintmd_ai_mode            — "emit" or "exec" for the current environment
 #   sprintmd_orchestration_capable — true for tiers with emit subagent fan-out
 #       (claude-code, grok-build)
+#   sprintmd_subagent_type_for ROLE — Grok subagent_type per role (single seam;
+#       work|gate|polish|chain → general-purpose today)
 #   sprintmd_subagent_tool_name — "Task tool" | "spawn_subagent" for prompt wording
-#   sprintmd_subagent_spawn_phrase [purpose] — "Launch a NEW subagent …" fragment
-#   sprintmd_subagent_own_fresh — "its OWN fresh subagent (…)" fragment
-#   sprintmd_subagent_parallel_dispatch — parallel fan-out instruction line
+#   sprintmd_subagent_spawn_phrase [purpose] [role] — "Launch a NEW subagent …" fragment
+#   sprintmd_subagent_own_fresh [role] — "its OWN fresh subagent (…)" fragment
+#   sprintmd_subagent_parallel_dispatch [role] — parallel fan-out instruction line
+#   sprintmd_subagent_no_nest   — "you are a worker, do NOT re-spawn" worker line
 #   sprintmd_emitted            — true if the last sprintmd_run only emitted a prompt
 #   sprintmd_announce_provider  — once per process: ▸ Provider: cli (tier) · mode: …
 #   sprintmd_run ARGS…          — run AI: emit prompt to stdout, or exec the CLI
 #   sprintmd_interactive_ok     — true if a live session is possible (exec mode,
 #       interactive-capable provider, real TTY) — one source of truth
+#   sprintmd_tty                — real pty slave path (/dev/ttysNN or /dev/pts/N)
+#       for interactive CLI handoffs; falls back to /dev/tty
 #   sprintmd_run_interactive A… — like sprintmd_run, but the exec path is a live
 #       back-and-forth session (inherits the terminal) instead of one-shot
 #   sprintmd_change_manifest TASK_FILE [FILE…] — build audit change manifest;
 #       sets SPRINTMD_CHANGED_FILES and SPRINTMD_CONTEXT_SOURCE
 #   sprintmd_parse_verdict TOKENS — (stdin) last VERDICT token, case/format tolerant
 #   sprintmd_extract_summary JSON — print the summary text from a CLI JSON log
+#   Dependency-graph helpers (pure, unit-testable — no AI):
+#     SPRINTMD_OPEN_STAGES        — stages still holding incomplete work
+#     sprintmd_stage_is_open STAGE — 0 when STAGE is an open (incomplete) stage
+#     sprintmd_reverse_edge_value FILE — Dependents value (legacy Blocks fallback)
+#     sprintmd_fold_target FILE   — id a task was folded into, or empty
+#     sprintmd_classify_dep ID [MISSING_AS] — one token:
+#         review|done|doing|next|backlog|blocked|folded|missing (policy knob)
+#     sprintmd_dependents_of ID   — ids that depend on ID (forward + reverse edges)
+#     sprintmd_rewrite_dep_id FROM TO — fold FROM→TO across Depends on/Dependents/
+#         Blocks on every task; leave a fold note on FROM's kept file
+#     sprintmd_ensure_reciprocal DEP DEPENDENT — ensure DEP lists DEPENDENT back
+#   Plan-membership reverse index (plan file is authority; task **Plan** mirrors):
+#     sprintmd_plan_member_ids PLAN_FILE — member task ids, one per line
+#     sprintmd_primary_plan_of ID — the task's single primary (lowest) plan id
+#     sprintmd_set_task_plan FILE VALUE — write the **Plan** field (none|id)
+#     sprintmd_reconcile_task_plan ID — refresh one task's **Plan** from the plans
+#     sprintmd_plan_index_drift [--fix] — report/repair Plan drift both ways
 
 _SPRINTMD_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
@@ -145,6 +173,10 @@ run_with_timeout() {
 run_with_timeout_dots() {
     local secs="$1"; shift
     local tmp pid ret n=0 out
+    # We own the ticker for this call — suppress any provider-level heartbeat
+    # nested inside "$@" so dots never double up. `local` scopes the claim to
+    # this call and is inherited by the backgrounded subshell that runs "$@".
+    local _SPRINTMD_HEARTBEAT_ON=1
 
     tmp=$(mktemp "${TMPDIR:-/tmp}/sprintmd-wait.XXXXXX") || return 1
 
@@ -175,6 +207,45 @@ run_with_timeout_dots() {
     cat "$tmp"
     rm -f "$tmp"
     return "$ret"
+}
+
+# ── Progress heartbeat ───────────────────────────────────────────────
+# A headless AI run that captures its own stdout/stderr leaves the terminal
+# silent, so a multi-minute pass looks hung. These two helpers tick dots on
+# the TTY while such a run is in flight, then close the line. Unlike
+# run_with_timeout_dots (which owns the command), these bracket a call the
+# provider already runs in the foreground: _start backgrounds a ticker,
+# _stop kills it. Both are no-ops when there is no terminal to draw on
+# (output captured, piped, or CI) and when a heartbeat is already running
+# (an outer run_with_timeout_dots owns the line) so dots never double up.
+# Pace with SPRINTMD_HEARTBEAT_SECS (default 2). Pair every _start with _stop.
+_SPRINTMD_HEARTBEAT_PID=""
+_sprintmd_heartbeat_start() {
+    _SPRINTMD_HEARTBEAT_PID=""
+    # Skip if an outer ticker already owns the line, or there is no TTY.
+    [ -z "${_SPRINTMD_HEARTBEAT_ON:-}" ] || return 0
+    { true >/dev/tty; } 2>/dev/null || return 0
+    _SPRINTMD_HEARTBEAT_ON=1
+    ( trap 'exit 0' TERM
+      n=0
+      while :; do
+          sleep "${SPRINTMD_HEARTBEAT_SECS:-2}"
+          printf '.' >/dev/tty 2>/dev/null || exit 0
+          n=$((n + 1))
+          [ $((n % 48)) -eq 0 ] && printf '\n' >/dev/tty 2>/dev/null
+      done ) &
+    _SPRINTMD_HEARTBEAT_PID=$!
+    # disown so bash prints no "Terminated" job notice when we kill it.
+    disown "$_SPRINTMD_HEARTBEAT_PID" 2>/dev/null || true
+}
+_sprintmd_heartbeat_stop() {
+    if [ -n "${_SPRINTMD_HEARTBEAT_PID:-}" ]; then
+        kill "$_SPRINTMD_HEARTBEAT_PID" 2>/dev/null || true
+        _SPRINTMD_HEARTBEAT_PID=""
+        # Close the dotted line so the next banner/result starts clean.
+        { printf '\n' >/dev/tty; } 2>/dev/null || true
+    fi
+    unset _SPRINTMD_HEARTBEAT_ON 2>/dev/null || true
 }
 
 # kebab_case "Some Title!" -> "some-title"
@@ -235,29 +306,81 @@ sprintmd_cfg_set() {
 # ── Model resolver ───────────────────────────────────────────────────
 # Usage: model=$(sprintmd_resolve_model WORK)
 #
-# Precedence: env SPRINTMD_MODEL_<SUFFIX> > config MODEL_<SUFFIX>
-#             > config MODEL_DEFAULT > empty (CLI picks its own)
+# Precedence, highest first:
+#   env SPRINTMD_MODEL_<SUFFIX>  per-role, this-shell override
+#   env SPRINTMD_MODEL_DEFAULT   per-run lever — what a spine command's
+#                                --model <id> flag exports for one invocation
+#   config MODEL_<SUFFIX>        per-role pin in docs/sprintmd/config
+#   config MODEL_DEFAULT         global pin
+#   empty                        CLI picks its own
+# Non-empty results are coerced for the active provider (see
+# sprintmd_coerce_model) so a leftover MODEL_GATE=opus after switching to
+# Grok never reaches the CLI as an unknown model id.
 sprintmd_resolve_model() {
     local suffix="$1"
     local env_var="SPRINTMD_MODEL_${suffix}"
+    local val=""
 
-    # Environment variable wins
+    # Per-role env var wins outright.
     if [ "${!env_var+set}" = "set" ]; then
-        printf '%s' "${!env_var}"
-        return
+        val="${!env_var}"
+    # A single --model <id> on a spine command exports SPRINTMD_MODEL_DEFAULT so
+    # one invocation pins every role it touches without editing config. It beats
+    # config (a per-run choice should) but yields to an explicit per-role env.
+    elif [ -n "${SPRINTMD_MODEL_DEFAULT:-}" ]; then
+        val="$SPRINTMD_MODEL_DEFAULT"
+    else
+        # Config per-script model
+        val=$(sprintmd_cfg "MODEL_${suffix}")
+        if [ -z "$val" ]; then
+            # Config global default
+            val=$(sprintmd_cfg "MODEL_DEFAULT")
+        fi
     fi
 
-    # Config per-script model
-    local val
-    val=$(sprintmd_cfg "MODEL_${suffix}")
-    if [ -n "$val" ]; then
-        printf '%s' "$val"
-        return
-    fi
+    sprintmd_coerce_model "$val"
+}
 
-    # Config global default
-    val=$(sprintmd_cfg "MODEL_DEFAULT")
-    printf '%s' "$val"
+# sprintmd_coerce_model MODEL
+# Map a resolved model id onto something the active provider understands.
+# Empty stays empty (caller / CLI may pick their own default). Claude-only
+# aliases (opus, sonnet, haiku, claude-*) on grok-build → grok-4.5; Grok
+# aliases (grok-*) on claude-code → opus. Warns once per process when a
+# remap happens so the operator can clear stale MODEL_* pins in config.
+sprintmd_coerce_model() {
+    local model="$1" tier coerced=""
+    if [ -z "$model" ]; then
+        printf ''
+        return 0
+    fi
+    tier="$(sprintmd_ai_tier)"
+    case "$tier" in
+        grok-build)
+            case "$model" in
+                opus|sonnet|haiku|OPUS|SONNET|HAIKU|claude*|Claude*|CLAUDE*)
+                    coerced="grok-4.5"
+                    ;;
+            esac
+            ;;
+        claude-code)
+            case "$model" in
+                grok*|Grok*|GROK*)
+                    coerced="opus"
+                    ;;
+            esac
+            ;;
+    esac
+    if [ -n "$coerced" ]; then
+        if [ -z "${_SPRINTMD_MODEL_COERCE_WARNED:-}" ]; then
+            printf 'SprintBias: model %s is not valid for %s — using %s\n' \
+                "$model" "$tier" "$coerced" >&2
+            printf '  Clear stale MODEL_* pins in docs/sprintmd/config (or re-run setup).\n' >&2
+            _SPRINTMD_MODEL_COERCE_WARNED=1
+        fi
+        printf '%s' "$coerced"
+        return 0
+    fi
+    printf '%s' "$model"
 }
 
 # ── Tier-aware model resolver ────────────────────────────────────────
@@ -266,11 +389,13 @@ sprintmd_resolve_model() {
 # Like sprintmd_resolve_model, but when nothing is configured (env/config both
 # empty) and the provider tier supports model selection, fall back to a strong
 # default instead of letting the CLI pick a cheaper one. For interactive,
-# reasoning-heavy flows — feature Q&A, idea Feynman, chat — the best model is
-# worth it unless the user has pinned one.
+# reasoning-heavy flows — feature Q&A, idea Feynman, chat — and for the work
+# spine (gate / work / polish), the best model is worth it unless the user has
+# pinned one.
 #   claude-code → opus
 #   grok-build  → grok-4.5 (re-verify with `grok models` if the product renames)
 # Other tiers return empty (their default.sh passthrough would only warn).
+# Provider-foreign pins are already remapped by sprintmd_resolve_model.
 sprintmd_tier_model() {
     local suffix="$1" model
     model="$(sprintmd_resolve_model "$suffix")"
@@ -302,18 +427,19 @@ sprintmd_conversation_method() {
     local f="$_SPRINTMD_LIB_DIR/ai/conversation.md"
     if [ ! -f "$f" ]; then
         echo -e "${RED}ERROR: Conversation Method missing: $f${NC}" >&2
-        echo "Expected docs/sprintmd/ai/conversation.md (shipped with sprint.md)." >&2
+        echo "Expected docs/sprintmd/ai/conversation.md (shipped with SprintBias)." >&2
         return 1
     fi
     cat "$f"
 }
 
-# ── Shared walkthrough instruction: resolving a next→blocked BLOCKER ──
-# A next/ task that depends on a task still parked in blocked/ can never run —
-# the executor silently HOLDS it until the dependency leaves blocked/. Both the
-# no-id sprint walk (chat-sprint.sh) and the folder walk (chat next) surface this
-# edge, and BOTH must resolve it the same way. Written once here so neither
-# reimplements — and drifts from — the other.
+# ── Shared walkthrough: dependent in next/ held on an undefined task in blocked/ ──
+# Lexicon: <D> is DEPENDENT (on hold) — not blocked. <B> is BLOCKED (needs a
+# decision or clarification). The executor HOLDS <D> until every Depends-on
+# prerequisite leaves blocked/ and reaches review/ or done/. Both the no-id
+# sprint walk (chat-sprint.sh) and the folder walk (chat next) surface this
+# edge the same way. Written once here so neither reimplements — and drifts
+# from — the other.
 #
 # Emits the prompt block that tells the conversational layer how to walk ONE such
 # edge: present the two real paths as a choice, action Path B (demote) inline,
@@ -326,26 +452,26 @@ sprintmd_conversation_method() {
 sprintmd_next_blocked_resolution() {
     local path_a
     if [ "$(sprintmd_ai_mode)" = "emit" ] && sprintmd_orchestration_capable; then
-        path_a="Hand this off to a FRESH context — do NOT redefine the dependency inline here. $(sprintmd_subagent_spawn_phrase "the blocked dependency"), aimed at the MOST-UPSTREAM undefined one first (the dependency whose own '**Depends on**' has no undefined deps left; break ties by lowest id). Its entire instruction: 'Run ./sprint.sh chat <dep-id> and carry that task as far toward READY as you can on your own — read any *Context from chat* note in its file, refine it, and if a question genuinely needs the human, leave it in the file's ## Questions section and report it back.' Tell the user you spun up a fresh agent for <dep-id> and say in one line what it is picking up."
+        path_a="Hand this off to a FRESH context — do NOT resolve the dependency inline here. $(sprintmd_subagent_spawn_phrase "the dependency that needs a decision (in blocked/)" chain), aimed at the MOST-UPSTREAM one first (the dependency whose own '**Depends on**' has no unresolved blocked deps left; break ties by lowest id). Its entire instruction: 'Run ./sprint.sh chat <dep-id> and carry that task as far toward READY as you can on your own — read any *Context from chat* note in its file, refine it, and if a question genuinely needs the human, leave it in the file's ## Questions section and report it back.' Tell the user you spun up a fresh agent for <dep-id> and say in one line what it is picking up."
     else
-        path_a="Hand this off — do NOT redefine the dependency inline here. Tell the user the exact command to run in a FRESH window:  ./sprint.sh chat <dep-id>  (for the most-upstream undefined dependency). Keeping each session's context small is the point of chaining out."
+        path_a="Hand this off — do NOT resolve the dependency inline here. Tell the user the exact command to run in a FRESH window:  ./sprint.sh chat <dep-id>  (for the most-upstream dependency still in blocked/). Keeping each session's context small is the point of chaining out."
     fi
-    printf '%s' "─── RESOLVING A next→blocked BLOCKER (dependent task <D> in next/ depends on task <B> in blocked/) ───
-A next/ task that depends on a task still sitting in blocked/ can NEVER run: the executor ('work') silently HOLDS it until the dependency leaves blocked/. Do not merely report this — close the loop. Present the TWO REAL paths as an explicit choice and act on the one the user picks. Do NOT frame 'drop the Depends on line' as a way out of a genuine block — that only makes <D> LOOK runnable while the work it needs is still undone (the folder-satisfaction trap).
+    printf '%s' "─── DEPENDENT ON HOLD: <D> in next/ depends on <B> still in blocked/ ───
+Lexicon: <D> is DEPENDENT (on hold until its prerequisite is done) — not blocked. <B> is BLOCKED (a decision or clarification is needed on <B>). The executor ('work') HOLDS <D> in next/ until every '**Depends on**' prerequisite reaches review/ or done/. Do not merely report this — close the loop. Present the TWO REAL paths as an explicit choice and act on the one the user picks. Do NOT frame 'drop the Depends on line' as a way out of a genuine prerequisite — that only makes <D> LOOK runnable while the work it needs is still undone (the folder-satisfaction trap).
 
-PATH A — DEFINE THE BLOCKED DEPENDENCY <B> (choose when the dependency is real and still needed):
+PATH A — RESOLVE THE BLOCKED DEPENDENCY <B> (choose when the dependency is real and still needed):
 ${path_a}
-Either way, chat's own close-the-loop branch re-enters the sprint only through the shared gate (bash docs/sprintmd/scripts/promote-to-sprint.sh <B-file>) — READY → next/, BLOCKED stays with a reason — which makes <D> runnable when gate grades READY. You do not rebuild that machinery here; you point at chat <B>.
+Either way, chat's own close-the-loop branch re-enters the sprint only through the shared gate (bash docs/sprintmd/scripts/promote-to-sprint.sh <B-file>) — READY → next/, BLOCKED stays when a decision or clarification is still needed — which releases <D> from hold when gate grades READY. You do not rebuild that machinery here; you point at chat <B>.
 
 PATH B — DEMOTE THE DEPENDENT TASK <D> BACK TO backlog/ (choose to pull it out of the sprint):
-On the user's OK, action this INLINE: move <D> out of the sprint so next/ holds no work blocked on an undefined task —  git mv docs/tasks/next/<D-file> docs/tasks/backlog/<D-file> || mv docs/tasks/next/<D-file> docs/tasks/backlog/<D-file>. THEN RE-SCAN next/ for any OTHER task that also depends on <B>: the preflight already emitted a SEPARATE BLOCKER finding for each (next task, blocked dep) pair, so <B>'s other dependents are already in the findings list — recognize them by the same blocked id <B>, do not run a fresh board scan. Only when NONE remain may you say 'the sprint no longer contains work blocked on <B>.' If siblings remain, name them and offer to resolve each in turn (A or B).
+On the user's OK, action this INLINE: move <D> out of the sprint so next/ holds no work waiting on a task that still needs a decision —  git mv docs/tasks/next/<D-file> docs/tasks/backlog/<D-file> || mv docs/tasks/next/<D-file> docs/tasks/backlog/<D-file>. THEN RE-SCAN next/ for any OTHER task that also depends on <B>: the preflight already emitted a SEPARATE finding for each (next dependent, dep in blocked/) pair, so <B>'s other dependents are already in the findings list — recognize them by the same blocked id <B>, do not run a fresh board scan. Only when NONE remain may you say 'the sprint no longer contains work waiting on <B>.' If siblings remain, name them and offer to resolve each in turn (A or B).
 
 THE DROP PATH — a metadata correction for a STALE or SPURIOUS edge ONLY, and only after an on-the-spot audit:
 Dropping the '**Depends on**:' line is NOT one of the two resolution paths above. It is reserved for an edge that is not a genuine dependency. Before you may even offer it, AUDIT THE EDGE on the spot — a bounded, READ-ONLY reasoning step, NOT a gate pass: read WHY <D> needed <B> (what <D>'s Problem/Success actually required from <B>) and check whether that need is already satisfied elsewhere or has become obsolete. ONLY an edge that FAILS this audit (need already met / no longer needed) may be dropped from <D>'s Depends on line. An edge whose need still stands IS a real dependency: route to A or B, never drop. No audit, no drop."
 }
 
 # Resolve a task file by numeric ID. Prints "path<TAB>stage-dir" on success.
-# Default search order matches the task lifecycle.
+# Default search order matches the task lifecycle (open stages only).
 sprintmd_find_task() {
     local id="$1"; shift
     local dirs=("$@")
@@ -363,16 +489,43 @@ sprintmd_find_task() {
     return 1
 }
 
+# The task lifecycle folders, in order. One source of truth for every script
+# that iterates stages (search, validate, check-alignment, sync, chat-sprint…).
+# shellcheck disable=SC2034
+SPRINTMD_STAGES=(backlog next doing blocked review "done")
+
+# sprintmd_task_stage ID -> stage folder name (backlog|next|doing|blocked|review|done)
+# or empty if no file matches. Scans every lifecycle folder.
+sprintmd_task_stage() {
+    local id="$1" stage match
+    for stage in "${SPRINTMD_STAGES[@]}"; do
+        match=$(find "docs/tasks/$stage" -maxdepth 1 -name "${id}-*.md" 2>/dev/null | head -1) || true
+        if [ -n "$match" ]; then
+            printf '%s' "$stage"
+            return 0
+        fi
+    done
+    return 1
+}
+
+# sprintmd_task_path ID -> absolute-or-relative path to the task file, or empty.
+sprintmd_task_path() {
+    local id="$1" stage match
+    for stage in "${SPRINTMD_STAGES[@]}"; do
+        match=$(find "docs/tasks/$stage" -maxdepth 1 -name "${id}-*.md" 2>/dev/null | head -1) || true
+        if [ -n "$match" ]; then
+            printf '%s' "$match"
+            return 0
+        fi
+    done
+    return 1
+}
+
 # Timestamped log path: sprintmd_log_path gate 42-fix-thing.md
 sprintmd_log_path() {
     local kind="$1" name="$2"
     printf 'docs/tmp/log-%s-%s-%s.json' "$kind" "${name%.md}" "$(date +%Y%m%d-%H%M%S)"
 }
-
-# The task lifecycle folders, in order. One source of truth for every script
-# that iterates stages (search, validate, check-alignment, sync, chat-sprint…).
-# shellcheck disable=SC2034
-SPRINTMD_STAGES=(backlog next doing blocked review "done")
 
 # task_id "12-fix-auth.md" (or a full path) -> "12"
 task_id() {
@@ -411,7 +564,7 @@ sprintmd_review_verdict() {
 }
 
 # sprintmd_meta_value FILE FIELD -> value of '**FIELD**:' (empty if absent).
-# FIELD is the label without asterisks, e.g. "Depends on" or "Blocks".
+# FIELD is the label without asterisks, e.g. "Depends on" or "Dependents".
 # Guards so a missing field never trips set -e under command substitution.
 sprintmd_meta_value() {
     local file="$1" field="$2"
@@ -420,7 +573,7 @@ sprintmd_meta_value() {
 }
 
 # sprintmd_iter_id_list VALUE
-# Parse a Depends-on / Blocks style value (comma/space list, N-M ranges).
+# Parse a Depends-on / Dependents style value (comma/space list, N-M ranges).
 # Emits one line per token:
 #   id <N>     — a numeric task ID (ranges expand to one line each)
 #   bad <tok>  — a non-numeric token that is not none/n/a/-
@@ -469,9 +622,9 @@ sprintmd_iter_id_list() {
 # resolves to no task file anywhere is treated as complete (the task finished
 # and was archived), so a stale reference can never wedge a queue. Malformed
 # tokens are ignored here (queue gating); validate-tasks.sh reports them.
-# This is what makes a dependency wait self-clearing: as each dependency lands
-# in review/, the dependent task becomes runnable on the next pass with no
-# human action.
+# Lexicon: unmet deps put the task on hold (dependent) — they do not make it
+# blocked. Self-clearing: as each dependency lands in review/, the dependent
+# becomes runnable on the next pass with no human action.
 sprintmd_unmet_deps() {
     local file="$1" raw id unmet=""
     raw=$(sprintmd_meta_value "$file" "Depends on")
@@ -491,17 +644,387 @@ EOF
     return 0
 }
 
+# ── Dependency-graph helpers ─────────────────────────────────────────
+# Shared primitives so work/chat/split stop inventing half-answers to the same
+# three questions: what stage is a dep in, who depends on a task, and how do we
+# rewrite edges when one id folds into another. Built on sprintmd_task_stage /
+# sprintmd_task_path / sprintmd_meta_value / sprintmd_iter_id_list. Pure enough
+# to unit-test without AI — they read and rewrite files under docs/tasks/ from
+# the repo root, no network and no model. Call sites migrate in #329/#330; this
+# task only lays the seam. Reverse-edge reads honour both the canonical
+# **Dependents** and the legacy **Blocks** spelling (#327 pins the wording).
+
+# Open lifecycle stages — the folders that still hold incomplete work. review/
+# and done/ are complete. One source of truth so scripts stop copying the list
+# (chat-sprint's local OPEN_STAGES migrates onto this in #329).
+# shellcheck disable=SC2034
+SPRINTMD_OPEN_STAGES=(backlog next doing blocked)
+
+# sprintmd_stage_is_open STAGE -> 0 if the stage holds incomplete work.
+sprintmd_stage_is_open() {
+    local s
+    for s in "${SPRINTMD_OPEN_STAGES[@]}"; do
+        [ "$s" = "$1" ] && return 0
+    done
+    return 1
+}
+
+# sprintmd_reverse_edge_value FILE -> the reverse-dependency list value.
+# Prefers the canonical **Dependents**; falls back to legacy **Blocks** for one
+# compatibility window. Empty when neither field is set. Single reader so no
+# script re-invents the Dependents←Blocks fallback (chat-sprint's reverse_edge).
+sprintmd_reverse_edge_value() {
+    local v
+    v=$(sprintmd_meta_value "$1" "Dependents")
+    [ -n "$v" ] && { printf '%s' "$v"; return 0; }
+    sprintmd_meta_value "$1" "Blocks"
+}
+
+# sprintmd_fold_target FILE -> the id a task was folded into, or empty.
+# Recognizes both fold-note shapes sprintmd_rewrite_dep_id may leave:
+#   <!-- folded into #B YYYY-MM-DD -->   (kept-file marker)
+#   **Folded into**: B                   (header form)
+sprintmd_fold_target() {
+    local file="$1" v
+    [ -f "$file" ] || return 0
+    v=$(sprintmd_meta_value "$file" "Folded into")
+    if [ -z "$v" ]; then
+        v=$( { grep -m1 -oE '<!-- *folded into #?[0-9]+' "$file" 2>/dev/null || true; } \
+                | grep -oE '[0-9]+' | head -1 )
+    fi
+    v="${v#\#}"
+    printf '%s' "$v"
+}
+
+# sprintmd_classify_dep ID [MISSING_AS] -> exactly one classification token:
+#   review|done|doing|next|backlog|blocked  — the stage the file sits in
+#   folded                                  — the file carries a fold marker
+#   missing                                 — no file resolves anywhere
+# A folded file reports `folded` regardless of the stage it still occupies, so a
+# kept-but-folded task never masquerades as open work.
+#
+# Missing-id policy is deliberately unbaked (plan 15 open decision; #330 sets the
+# default). When an id resolves to no file this prints MISSING_AS if given (or
+# $SPRINTMD_DEP_MISSING_AS), else the literal `missing`. Pass `done` to adopt the
+# archived-is-complete reading sprintmd_unmet_deps uses today.
+sprintmd_classify_dep() {
+    local id="$1" missing_as="${2:-${SPRINTMD_DEP_MISSING_AS:-missing}}"
+    local stage path
+    stage=$(sprintmd_task_stage "$id") || stage=""
+    if [ -z "$stage" ]; then
+        printf '%s' "$missing_as"
+        return 0
+    fi
+    path=$(sprintmd_task_path "$id") || path=""
+    if [ -n "$path" ] && [ -n "$(sprintmd_fold_target "$path")" ]; then
+        printf 'folded'
+        return 0
+    fi
+    printf '%s' "$stage"
+    return 0
+}
+
+# sprintmd_dependents_of ID -> the task ids that depend on ID (its reverse
+# edges), one per line, numeric-sorted and de-duped. Two sources, unioned:
+#   • every task whose **Depends on** names ID (authoritative forward edge)
+#   • ID's own **Dependents** / legacy **Blocks** field (declared reverse edge)
+# Scans all lifecycle folders so an edge from an archived task still surfaces.
+sprintmd_dependents_of() {
+    local id="$1" stage f raw kind tok out="" self
+    for stage in "${SPRINTMD_STAGES[@]}"; do
+        for f in docs/tasks/"$stage"/*.md; do
+            [ -e "$f" ] || continue
+            raw=$(sprintmd_meta_value "$f" "Depends on")
+            [ -z "$raw" ] && continue
+            while read -r kind tok; do
+                [ "$kind" = "id" ] || continue
+                [ "$tok" = "$id" ] && out="$out $(task_id "$f")"
+            done <<EOF
+$(sprintmd_iter_id_list "$raw")
+EOF
+        done
+    done
+    self=$(sprintmd_task_path "$id") || self=""
+    if [ -n "$self" ]; then
+        raw=$(sprintmd_reverse_edge_value "$self")
+        while read -r kind tok; do
+            [ "$kind" = "id" ] && out="$out $tok"
+        done <<EOF
+$(sprintmd_iter_id_list "$raw")
+EOF
+    fi
+    [ -n "$out" ] && printf '%s' "$out" | tr ' ' '\n' \
+        | grep -E '^[0-9]+$' | sort -un
+    return 0
+}
+
+# _sprintmd_rewrite_field FILE FIELD FROM TO
+# When FILE's **FIELD** id-list names FROM, rewrite it to TO (drop FROM, keep the
+# other ids in first-seen order, de-dup) and edit the line in place. Prints 0 and
+# returns 0 when it changed the file, returns 1 otherwise. Range tokens (N-M)
+# normalize to explicit ids — the honest cost of surgically breaking a folded id
+# out of a range. Internal to the dep-graph rewrite helper.
+_sprintmd_rewrite_field() {
+    local file="$1" field="$2" from="$3" to="$4"
+    local raw kind tok seen=" " ids="" changed=0 new
+    raw=$(sprintmd_meta_value "$file" "$field")
+    [ -z "$raw" ] && return 1
+    case " $(sprintmd_iter_id_list "$raw" | awk '$1=="id"{print $2}' | tr '\n' ' ') " in
+        *" $from "*) : ;;
+        *) return 1 ;;
+    esac
+    while read -r kind tok; do
+        [ "$kind" = "id" ] || continue
+        if [ "$tok" = "$from" ]; then tok="$to"; changed=1; fi
+        case "$seen" in *" $tok "*) continue ;; esac
+        seen="$seen$tok "
+        ids="$ids, $tok"
+    done <<EOF
+$(sprintmd_iter_id_list "$raw")
+EOF
+    [ "$changed" = 1 ] || return 1
+    new="${ids#, }"
+    [ -z "$new" ] && new="none"
+    sed_inplace "s|^\([[:space:]]*\)\*\*${field}\*\*[[:space:]]*:.*|\1**${field}**: ${new}|" "$file"
+    return 0
+}
+
+# sprintmd_rewrite_dep_id FROM TO
+# Fold id FROM into TO across every open and archived task: rewrite each
+# **Depends on** / **Dependents** / legacy **Blocks** line that names FROM so it
+# names TO instead, and leave a one-line fold note on FROM's own file when it is
+# kept (`<!-- folded into #TO YYYY-MM-DD -->`, idempotent). Prints one line per
+# rewritten file so callers/tests can assert the reach. A positive API — the
+# rebuild routes through sprintmd_iter_id_list, not a bag of sed against ids.
+# Date comes from $SPRINTMD_TODAY when set (deterministic tests), else `date`.
+sprintmd_rewrite_dep_id() {
+    local from="$1" to="$2" stage f changed fromfile existing today
+    [ -n "$from" ] && [ -n "$to" ] || {
+        printf 'usage: sprintmd_rewrite_dep_id FROM TO\n' >&2; return 2; }
+    for stage in "${SPRINTMD_STAGES[@]}"; do
+        for f in docs/tasks/"$stage"/*.md; do
+            [ -e "$f" ] || continue
+            changed=0
+            _sprintmd_rewrite_field "$f" "Depends on" "$from" "$to" && changed=1
+            _sprintmd_rewrite_field "$f" "Dependents" "$from" "$to" && changed=1
+            _sprintmd_rewrite_field "$f" "Blocks" "$from" "$to" && changed=1
+            [ "$changed" = 1 ] && printf '%s\n' "$f"
+        done
+    done
+    fromfile=$(sprintmd_task_path "$from") || fromfile=""
+    if [ -n "$fromfile" ]; then
+        existing=$(sprintmd_fold_target "$fromfile")
+        if [ "$existing" != "$to" ]; then
+            today="${SPRINTMD_TODAY:-$(date +%Y-%m-%d)}"
+            printf '\n<!-- folded into #%s %s -->\n' "$to" "$today" >> "$fromfile"
+        fi
+    fi
+    return 0
+}
+
+# _sprintmd_write_field FILE FIELD VALUE
+# Set **FIELD**'s value in FILE. Rewrites the line in place when the field is
+# present (preserving indentation); otherwise inserts "**FIELD**: VALUE" right
+# after the **Depends on** line. Returns 1 when the field is absent and there is
+# no **Depends on** anchor to insert after. FIELD is a plain label; VALUE is a
+# trusted id-list or 'none'. Internal to sprintmd_ensure_reciprocal.
+_sprintmd_write_field() {
+    local file="$1" field="$2" value="$3" tmp
+    if grep -qiE "^[[:space:]]*\*\*${field}\*\*[[:space:]]*:" "$file" 2>/dev/null; then
+        sed_inplace "s|^\([[:space:]]*\)\*\*${field}\*\*[[:space:]]*:.*|\1**${field}**: ${value}|" "$file"
+        return 0
+    fi
+    grep -qiE '^[[:space:]]*\*\*Depends on\*\*[[:space:]]*:' "$file" 2>/dev/null || return 1
+    tmp=$(mktemp "${TMPDIR:-/tmp}/sprintmd-field.XXXXXX") || return 1
+    awk -v f="$field" -v v="$value" '
+        { print }
+        !ins && $0 ~ /^[[:space:]]*\*\*Depends on\*\*[[:space:]]*:/ {
+            match($0, /^[[:space:]]*/); ind=substr($0, 1, RLENGTH)
+            print ind "**" f "**: " v
+            ins=1
+        }
+    ' "$file" > "$tmp" && cat "$tmp" > "$file"
+    rm -f "$tmp"
+    return 0
+}
+
+# sprintmd_ensure_reciprocal DEP DEPENDENT
+# Make "DEPENDENT depends on DEP" reciprocal: ensure DEP's reverse-edge field
+# lists DEPENDENT. No-op when DEP has no file or already lists DEPENDENT. Writes
+# to the canonical **Dependents** unless only the legacy **Blocks** is present.
+# Prints DEP's file path when it changed it. Optional convenience — call sites
+# stay on chat-sprint's inline check until #329 migrates them.
+sprintmd_ensure_reciprocal() {
+    local dep="$1" dependent="$2" depfile field raw kind tok new seen=" "
+    depfile=$(sprintmd_task_path "$dep") || depfile=""
+    [ -n "$depfile" ] || return 0
+    field="Dependents"
+    if [ -z "$(sprintmd_meta_value "$depfile" "Dependents")" ] \
+       && [ -n "$(sprintmd_meta_value "$depfile" "Blocks")" ]; then
+        field="Blocks"
+    fi
+    raw=$(sprintmd_reverse_edge_value "$depfile")
+    while read -r kind tok; do
+        [ "$kind" = "id" ] || continue
+        [ "$tok" = "$dependent" ] && return 0
+        case "$seen" in *" $tok "*) continue ;; esac
+        seen="$seen$tok "
+        new="${new:+$new, }$tok"
+    done <<EOF
+$(sprintmd_iter_id_list "$raw")
+EOF
+    new="${new:+$new, }$dependent"
+    _sprintmd_write_field "$depfile" "$field" "$new" && printf '%s\n' "$depfile"
+    return 0
+}
+
+# ── Plan-membership reverse index ────────────────────────────────────
+# The plan FILE member list is the single authority for "who is in a plan"; the
+# task **Plan** field is only a reverse index onto it. These helpers keep the
+# two in sync without inventing a second membership algorithm: one reader over
+# docs/plans/*.md decides membership, and the task field is rewritten to match
+# — never the other direction. Locked (plan 15): a task carries ONE primary
+# **Plan** id (the lowest-numbered plan that lists it); any extra memberships
+# live only on the plan files. Migrate on touch — done/ is never mass-rewritten.
+
+SPRINTMD_PLANS_DIR="${SPRINTMD_PLANS_DIR:-docs/plans}"
+
+# sprintmd_plan_member_ids PLAN_FILE -> member task ids, one per line, de-duped
+# in first-seen order. Reads the "- #ID — title" member lines (checkbox
+# optional). Same extraction plan-start.sh uses to collect members, so the two
+# never disagree on who a plan lists.
+sprintmd_plan_member_ids() {
+    local f="$1"
+    [ -f "$f" ] || return 0
+    { grep -oE '^- (\[[ xX]\] )?#[0-9]+' "$f" 2>/dev/null || true; } \
+        | grep -oE '[0-9]+' | awk '!seen[$0]++'
+}
+
+# sprintmd_plan_file_id PLAN_FILE -> the numeric plan id from its filename.
+sprintmd_plan_file_id() {
+    local b="${1##*/}"
+    printf '%s' "${b%%-*}"
+}
+
+# sprintmd_primary_plan_of TASK_ID -> the task's single primary plan id, or
+# empty when no plan lists it. A task may appear on several plan files; the
+# reverse index records only the LOWEST-numbered plan (locked decision). Scans
+# docs/plans/*.md, skipping templates.
+sprintmd_primary_plan_of() {
+    local id="$1" f pid best="" mid
+    for f in "$SPRINTMD_PLANS_DIR"/*.md; do
+        [ -e "$f" ] || continue
+        case "${f##*/}" in .TEMPLATE-*|TEMPLATE-*) continue ;; esac
+        pid=$(sprintmd_plan_file_id "$f")
+        [[ "$pid" =~ ^[0-9]+$ ]] || continue
+        while IFS= read -r mid; do
+            [ "$mid" = "$id" ] || continue
+            if [ -z "$best" ] || [ "$pid" -lt "$best" ]; then best="$pid"; fi
+            break
+        done <<EOF
+$(sprintmd_plan_member_ids "$f")
+EOF
+    done
+    printf '%s' "$best"
+}
+
+# sprintmd_set_task_plan TASK_FILE VALUE -> set **Plan** to VALUE ('none' or a
+# plan id). Rewrites the line in place when present (preserving indent); for an
+# older task with no **Plan** field, inserts it after **Docs** (or **Created**).
+# Prints the file path when it changed the value, nothing when already correct.
+sprintmd_set_task_plan() {
+    local file="$1" value="$2" cur tmp
+    [ -f "$file" ] || return 0
+    [ -n "$value" ] || value="none"
+    cur=$(sprintmd_meta_value "$file" "Plan"); [ -n "$cur" ] || cur="none"
+    [ "$cur" = "$value" ] && return 0
+    if grep -qiE '^[[:space:]]*\*\*Plan\*\*[[:space:]]*:' "$file" 2>/dev/null; then
+        sed_inplace "s|^\([[:space:]]*\)\*\*Plan\*\*[[:space:]]*:.*|\1**Plan**: ${value}|" "$file"
+        printf '%s\n' "$file"
+        return 0
+    fi
+    # No **Plan** field (pre-#327 task) — insert after **Docs**, else **Created**.
+    local anchor="Docs"
+    if ! grep -qiE '^[[:space:]]*\*\*Docs\*\*[[:space:]]*:' "$file" 2>/dev/null; then
+        grep -qiE '^[[:space:]]*\*\*Created\*\*[[:space:]]*:' "$file" 2>/dev/null || return 1
+        anchor="Created"
+    fi
+    tmp=$(mktemp "${TMPDIR:-/tmp}/sprintmd-plan.XXXXXX") || return 1
+    awk -v v="$value" -v a="$anchor" '
+        { print }
+        !ins && $0 ~ ("^[[:space:]]*\\*\\*" a "\\*\\*[[:space:]]*:") {
+            match($0, /^[[:space:]]*/); ind=substr($0, 1, RLENGTH)
+            print ind "**Plan**: " v; ins=1
+        }
+    ' "$file" > "$tmp" && cat "$tmp" > "$file"
+    rm -f "$tmp"
+    printf '%s\n' "$file"
+    return 0
+}
+
+# sprintmd_reconcile_task_plan TASK_ID -> derive the task's primary plan from the
+# plan files (the authority) and write it onto the task's **Plan** field ('none'
+# when no plan claims it). The one path that writes **Plan**. Skips done/ (no
+# mass rewrite). Prints the file path when it changed the field.
+sprintmd_reconcile_task_plan() {
+    local id="$1" stage path primary
+    stage=$(sprintmd_task_stage "$id") || stage=""
+    [ -n "$stage" ] && [ "$stage" != "done" ] || return 0
+    path=$(sprintmd_task_path "$id") || return 0
+    [ -n "$path" ] || return 0
+    primary=$(sprintmd_primary_plan_of "$id")
+    sprintmd_set_task_plan "$path" "${primary:-none}"
+}
+
+# sprintmd_plan_index_drift [--fix] -> report every OPEN or review task whose
+# **Plan** field disagrees with the plan files, one per line as
+# "ID<TAB>field<TAB>computed". This catches drift both ways: a task that says
+# Plan N when no plan lists it (removed member / stale id), and a task that says
+# none (or a wrong id) when a plan does list it. With --fix each mismatch is
+# rewritten to the computed primary. done/ is left untouched (migrate on touch).
+sprintmd_plan_index_drift() {
+    local fix=0; [ "${1:-}" = "--fix" ] && fix=1
+    local stage f id cur primary
+    for stage in backlog next doing blocked review; do
+        for f in docs/tasks/"$stage"/*.md; do
+            [ -e "$f" ] || continue
+            case "${f##*/}" in .TEMPLATE-*|TEMPLATE-*) continue ;; esac
+            id=$(task_id "$f")
+            [[ "$id" =~ ^[0-9]+$ ]] || continue
+            cur=$(sprintmd_meta_value "$f" "Plan"); [ -n "$cur" ] || cur="none"
+            primary=$(sprintmd_primary_plan_of "$id"); [ -n "$primary" ] || primary="none"
+            [ "$cur" = "$primary" ] && continue
+            printf '%s\t%s\t%s\n' "$id" "$cur" "$primary"
+            [ "$fix" -eq 1 ] && sprintmd_set_task_plan "$f" "$primary" >/dev/null
+        done
+    done
+    return 0
+}
+
 # ── DOC_STATE (ID allocation) and templates ──────────────────────────
 
 SPRINTMD_DOC_STATE="${SPRINTMD_DOC_STATE:-docs/sprintmd/DOC_STATE.md}"
 
-# alloc_id KEY [STATE] -> prints HIGHEST+1 for "**KEY**: N"; returns 1 if the
-# file or a valid current value is missing (caller prints the error).
+# alloc_id KEY [GLOB...] -> prints the next ID for "**KEY**: N".
+# Reconciles the DOC_STATE counter with the numeric prefixes of files matched
+# by GLOB(s), so a file created by hand (which never bumped the counter) can
+# never hand back a colliding ID: next = max(counter, highest-on-disk) + 1.
+# With no GLOB it behaves exactly as before (counter + 1). Returns 1 if the
+# state file or a valid counter is missing (caller prints the error).
 alloc_id() {
-    local key="$1" state="${2:-$SPRINTMD_DOC_STATE}" highest
+    local key="$1"; shift
+    local state="$SPRINTMD_DOC_STATE" highest disk=0 glob f base n
     [ -f "$state" ] || return 1
     highest=$(grep "^\*\*${key}\*\*:" "$state" | sed 's/.*: *//' | tr -d '[:space:]')
     [[ "$highest" =~ ^[0-9]+$ ]] || return 1
+    for glob in "$@"; do
+        for f in $glob; do
+            [ -e "$f" ] || continue
+            base=${f##*/}; n=${base%%-*}
+            [[ "$n" =~ ^[0-9]+$ ]] && (( n > disk )) && disk=$n
+        done
+    done
+    (( disk > highest )) && highest=$disk
     printf '%s' "$((highest + 1))"
 }
 
@@ -622,6 +1145,22 @@ sprintmd_orchestration_capable() {
     esac
 }
 
+# Grok subagent_type for an orchestration ROLE. The single seam that decides
+# which native worker type each fan-out spawns. Every role currently resolves to
+# general-purpose and here is why: gate must Edit/Write the task file AND `git mv`
+# it (shell), but no restricted capability_mode grants both (read-write = edits,
+# no shell; execute = shell, no edits), so explore/read-write/execute all break
+# the gate contract; work implements product code; polish and chain read and
+# rewrite/define task files. A future specialization (e.g. polish → read-write)
+# is a one-line change here, not edits across the four wording helpers.
+# Roles: work | gate | polish | chain. Grok-only — Claude has no type names.
+sprintmd_subagent_type_for() {
+    case "$1" in
+        work|gate|polish|chain) printf 'general-purpose' ;;
+        *)                      printf 'general-purpose' ;;
+    esac
+}
+
 # Short name of the subagent mechanism for prompt wording only.
 sprintmd_subagent_tool_name() {
     case "$(sprintmd_ai_tier)" in
@@ -631,15 +1170,17 @@ sprintmd_subagent_tool_name() {
 }
 
 # "Launch a NEW subagent …" fragment. Optional $1 = purpose phrase
-# (e.g. "the blocked dependency", "<next-id>").
+# (e.g. "the blocked dependency", "<next-id>"). Optional $2 = role for the Grok
+# subagent_type (default: chain — its only current caller is the chat handoff).
 sprintmd_subagent_spawn_phrase() {
-    local purpose="${1:-}"
+    local purpose="${1:-}" role="${2:-chain}"
     case "$(sprintmd_ai_tier)" in
         grok-build)
+            local type; type="$(sprintmd_subagent_type_for "$role")"
             if [ -n "$purpose" ]; then
-                printf 'Launch a NEW subagent via spawn_subagent (subagent_type: general-purpose) for %s' "$purpose"
+                printf 'Launch a NEW subagent via spawn_subagent (subagent_type: %s) for %s' "$type" "$purpose"
             else
-                printf 'Launch a NEW subagent via spawn_subagent (subagent_type: general-purpose)'
+                printf 'Launch a NEW subagent via spawn_subagent (subagent_type: %s)' "$type"
             fi
             ;;
         *)
@@ -653,10 +1194,14 @@ sprintmd_subagent_spawn_phrase() {
 }
 
 # "its OWN fresh subagent (…)" — used by work / polish multi-task prompts.
+# $1 = role for the Grok subagent_type (work | polish); default work. work and
+# polish share this helper today (both general-purpose); pass the role so a
+# future split — e.g. polish → read-write — lands in sprintmd_subagent_type_for.
 sprintmd_subagent_own_fresh() {
+    local role="${1:-work}"
     case "$(sprintmd_ai_tier)" in
         grok-build)
-            printf 'its OWN fresh subagent (spawn_subagent, subagent_type: general-purpose)'
+            printf 'its OWN fresh subagent (spawn_subagent, subagent_type: %s)' "$(sprintmd_subagent_type_for "$role")"
             ;;
         *)
             printf 'its OWN fresh subagent (Task tool)'
@@ -665,13 +1210,31 @@ sprintmd_subagent_own_fresh() {
 }
 
 # One-line parallel dispatch instruction for gate-lib and similar fan-outs.
+# $1 = role for the Grok subagent_type; default gate — its only current caller.
 sprintmd_subagent_parallel_dispatch() {
+    local role="${1:-gate}"
     case "$(sprintmd_ai_tier)" in
         grok-build)
-            printf 'Dispatch ONE subagent per task file below, ALL IN PARALLEL (issue every spawn_subagent call in a single message; subagent_type: general-purpose).'
+            printf 'Dispatch ONE subagent per task file below, ALL IN PARALLEL (issue every spawn_subagent call in a single message; subagent_type: %s).' "$(sprintmd_subagent_type_for "$role")"
             ;;
         *)
             printf 'Dispatch ONE subagent per task file below, ALL IN PARALLEL (issue every Task tool call in a single message).'
+            ;;
+    esac
+}
+
+# No-nesting rule for a SPAWNED worker's own instruction. The orchestrator owns
+# fan-out; a worker that re-spawns fails because native nesting depth is one
+# (Grok Build; Claude Task subagents likewise cannot launch further subagents).
+# Tier-worded so Claude says "Task tool" and Grok says "spawn_subagent". Belongs
+# only inside a worker's instruction string, never in a standalone/exec prompt.
+sprintmd_subagent_no_nest() {
+    case "$(sprintmd_ai_tier)" in
+        grok-build)
+            printf 'You are a worker, not an orchestrator: do the work yourself and do NOT call spawn_subagent — nesting depth is one, so a worker that re-spawns fails.'
+            ;;
+        *)
+            printf 'You are a worker, not an orchestrator: do the work yourself and do NOT launch further subagents (Task tool).'
             ;;
     esac
 }
@@ -731,7 +1294,7 @@ sprintmd_emit_prompt() {
         esac
     done
 
-    printf '%s\n' "── sprint.md: run the following in this session ──────────────"
+    printf '%s\n' "── SprintBias: run the following in this session ──────────────"
     [ -n "$system_prompt" ] && printf '%s\n\n' "$system_prompt"
     [ -n "$prompt" ] && printf '%s\n' "$prompt"
     [ ${#rest[@]} -gt 0 ] && printf '%s\n' "${rest[*]}"
@@ -789,6 +1352,42 @@ sprintmd_interactive_ok() {
     [ "${SPRINTMD_PROVIDER_INTERACTIVE:-0}" = 1 ]             || return 1
     declare -F sprintmd_provider_interactive >/dev/null 2>&1 || return 1
     [ -t 0 ] && [ -t 1 ]
+}
+
+# sprintmd_tty — real pty slave path for nested interactive CLI handoffs.
+# Prints e.g. /dev/ttys009 (macOS) or /dev/pts/0 (Linux). Falls back to /dev/tty
+# only when the real path cannot be resolved.
+#
+# Why this exists: Claude Code and Grok Build TUIs need stdin on the *actual*
+# pty slave (lsof shows healthy sessions as `0u /dev/ttysNN`). Opening
+# `<>/dev/tty` is read-write but still attaches device 2,0 — and both TUIs
+# wedge after the first turn under that shape (task 335: O_RDONLY was
+# necessary but not sufficient; the device path matters too). Callers that
+# launch a nested interactive session from a menu (chat-folder [d], chat-bugs
+# [d]) should open stdin with:  … <>"$(sprintmd_tty)"
+sprintmd_tty() {
+    local t
+    if t=$(tty 2>/dev/null) && [ -n "$t" ] && [ -c "$t" ]; then
+        printf '%s' "$t"
+        return 0
+    fi
+    # stdin may already be non-tty (redirected or drained by an earlier
+    # headless CLI). Resolve via this process's controlling terminal — ps
+    # reports ttysNN / pts/N without the /dev/ prefix on macOS and Linux.
+    t=$(ps -p $$ -o tty= 2>/dev/null | tr -d ' ')
+    case "$t" in
+        ""|\?) printf '%s' /dev/tty ;;
+        /*)
+            if [ -c "$t" ]; then printf '%s' "$t"
+            else printf '%s' /dev/tty
+            fi
+            ;;
+        *)
+            if [ -c "/dev/$t" ]; then printf '%s' "/dev/$t"
+            else printf '%s' /dev/tty
+            fi
+            ;;
+    esac
 }
 
 # sprintmd_run_interactive — like sprintmd_run, but opens a LIVE conversation the

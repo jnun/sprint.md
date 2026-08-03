@@ -26,7 +26,7 @@ A release notes generator that pulls completed sprint tasks into a dated, plain-
 ### Non-Functional Requirements
 
 - [ ] Output is readable by non-developers (partners, end-users)
-- [ ] Follows the existing sprint.md file-based, no-dependencies philosophy
+- [ ] Follows the existing SprintBias file-based, no-dependencies philosophy
 
 ## Technical Design
 

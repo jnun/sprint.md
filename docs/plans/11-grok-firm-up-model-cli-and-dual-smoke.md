@@ -39,7 +39,7 @@ Four outcomes, in product language:
    repeatable “ship confidence” checklist.
 
 When this plan ships, Grok is not merely registered — it is **exercised** — and
-model switching is a first-class sprint.md action.
+model switching is a first-class SprintBias action.
 
 ## Why
 
@@ -112,7 +112,7 @@ Plan 5 closed the capability gap. Remaining risk is **trust**:
 - [ ] #291 — Verify and lock Grok tool ID map for headless allowlists
 - [ ] #292 — Prove Grok emit subagent handoff and harden orchestration prompts
 - [ ] #293 — Specialize Grok subagent types for gate vs work vs polish
-- [ ] #294 — Expose model show list and set from the sprint.md CLI
+- [ ] #294 — Expose model show list and set from the SprintBias CLI
 - [ ] #295 — Make per-command model overrides discoverable on help and common flags
 - [ ] #296 — Smoke-test Claude-proven spine under Grok Build
 - [ ] #297 — Dual-provider smoke protocol on a fresh project for upcoming plans

@@ -11,3 +11,14 @@ Tasks get an auto-assigned ID and are built from a battle-tested
 template. The file is created ready to edit — fill in the problem and
 success criteria yourself, or run `./sprint.sh chat <id>` to develop the
 scope, criteria, and dependencies conversationally.
+
+The header stamps **Plan** (which `docs/plans/N-…` this belongs to),
+**Depends on** (prerequisite task IDs), **Dependents** (the reverse edge —
+task IDs that wait on this one), and **Tests** (suite scripts that prove the
+success criteria for `promote`), all defaulting to `none`.
+
+**Dependents** is the reverse of **Depends on**, not the `blocked/` folder.
+**Docs** is what you read while building; **Tests** is what `promote` runs to
+close (`docs/tests/*.sh` only — not product `newtest` loops).
+
+Legacy aliases (read only): **Blocks** → **Dependents**, **Proven by** → **Tests**.

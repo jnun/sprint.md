@@ -36,7 +36,7 @@ KEBAB_CASE_DESC=$(sprintmd_slug "$DESCRIPTION") || {
 sprintmd_lock
 
 # Read highest task ID and increment with error handling
-NEW_ID=$(alloc_id sprint_TASK_ID) || {
+NEW_ID=$(alloc_id sprint_TASK_ID 'docs/tasks/*/[0-9]*-*.md') || {
     echo -e "${RED}ERROR: Invalid or missing task ID in DOC_STATE.md${NC}"
     echo "Please fix docs/sprintmd/DOC_STATE.md manually. Expected format: '**sprint_TASK_ID**: NUMBER'"
     exit 1
@@ -44,12 +44,17 @@ NEW_ID=$(alloc_id sprint_TASK_ID) || {
 
 FILENAME=$(printf "%d-%s.md" "$NEW_ID" "$KEBAB_CASE_DESC")
 
-# A file for this fresh ID should never exist. If it does, DOC_STATE.md's
-# counter is behind the files on disk — say so honestly rather than blaming
-# an imaginary racing process (the lock above rules that out).
-if [ -f "docs/tasks/backlog/$FILENAME" ]; then
-    echo -e "${RED}ERROR: docs/tasks/backlog/$FILENAME already exists!${NC}"
-    echo "DOC_STATE.md's sprint_TASK_ID may be out of sync with the files on disk."
+# No file anywhere in the task tree may already own this ID, whatever its slug.
+# alloc_id reconciles the counter with disk, so this should never fire — if it
+# does, DOC_STATE.md is corrupt or two files share a numeric prefix by hand.
+# Glob-loop (not `ls | head`) so an unmatched pattern can't trip pipefail.
+DUP=""
+for existing in docs/tasks/*/"${NEW_ID}"-*.md; do
+    [ -e "$existing" ] && { DUP="$existing"; break; }
+done
+if [ -n "$DUP" ]; then
+    echo -e "${RED}ERROR: task ID ${NEW_ID} already exists: ${DUP}${NC}"
+    echo "DOC_STATE.md's sprint_TASK_ID is out of sync with the files on disk."
     exit 1
 fi
 

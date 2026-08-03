@@ -1,6 +1,6 @@
 ---
 name: Task
-about: Create a task to be tracked through the sprint.md pipeline
+about: Create a task to be tracked through the SprintBias pipeline
 title: ''
 labels: ''
 assignees: ''

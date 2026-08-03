@@ -7,31 +7,41 @@ a plan.
 
 **plan start [id] [--commit-only]** — gate, then commit that plan's members
 into `next/` (the sprint). `next/` IS the sprint, so workability is decided
-BEFORE a member enters it: each backlog member is run through the shared
-workability gate (the same review `./sprint.sh gate` runs) while still in `backlog/`, and
-only what grades READY is promoted. Location-aware:
+BEFORE a member is runnable: each backlog member is run through the shared
+workability gate (the same review `./sprint.sh gate` runs), and only what
+grades READY sits in `next/` stamped for `work`. Location-aware:
 
   backlog/  → gate in place, then:
                 READY   → stamp + move to next/
-                BLOCKED → move to blocked/ (never visits next/)
+                BLOCKED → move to blocked/ (needs decision/clarification; never visits next/)
                 COMPLETE → move to review/ (work already in codebase; not done/)
-  next/     → leave (idempotent)
+  next/     → stamped READY → leave (idempotent)
+              not READY     → demote to backlog/ (self-heal a bad/accidental mv),
+                              then gate with the rest unless --commit-only
   blocked/  → stop; run chat <id>, then re-run plan start
   doing|review|done → skip with a notice
   missing   → hard error (dangling member)
 
 A member already sitting in `blocked/` stops the start with a `chat <id>`
-pointer — `blocked/` is human-triage territory, so the start does not silently
-re-spend AI budget re-gating work someone already flagged. Resolve it
-(`chat <id>`), re-queue it to `backlog/`, then re-run `plan start`.
+pointer — `blocked/` means a decision or clarification is still needed, so the
+start does not silently re-spend AI budget re-gating work someone already
+flagged. Resolve it (`chat <id>`), re-queue it to `backlog/`, then re-run
+`plan start`.
 
 `--commit-only` skips the gate and does the pure, deterministic `backlog → next`
 move — for power users, tests, and non-AI environments. Members are NOT vetted.
+Unstamped `next/` members are still demoted to `backlog/` (healed), but not
+re-promoted without a gate.
 
-Bare `plan start` lists plans (id, name, DRAFT/READY) and asks which to start.
-Starting a non-READY plan warns interactively; non-interactive (e.g. loop
---refill) requires **Status:** READY. (Plan-file **Status:** READY is separate
-from the task-level READY the gate stamps on each member.)
+Bare `plan start` lists plans (id, name, DRAFT/READY/STARTED) and asks which to
+start. Plan-file **Status:** READY is separate from the task-level READY the
+gate stamps on each member:
+
+  READY    → proceed
+  STARTED  → check members (heal misplaced next/, gate remaining; no prompt)
+  DRAFT/…  → interactive: auto-mark READY (explicit start is the confirm),
+             then gate members; non-interactive (e.g. loop --refill) requires
+             **Status:** READY
 
 A successful start latches the plan file to `**Status:** STARTED` — a one-way
 switch. STARTED means "members committed to `next/`," not "members currently in

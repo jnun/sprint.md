@@ -1,19 +1,19 @@
 #!/usr/bin/env bash
-# install.sh — one-breath bootstrap for sprint.md
+# install.sh — one-breath bootstrap for SprintBias
 #
 # From *your* project:
-#   curl -fsSL https://raw.githubusercontent.com/jnun/sprint.md/main/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/jnun/sprintbias/main/install.sh | bash
 #
 # Or pin a ref / target:
 #   curl -fsSL .../install.sh | bash -s -- .
 #   SPRINT_REF=v0.0.58 curl -fsSL .../install.sh | bash
 #   ./install.sh /path/to/project
 #
-# Fetches the sprint.md source tree, then runs setup.sh into the target.
+# Fetches the SprintBias source tree, then runs setup.sh into the target.
 
 if [ -z "${BASH_VERSION:-}" ]; then
     echo "Error: install.sh must be run with bash." >&2
-    echo "  curl -fsSL https://raw.githubusercontent.com/jnun/sprint.md/main/install.sh | bash" >&2
+    echo "  curl -fsSL https://raw.githubusercontent.com/jnun/sprintbias/main/install.sh | bash" >&2
     exit 1
 fi
 
@@ -25,7 +25,7 @@ fi
 set -euo pipefail
 
 TARGET="${1:-.}"
-REPO="${SPRINT_REPO:-jnun/sprint.md}"
+REPO="${SPRINT_REPO:-jnun/sprintbias}"
 REF="${SPRINT_REF:-main}"
 BASE="https://github.com/${REPO}"
 
@@ -38,7 +38,7 @@ cleanup() {
 trap cleanup EXIT
 
 echo "================================================"
-echo "  sprint.md — install"
+echo "  SprintBias — install"
 echo "================================================"
 echo "  Ref:    $REF"
 echo "  Target: $TARGET"
@@ -51,7 +51,7 @@ if [ ! -d "$TARGET" ]; then
 fi
 
 TMP=$(mktemp -d)
-ARCHIVE="$TMP/sprint.md.tgz"
+ARCHIVE="$TMP/sprintbias.tgz"
 
 echo "→ Fetching source…"
 if ! curl -fsSL "${BASE}/archive/refs/heads/${REF}.tar.gz" -o "$ARCHIVE" 2>/dev/null; then
@@ -63,8 +63,14 @@ if ! curl -fsSL "${BASE}/archive/refs/heads/${REF}.tar.gz" -o "$ARCHIVE" 2>/dev/
 fi
 
 tar -xzf "$ARCHIVE" -C "$TMP"
-# GitHub archives unpack to <repo>-<ref> (slashes in tags become -)
-SRC=$(find "$TMP" -maxdepth 1 -type d \( -name 'sprint.md-*' -o -name 'sprint.md*' \) ! -path "$TMP" | head -1)
+# GitHub archives unpack to <repo>-<ref> (slashes in tags become -).
+# Accept current repo name, legacy sprint.md archives, and any SPRINT_REPO override.
+REPO_BASE="${REPO##*/}"
+SRC=$(find "$TMP" -maxdepth 1 -type d \( \
+    -name "${REPO_BASE}-*" -o -name "${REPO_BASE}*" \
+    -o -name 'sprintbias-*' -o -name 'sprintbias*' \
+    -o -name 'sprint.md-*' -o -name 'sprint.md*' \
+  \) ! -path "$TMP" | head -1)
 if [ -z "$SRC" ] || [ ! -f "$SRC/setup.sh" ]; then
     echo "Error: archive did not contain setup.sh" >&2
     exit 1

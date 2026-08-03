@@ -1,8 +1,8 @@
 # Sync tasks from docs/tasks/ to GitHub Issues
-# Powered by sprint.md: https://github.com/jnun/sprint.md
+# Powered by SprintBias: https://github.com/jnun/sprintbias
 #
 # Thin caller wrapper — triggers on push/dispatch and delegates to the reusable
-# workflow in the sprint.md repo where all sync logic lives. Updates to the sync
+# workflow in the SprintBias repo where all sync logic lives. Updates to the sync
 # engine are picked up automatically without re-copying this file.
 
 name: Sync Tasks to Issues
@@ -26,7 +26,7 @@ jobs:
     permissions:
       issues: write
       contents: read
-    uses: jnun/sprint.md/.github/workflows/sync-tasks-reusable.yml@main
+    uses: jnun/sprintbias/.github/workflows/sync-tasks-reusable.yml@main
     with:
       force_sync_all: ${{ github.event.inputs.force_sync_all == 'true' }}
       # Optional: customize paths (defaults shown)

@@ -28,7 +28,7 @@ setup() {
 
     # Create minimal DOC_STATE.md
     cat > "$TMPDIR/docs/sprintmd/DOC_STATE.md" << 'EOF'
-# sprint.md Documentation State
+# SprintBias Documentation State
 
 **Last Updated**: 2026-01-01
 **sprint_VERSION**: 2.2.0

@@ -29,6 +29,6 @@ What it does:
 Notes:
   - Universal by delegation: it does not reimplement version resolution — it
     calls each ecosystem's own tools. Ecosystem "audit" CLIs (npm audit, …)
-    stay as internal tool names; the sprint.md command is `deps`.
+    stay as internal tool names; the SprintBias command is `deps`.
   - No toolchain installed for an ecosystem = that ecosystem's blocks say
     "skipped".

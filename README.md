@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="https://github.com/jnun/sprint.md/releases/download/demo-assets/sprint-md-logo.gif" alt="sprint.md" width="720">
+<img src="https://github.com/jnun/sprintbias/releases/download/demo-assets/sprint-md-logo.gif" alt="SprintBias" width="720">
 
 # Plans live in git.
 
@@ -9,8 +9,10 @@
 **One board your agents and your team can both see.**  
 No database. No SaaS. No login.
 
+**[sprintbias.com](https://sprintbias.com)** · **[GitHub](https://github.com/jnun/sprintbias)**
+
 [![License: MIT](https://img.shields.io/badge/License-MIT-black.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-0.0.58-blue.svg)](https://github.com/jnun/sprint.md/releases)
+[![Version](https://img.shields.io/badge/version-0.0.61-blue.svg)](https://github.com/jnun/sprintbias/releases)
 ![AI: Claude · Grok](https://img.shields.io/badge/AI-Claude%20%C2%B7%20Grok-8A2BE2.svg)
 
 </div>
@@ -18,8 +20,8 @@ No database. No SaaS. No login.
 ## Get it
 
 ```bash
-git clone git@github.com:jnun/sprint.md.git
-cd sprint.md
+git clone git@github.com:jnun/sprintbias.git
+cd sprintbias
 ./setup.sh ~/code/my-app     # your project path
 ```
 
@@ -55,6 +57,9 @@ Group related tasks when you’re ready:
 ./sprint.sh -c chat 12
 ```
 
+Maintainers: before a release, smoke both hosts with the
+[dual-provider smoke protocol](docs/guides/dual-provider-smoke.md).
+
 ---
 
 ## Why it feels light
@@ -70,7 +75,7 @@ Group related tasks when you’re ready:
 - **Agents already speak this** — markdown and paths, no API, no login  
 - **Yours to keep** — delete `sprint.sh` anytime; tasks, plans, and history remain  
 
-> Session tools help *inside* a chat. **sprint.md is how the work stays when the chat ends.**
+> Session tools help *inside* a chat. **SprintBias is how the work stays when the chat ends.**
 
 ---
 
@@ -91,7 +96,7 @@ The sprint is whatever sits in `next/` right now. No special file — the folder
 
 ## Live here
 
-This repository **runs on sprint.md**. Browse [`docs/tasks/`](docs/tasks/) for a real board.
+This repository **runs on SprintBias**. Browse [`docs/tasks/`](docs/tasks/) for a real board.
 
 **[GETSTARTED.md](GETSTARTED.md)** · full manual: **[DOCUMENTATION.md](DOCUMENTATION.md)**
 

@@ -14,7 +14,7 @@ PLANS_DIR="docs/plans"
 REVIEW_FILE="docs/tmp/plan-think.md"
 PLAN_ID="${1:-}"
 
-MODEL="$(sprintmd_resolve_model PLAN_THINK)"
+MODEL="$(sprintmd_tier_model PLAN_THINK)"
 TOOLS="Read,Edit,Write,Bash,Grep,Glob"
 PERMISSIONS="auto"
 MAX_TURNS=50

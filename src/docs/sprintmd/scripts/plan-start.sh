@@ -4,15 +4,18 @@
 #
 # Invoked as: ./sprint.sh plan start [id] [--commit-only]
 #
-# next/ IS the sprint, so workability is decided BEFORE a member enters it: each
+# next/ IS the sprint. Workability is decided before a member is runnable: each
 # backlog member is run through the shared workability gate (gate-lib.sh — same
-# code `./sprint.sh gate` runs) while still in backlog/ — READY is promoted into
-# next/, BLOCKED lands in blocked/ (never visits next/), COMPLETE goes to review/.
-# --commit-only skips the gate and does the pure, deterministic backlog→next mv
-# (power users, tests, non-AI environments).
+# code `./sprint.sh gate` runs). READY → stamp + next/; BLOCKED → blocked/;
+# COMPLETE → review/. --commit-only skips the gate for pure backlog→next mv.
 #
-# Location-aware regardless of mode: next=idempotent, already-blocked=stop,
-# past=skip, missing=hard error. Moves use move_file (git mv || mv); developer owns commits.
+# Misplaced members in next/ (no READY stamp): demote to backlog/ so a bad mv
+# is self-healing. Default mode then gates them with everyone else; --commit-only
+# leaves them in backlog (not re-promoted unvetted).
+#
+# Plan-file Status: interactive DRAFT auto-marks READY; STARTED re-runs without
+# a prompt; non-interactive requires READY (loop --refill). Moves use move_file
+# (git mv || mv); developer owns commits.
 
 set -euo pipefail
 
@@ -22,6 +25,7 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/lib.sh"
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/gate-lib.sh"
 
 PLANS_DIR="docs/plans"
+BACKLOG_DIR="docs/tasks/backlog"
 NEXT_DIR="docs/tasks/next"
 BLOCKED_DIR="docs/tasks/blocked"
 REVIEW_DIR="docs/tasks/review"
@@ -78,6 +82,17 @@ stamp_started() {
     # No status line at all (malformed plan) — append one; plan_status reads the
     # first match, so a single appended line still reports STARTED.
     printf '\n**Status:** STARTED\n' >> "$f"
+  fi
+}
+
+# Flip plan **Status:** to READY (set-or-replace, never append a second line).
+# Used when interactive plan start confirms a DRAFT plan is startable.
+stamp_ready() {
+  local f="$1"
+  if grep -qE '^\*\*Status:\*\*' "$f" 2>/dev/null; then
+    sed_inplace 's/^\*\*Status:\*\*.*/**Status:** READY/' "$f"
+  else
+    printf '\n**Status:** READY\n' >> "$f"
   fi
 }
 
@@ -150,23 +165,32 @@ echo "▸ Starting plan: $(basename "$PLAN_FILE")"
 echo "  Status: $STATUS"
 echo ""
 
-# DRAFT warning — interactive may proceed; non-interactive refuses.
-if [ "$STATUS" != "READY" ]; then
-  echo "⚠ Plan is not marked READY (status: $STATUS)."
-  echo "  Author/refine with: ./sprint.sh chat plan $PLAN_ID"
-  if [ -t 0 ] && [ -t 1 ]; then
-    printf "Start it anyway? [y/N]: "
-    read -r _ans </dev/tty 2>/dev/null || _ans="n"
-    case "$_ans" in
-      y|Y|yes|YES) echo "  Proceeding with DRAFT plan..." ;;
-      *) echo "Cancelled."; exit 0 ;;
-    esac
-  else
-    echo "  Non-interactive start requires **Status:** READY (loop --refill only starts READY plans)."
-    exit 1
-  fi
-  echo ""
-fi
+# Plan-file **Status:** READY is the autonomy latch for loop --refill.
+# Explicit plan start always means "commit this plan":
+#   STARTED  → re-run is safe (heal misplaced next/, gate remaining backlog)
+#   READY    → proceed
+#   DRAFT/…  → interactive: auto-mark READY (start *is* the confirm);
+#              non-interactive: refuse (loop only starts READY plans)
+case "$STATUS" in
+  READY) ;;
+  STARTED)
+    echo "  Plan already STARTED — checking members."
+    echo ""
+    ;;
+  *)
+    if [ -t 0 ] && [ -t 1 ]; then
+      stamp_ready "$PLAN_FILE"
+      echo "  Marking plan READY and starting (was $STATUS)."
+      STATUS="READY"
+      echo ""
+    else
+      echo "⚠ Plan is not marked READY (status: $STATUS)."
+      echo "  Author/refine with: ./sprint.sh chat plan $PLAN_ID"
+      echo "  Non-interactive start requires **Status:** READY (loop --refill only starts READY plans)."
+      exit 1
+    fi
+    ;;
+esac
 
 # ── Collect members ──────────────────────────────────────────────────
 
@@ -177,12 +201,16 @@ if [ -z "$MEMBER_IDS" ]; then
   exit 1
 fi
 
-mkdir -p "$NEXT_DIR"
+mkdir -p "$BACKLOG_DIR" "$NEXT_DIR"
 
-# Preflight: classify every member before any move.
+# Preflight: classify every member before any promote.
+# next/ without a READY stamp is treated as accidental — demote to backlog/
+# so the sprint only holds stamped work. Default mode then gates those files
+# with the rest of the backlog; --commit-only leaves them in backlog.
 declare -a MOVE_PATHS=() MOVE_NAMES=()
 declare -a SKIP_NEXT=() SKIP_PAST=()
 declare -a BLOCKED_IDS=() MISSING_IDS=()
+DEMOTED=0
 
 for id in $MEMBER_IDS; do
   if ! hit=$(resolve_member "$id"); then
@@ -198,7 +226,25 @@ for id in $MEMBER_IDS; do
       MOVE_NAMES+=("$name")
       ;;
     next)
-      SKIP_NEXT+=("#$id $name")
+      if [ "$(sprintmd_review_verdict "$fpath")" = "READY" ]; then
+        SKIP_NEXT+=("#$id $name")
+      else
+        # Not stamped READY — wrong place. Park in backlog.
+        dest="$BACKLOG_DIR/$name"
+        if [ -e "$dest" ]; then
+          echo "  ⚠ not READY in next/ but backlog already has $name — left in next/"
+        else
+          move_file "$fpath" "$dest"
+          echo "  · not READY → backlog/: #$id $name"
+          DEMOTED=$((DEMOTED + 1))
+          # Default start will gate+promote if workable; --commit-only does not
+          # re-push unvetted work into next/.
+          if [ "$COMMIT_ONLY" -eq 0 ]; then
+            MOVE_PATHS+=("$dest")
+            MOVE_NAMES+=("$name")
+          fi
+        fi
+      fi
       ;;
     blocked)
       BLOCKED_IDS+=("$id")
@@ -219,9 +265,10 @@ if [ ${#MISSING_IDS[@]} -gt 0 ]; then
   exit 1
 fi
 
-# Blocked: stop entirely so the sprint is not half-committed around undefined work
+# Blocked: stop entirely so the sprint is not half-committed around work that
+# still needs a decision or clarification
 if [ ${#BLOCKED_IDS[@]} -gt 0 ]; then
-  echo "✗ Member(s) still in blocked/ — define them before starting this plan:"
+  echo "✗ Member(s) still in blocked/ — resolve decisions/clarifications before starting this plan:"
   for id in "${BLOCKED_IDS[@]}"; do
     echo "    ./sprint.sh chat $id"
   done
@@ -229,10 +276,21 @@ if [ ${#BLOCKED_IDS[@]} -gt 0 ]; then
   exit 1
 fi
 
+# ── Reconcile the Plan reverse index ─────────────────────────────────
+# The plan file is the membership authority; refresh each member's **Plan**
+# field to match. sprintmd_plan_index_drift --fix scans every open task, so it
+# also clears a stale **Plan** on a task that was removed from this plan (its
+# primary falls back to another plan or none). Migrate on touch — done/ is left
+# untouched. Runs before the gate; the Plan field is independent of stage.
+PLAN_SYNCED=$(sprintmd_plan_index_drift --fix | wc -l | tr -d '[:space:]')
+if [ "${PLAN_SYNCED:-0}" -gt 0 ] 2>/dev/null; then
+  echo "  · synced Plan on $PLAN_SYNCED task(s)"
+fi
+
 # Notices for skips
 if [ ${#SKIP_NEXT[@]} -gt 0 ]; then
   for line in "${SKIP_NEXT[@]}"; do
-    echo "  · already in next/: $line"
+    echo "  · already in next/ (READY): $line"
   done
 fi
 if [ ${#SKIP_PAST[@]} -gt 0 ]; then
@@ -241,20 +299,18 @@ if [ ${#SKIP_PAST[@]} -gt 0 ]; then
   done
 fi
 
-# ── Promote backlog members ──────────────────────────────────────────
-# Default: gate each member IN PLACE (still in backlog/) before it can enter
-# next/. Only READY is promoted; BLOCKED never touches the sprint. --commit-only
-# skips the gate for the pure, deterministic filesystem promote.
+# ── Gate / promote backlog members ───────────────────────────────────
+# Default: gate each backlog member in place; only READY is promoted into
+# next/. --commit-only skips the gate for pure filesystem promote.
 
-READY_MOVED=0   # READY members that reached next/
+READY_MOVED=0   # READY members promoted into next/
 BLOCKED_CT=0    # graded BLOCKED, landed in blocked/
 COMPLETE_CT=0  # graded COMPLETE, landed in review/
 ERR_CT=0        # gate errored, member left in backlog/
 EMITTED=0       # a review prompt was emitted for the surrounding agent to run
 
 if [ "$COMMIT_ONLY" -eq 1 ]; then
-  # Pure filesystem promote — no AI, no vetting. For power users, tests, and
-  # non-AI environments that want today's raw backlog→next mv.
+  # Pure filesystem promote — no AI, no vetting.
   if [ ${#MOVE_PATHS[@]} -gt 0 ]; then
     i=0
     while [ "$i" -lt "${#MOVE_PATHS[@]}" ]; do
@@ -273,7 +329,7 @@ if [ "$COMMIT_ONLY" -eq 1 ]; then
   fi
 elif [ ${#MOVE_PATHS[@]} -gt 0 ]; then
   mkdir -p docs/tmp
-  # READY_DIR = next/: a member that grades READY is promoted into the sprint;
+  # READY_DIR = next/: only what grades READY is promoted into the sprint;
   # BLOCKED → blocked/, COMPLETE → review/ (handled inside the shared gate).
   sprintmd_gate_init plan "$NEXT_DIR" "$NEXT_DIR"
 
@@ -311,11 +367,13 @@ if [ "$EMITTED" -eq 1 ]; then
   echo "  Each READY member is promoted into next/; BLOCKED → blocked/, COMPLETE → review/."
 elif [ "$COMMIT_ONLY" -eq 1 ]; then
   echo "▸ Plan $PLAN_ID committed (--commit-only): moved $READY_MOVED task(s) into next/ (gate skipped — not vetted)"
+  [ "$DEMOTED" -gt 0 ] && echo "  (demoted $DEMOTED unstamped next/ → backlog/)"
 else
   echo "▸ Plan $PLAN_ID started: $READY_MOVED ready → next/, $BLOCKED_CT blocked, $COMPLETE_CT complete"
+  [ "$DEMOTED" -gt 0 ] && echo "  (demoted $DEMOTED unstamped next/ → backlog/ before gate)"
   [ "$ERR_CT" -gt 0 ] && echo "  ($ERR_CT gate error(s) — left in backlog/)"
 fi
-[ ${#SKIP_NEXT[@]} -gt 0 ] && echo "  (already queued: ${#SKIP_NEXT[@]})"
+[ ${#SKIP_NEXT[@]} -gt 0 ] && echo "  (already queued READY: ${#SKIP_NEXT[@]})"
 [ ${#SKIP_PAST[@]} -gt 0 ] && echo "  (already past next/: ${#SKIP_PAST[@]})"
 
 # One-way STARTED latch: this plan has now been committed to the sprint. Set on

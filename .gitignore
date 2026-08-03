@@ -37,7 +37,7 @@ tmp/
 *.seed
 *.pid.lock
 nohup.out
-# sprint.md ID-allocation mutex (auto-created and removed; never commit a stale one)
+# SprintBias ID-allocation mutex (auto-created and removed; never commit a stale one)
 docs/sprintmd/.sprint-alloc.lock/
 
 # Archive Files (if users zip up old work)

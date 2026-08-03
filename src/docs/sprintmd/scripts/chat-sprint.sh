@@ -6,7 +6,7 @@
 # those findings one at a time — same one-detail voice as single-task `chat`.
 #
 # Reached via `./sprint.sh chat` with NO task id (chat.sh routes here). This is a
-# STRUCTURAL health pass ("is this sprint internally consistent and unblocked?"),
+# STRUCTURAL health pass ("are dependencies sound and is every task in the right condition?"),
 # deliberately distinct from `plan think` (a planning critique of a plan). See:
 #   ./sprint.sh help chat
 #
@@ -49,6 +49,15 @@ echo ""
 field() {
   { grep -m1 -iE "^[[:space:]]*\*\*$2\*\*[[:space:]]*:" "$1" 2>/dev/null || true; } \
     | sed -E 's/^[^:]*:[[:space:]]*//'
+}
+
+# Reverse-dependency edge for a task file. Prefer the canonical **Dependents**;
+# fall back to the legacy **Blocks** spelling for one compatibility window.
+reverse_edge() {
+  local v
+  v="$(field "$1" 'Dependents')"
+  [ -n "$v" ] && { printf '%s' "$v"; return 0; }
+  field "$1" 'Blocks'
 }
 
 # id_list "1, #3-5, none" -> "1 3 4 5". Expands N-M ranges; drops none/n-a/blank.
@@ -164,7 +173,7 @@ for id in $(board_ids); do
   file="$(file_of "$id")"
   stage="$(stage_of "$id")"
   deps="$(id_list "$(field "$file" 'Depends on')")"
-  blocks="$(id_list "$(field "$file" 'Blocks')")"
+  blocks="$(id_list "$(reverse_edge "$file")")"
   parent="$(id_list "$(field "$file" 'Parent')")"
   verdict="$(sprintmd_review_verdict "$file")"
 
@@ -173,25 +182,26 @@ for id in $(board_ids); do
     [ -n "$(stage_of "$d")" ] && continue
     add_finding 2 INTEGRITY "$id" "$file" \
       "declares 'Depends on: $d' but task $d exists in no stage (broken edge)" \
-      "correct the id, or drop $d from the Depends on line"
+      "if $d was folded/renumbered, rewrite the edge through the helper (source docs/sprintmd/lib.sh && sprintmd_rewrite_dep_id $d <new-id>); drop $d only when it was never a real prerequisite"
   done
   for b in $blocks; do
     [ -n "$(stage_of "$b")" ] && continue
     add_finding 2 INTEGRITY "$id" "$file" \
-      "declares 'Blocks: $b' but task $b exists in no stage (broken edge)" \
-      "correct the id, or drop $b from the Blocks line"
+      "declares 'Dependents: $b' but task $b exists in no stage (broken edge)" \
+      "if $b was folded/renumbered, rewrite the edge through the helper (source docs/sprintmd/lib.sh && sprintmd_rewrite_dep_id $b <new-id>); drop $b only when nothing still waits on this task"
   done
 
-  # 2. One-way edges — A depends on B, but B (if still open) omits A from Blocks.
-  #    Checked only when B is open, so an edge into an archived task is silent.
+  # 2. One-way edges — A depends on B, but B (if still open) omits A from its
+  #    reverse edge. Checked only when B is open, so an edge into an archived
+  #    task is silent. B's reverse edge reads **Dependents** (legacy **Blocks**).
   for d in $deps; do
     df="$(file_of "$d")"; [ -n "$df" ] || continue
     is_open "$(stage_of "$d")" || continue
-    dbl="$(id_list "$(field "$df" 'Blocks')")"
+    dbl="$(id_list "$(reverse_edge "$df")")"
     case " $dbl " in *" $id "*) : ;; *)
       add_finding 4 HYGIENE "$id" "$file" \
-        "depends on $d, but task $d's 'Blocks' does not list $id (one-way edge)" \
-        "add $id to task $d's Blocks line so the edge is reciprocal" ;;
+        "depends on $d, but task $d's 'Dependents' does not list $id (one-way edge)" \
+        "heal the edge through the helper: source docs/sprintmd/lib.sh && sprintmd_ensure_reciprocal $d $id  (adds $id to task $d's Dependents)" ;;
     esac
   done
 
@@ -206,7 +216,7 @@ for id in $(board_ids); do
   # 4. Outstanding questions — surfaced one per finding so each can be walked
   #    and written back singly. On a READY next/ task these are integrity bugs
   #    (marked ready, not actually ready); elsewhere they are ordering issues.
-  #    A task correctly stamped BLOCKED already advertises why it can't run —
+  #    A task correctly stamped BLOCKED already advertises the open decision —
   #    re-surfacing its recorded question would be noise, so skip that case.
   if [ "$verdict" != "BLOCKED" ]; then
   while IFS= read -r q; do
@@ -232,7 +242,7 @@ EOF
     if [ "$verdict" != "READY" ]; then
       add_finding 4 HYGIENE "$id" "$file" \
         "sits in next/ without a '**Status: READY**' stamp (work will skip it)" \
-        "run 'chat $id' to finish defining it, or 'gate' to vet it"
+        "run 'chat $id' to settle any open decisions, or 'gate' to vet it"
     fi
     # Dependency-stage violations — grade each unmet dep by where it sits.
     for u in $(sprintmd_unmet_deps "$file"); do
@@ -240,12 +250,12 @@ EOF
       case "$ustage" in
         blocked)
           add_finding 1 BLOCKER "$id" "$file" \
-            "depends on $u, which is BLOCKED — this task cannot actually run yet" \
-            "PATH A: define $u so it can leave blocked/ (hands off to 'chat $u'); or PATH B: demote this task to backlog/ so the sprint holds no work blocked on $u" ;;
+            "is dependent (on hold): depends on $u, which still needs a decision or clarification in blocked/" \
+            "PATH A: resolve $u so it can leave blocked/ (hands off to 'chat $u'); or PATH B: demote this dependent task to backlog/ so the sprint holds no work waiting on $u" ;;
         backlog)
           add_finding 3 ORDERING "$id" "$file" \
-            "depends on $u, still in backlog/ — prerequisite is not even in the sprint" \
-            "pull $u into the sprint ('plan') or defer this task until it is planned" ;;
+            "depends on $u, still in backlog/ — prerequisite is not fully vetted for work" \
+            "This task depends on $u, which is still in backlog/. Consider: ./sprint.sh chat $u" ;;
         # next/doing: both in flight — frontier ordering handles it, not a finding.
       esac
     done
@@ -406,7 +416,7 @@ NEXT_BLOCKED_RESOLUTION="$(sprintmd_next_blocked_resolution)"
 # Shared Conversation Method — stated once in ai/conversation.md, not restated below.
 _METHOD="$(sprintmd_conversation_method)" || exit 1
 
-APPEND_PROMPT="You are a senior engineer running a structural-health stand-up over a queued sprint — is it internally consistent and unblocked? NOT a planning critique of whether it is the right plan ('./sprint.sh plan think' owns that). A shell preflight already found every issue below; WALK them with the user and fix each, one at a time.
+APPEND_PROMPT="You are a senior engineer running a structural-health stand-up over a queued sprint — are dependencies sound and is every task in the right condition (READY vs needs a decision vs dependent/on hold)? NOT a planning critique of whether it is the right plan ('./sprint.sh plan think' owns that). A shell preflight already found every issue below; WALK them with the user and fix each, one at a time.
 
 $_METHOD
 
@@ -425,11 +435,11 @@ For EACH finding:
 1. VERIFY against the named task file first. Preflight is conservative; if already resolved, say so in one line and move on. Never act on an unconfirmed finding.
 2. STATE in one or two sentences what is wrong and why it matters for running the sprint.
 3. RECOMMEND a specific fix (findings carry one) and OFFER TO ACT. Acting is only these, inside the task pipeline:
-   - fix a metadata edge (Depends on / Blocks / Parent);
+   - fix a metadata edge (Depends on / Dependents / Parent) — route it through the lib helpers so both ends stay reciprocal (source docs/sprintmd/lib.sh; sprintmd_ensure_reciprocal DEP DEPENDENT for a one-way edge, sprintmd_rewrite_dep_id FROM TO for a folded/renumbered id), never a one-sided hand-edit;
    - mis-parked blocked/ (no '**Status: BLOCKED**', no '## Questions'): DEFAULT move to backlog/ (git mv $BLOCKED_DIR/<file> docs/tasks/backlog/<file> || mv $BLOCKED_DIR/<file> docs/tasks/backlog/<file>); only stamp BLOCKED, or commit to sprint via bash docs/sprintmd/scripts/promote-to-sprint.sh <file> (gate: READY→next/; never raw mv into next/);
    - stamp or correct a '**Status:**' marker;
-   - next→blocked BLOCKER: two-path choice under 'RESOLVING A next→blocked BLOCKER' below — do NOT drop Depends on to paper over it;
-   - real definition work: CHAIN OUT to './sprint.sh chat <id>' in a fresh window — do not redefine inline.
+   - dependent on hold for a task in blocked/: two-path choice under 'DEPENDENT ON HOLD' below — do NOT drop Depends on to paper over it;
+   - real decision/clarification work: CHAIN OUT to './sprint.sh chat <id>' in a fresh window — do not settle it inline.
 4. MOVE ON — note what is settled, then the next finding.
 
 OUTSTANDING QUESTIONS — write back, do not merely discuss

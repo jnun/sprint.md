@@ -1,6 +1,6 @@
 # Claude Provider Tier (as built)
 
-How sprint.md runs at full strength today when the AI provider is **Claude Code**.
+How SprintBias runs at full strength today when the AI provider is **Claude Code**.
 This is one of two first-class orchestration tiers (peer: **Grok Build** —
 `docs/guides/grok-provider-tier.md`). Other providers degrade from these designs,
 not the other way around.
@@ -114,6 +114,7 @@ Step	Action
 ## Related
 
 Path											Role
+docs/guides/dual-provider-smoke.md				Pre-release smoke ritual for both hosts
 docs/sprintmd/cli/claude.sh						Profile implementation
 docs/sprintmd/lib.sh							Mode, tier, run helpers
 docs/sprintmd/ai/provider-capabilities.md		Matrix source of truth

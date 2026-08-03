@@ -4,7 +4,7 @@
 #
 # Default path checks what the runtime actually needs — numeric filename IDs,
 # title/filename ID match, unique IDs across stages, and well-formed
-# **Depends on** / **Blocks** tokens. Template-stamped presence checks
+# **Depends on** / **Dependents** tokens. Template-stamped presence checks
 # (**Feature**, ## Problem, ## Success criteria) are not re-checked; those are
 # guaranteed by create-task.sh from .TEMPLATE-task.md.
 #
@@ -47,7 +47,7 @@ for arg in "$@"; do
             echo "  — numeric filename ID"
             echo "  — title ID matches filename"
             echo "  — no duplicate task IDs across stages"
-            echo "  — **Depends on** / **Blocks** token shape (no cycle detection)"
+            echo "  — **Depends on** / **Dependents** token shape (no cycle detection)"
             echo ""
             echo "Options:"
             echo "  --fix       Auto-fix safe issues (title-line ID mismatch only)"
@@ -112,15 +112,22 @@ paths_for_id() {
     awk -F'\t' -v id="$id" '$1 == id { print $2 }' "$ID_INDEX"
 }
 
-# Check one dependency-style field (Depends on / Blocks). Prints one issue
+# Check one dependency-style field (Depends on / Dependents). Prints one issue
 # line per problem (caller collects into its local issues array — bash 3.2
 # locals are not visible to callees). Numeric IDs that resolve to zero files
 # are treated as archived/gone (OK). Malformed tokens are reported. Cycle
 # detection is out of scope.
+#
+# Optional third arg is a legacy fallback field: if $field is absent, read it
+# instead (used so **Dependents** falls back to the old **Blocks** spelling for
+# one compatibility window). Issues are always reported under $field.
 check_id_list_field() {
-    local file="$1" field="$2"
+    local file="$1" field="$2" fallback="${3:-}"
     local raw kind tok
     raw=$(sprintmd_meta_value "$file" "$field")
+    if [ -z "$raw" ] && [ -n "$fallback" ]; then
+        raw=$(sprintmd_meta_value "$file" "$fallback")
+    fi
     [ -z "$raw" ] && return 0
     while read -r kind tok; do
         [ -n "$kind" ] || continue
@@ -220,13 +227,14 @@ EOF
         issues+=("Duplicate task ID $task_id (also at: ${others:-?})")
     fi
 
-    # 4–5. Depends on / Blocks token integrity (no cycle detection)
+    # 4–5. Depends on / Dependents token integrity (no cycle detection).
+    #      Dependents falls back to the legacy **Blocks** spelling on read.
     local _dep_issue
     while IFS= read -r _dep_issue; do
         [ -n "$_dep_issue" ] && issues+=("$_dep_issue")
     done <<EOF
 $(check_id_list_field "$file" "Depends on")
-$(check_id_list_field "$file" "Blocks")
+$(check_id_list_field "$file" "Dependents" "Blocks")
 EOF
 
     if [ ${#issues[@]} -eq 0 ]; then
@@ -275,6 +283,32 @@ for file in "${TASK_FILES[@]+"${TASK_FILES[@]}"}"; do
     validate_task "$file" || true
 done
 
+# ── Plan reverse-index drift ─────────────────────────────────────────
+# The plan file member list is the membership authority; each task's **Plan**
+# field mirrors it. Flag drift both ways: a task claiming Plan N no plan lists
+# (removed member / stale id), and a task saying none/wrong when a plan does
+# list it. --fix rewrites each to the primary (lowest) plan. done/ is skipped
+# (migrate on touch). One line per drifted task: ID  field → computed.
+PLAN_DRIFT=0
+PLAN_FIXED=0
+(cd "$PROJECT_ROOT" && sprintmd_plan_index_drift) > "$ID_INDEX.plan" 2>/dev/null || true
+if [ -s "$ID_INDEX.plan" ]; then
+    echo ""
+    echo "Plan reverse-index drift (plan file is authority):"
+    while IFS=$'\t' read -r _pid _cur _want; do
+        [ -n "$_pid" ] || continue
+        PLAN_DRIFT=$((PLAN_DRIFT + 1))
+        printf "  ${YELLOW}⚠${NC}  #%s  Plan: %s → %s\n" "$_pid" "$_cur" "$_want"
+    done < "$ID_INDEX.plan"
+    if [ "$FIX_MODE" = true ] && [ "$DRY_RUN" = false ]; then
+        (cd "$PROJECT_ROOT" && sprintmd_plan_index_drift --fix) >/dev/null 2>&1 || true
+        PLAN_FIXED=$PLAN_DRIFT
+        PLAN_DRIFT=0
+        printf "  ${GREEN}✓${NC} Synced Plan on %d task(s)\n" "$PLAN_FIXED"
+    fi
+fi
+rm -f "$ID_INDEX.plan"
+
 # Print summary
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
@@ -286,18 +320,25 @@ printf "${RED}Invalid files:  %d${NC}\n" "$INVALID_FILES"
 
 if [ "$FIX_MODE" = true ]; then
     printf "${BLUE}Fixed files:    %d${NC}\n" "$FIXED_FILES"
+    [ "$PLAN_FIXED" -gt 0 ] && printf "${BLUE}Plan synced:    %d${NC}\n" "$PLAN_FIXED"
 fi
+[ "$PLAN_DRIFT" -gt 0 ] && printf "${YELLOW}Plan drift:     %d${NC}\n" "$PLAN_DRIFT"
 
 echo ""
 
 # Exit with error code if any file is still invalid after fixes are applied.
 # REMAINING_INVALID (not FIXED_FILES < INVALID_FILES) is the source of truth:
 # a file with both a fixed title and an unfixable issue stays counted here.
-if [ "$REMAINING_INVALID" -gt 0 ]; then
-    if [ "$FIX_MODE" = false ]; then
-        echo "💡 Tip: Run with --fix to auto-correct title-line ID mismatches"
-    else
-        echo "⚠️  Some files could not be auto-fixed (duplicates / bad dependency tokens need a human)"
+# Unfixed Plan drift is also non-clean — --fix reconciles it in one pass.
+if [ "$REMAINING_INVALID" -gt 0 ] || [ "$PLAN_DRIFT" -gt 0 ]; then
+    if [ "$REMAINING_INVALID" -gt 0 ]; then
+        if [ "$FIX_MODE" = false ]; then
+            echo "💡 Tip: Run with --fix to auto-correct title-line ID mismatches and Plan drift"
+        else
+            echo "⚠️  Some files could not be auto-fixed (duplicates / bad dependency tokens need a human)"
+        fi
+    elif [ "$PLAN_DRIFT" -gt 0 ]; then
+        echo "💡 Tip: Run with --fix to sync each task's **Plan** to its plan file"
     fi
     exit 1
 fi

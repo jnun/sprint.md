@@ -1,6 +1,6 @@
 # GitHub Integration
 
-Automatic synchronization between sprint.md tasks and GitHub Issues.
+Automatic synchronization between SprintBias tasks and GitHub Issues.
 
 ## Feature Status: DONE
 
@@ -8,7 +8,7 @@ The GitHub integration is complete and working - tasks automatically sync with G
 
 ## Overview
 
-This feature provides automatic synchronization between the sprint.md folder-based task system and GitHub Issues, allowing stakeholders to track progress through GitHub's interface while maintaining folders as the source of truth.
+This feature provides automatic synchronization between the SprintBias folder-based task system and GitHub Issues, allowing stakeholders to track progress through GitHub's interface while maintaining folders as the source of truth.
 
 ## Automatic Issue Creation
 **Status**: DONE

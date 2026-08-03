@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# docs/sprintmd/cli/claude.sh — Claude Code CLI profile for sprint.md
+# docs/sprintmd/cli/claude.sh — Claude Code CLI profile for SprintBias
 #
 # Defines sprintmd_provider_exec(), which maps the provider-neutral interface used by
-# sprint.md scripts to Claude Code's actual CLI flags.
+# SprintBias scripts to Claude Code's actual CLI flags.
 #
 # Sourced automatically by config.sh when SPRINTMD_CLI=claude (the default).
 #
@@ -124,7 +124,7 @@ _sprintmd_warn_no_timeout() {
     windows) fix="the Windows timeout.exe cannot wrap commands — install GNU coreutils in MSYS2/Git Bash (e.g. 'pacman -S coreutils')" ;;
     *)       fix="install GNU coreutils so 'timeout' (or 'gtimeout') is on PATH" ;;
   esac
-  printf 'sprint.md: ⚠ timeout will not work until we %s.\n' "$fix" >&2
+  printf 'SprintBias: ⚠ timeout will not work until we %s.\n' "$fix" >&2
   printf '          Until then a wedged/unresponsive API request can hang instead of being capped (set SPRINTMD_ATTEMPT_TIMEOUT=0 to silence this).\n' >&2
 }
 
@@ -207,6 +207,10 @@ sprintmd_provider_exec() {
       cmd+=(-p "$prompt")
     fi
 
+    # Coerce Grok-only model ids if a caller bypassed lib resolve.
+    if declare -F sprintmd_coerce_model >/dev/null 2>&1; then
+      model="$(sprintmd_coerce_model "$model")"
+    fi
     [ -n "$model" ]            && cmd+=(--model "$model")
     [ -n "$max_turns" ]        && cmd+=(--max-turns "$max_turns")
     [ -n "$tools" ]            && cmd+=(--allowedTools "$tools")
@@ -236,7 +240,14 @@ sprintmd_provider_exec() {
         && _ps=("${PIPESTATUS[@]}") || _ps=("${PIPESTATUS[@]}")
       rc="${_ps[0]}"
     else
+      # Both streams are captured to temp files, so the terminal goes dark for
+      # the whole run — tick dots on the TTY so it never looks hung. Dots go to
+      # /dev/tty, so they still show even when a caller captures stdout via
+      # $(...); no-op only when no terminal is attached (piped/CI) or a
+      # heartbeat already owns the line.
+      _sprintmd_heartbeat_start
       ${tmo[@]+"${tmo[@]}"} "${cmd[@]}" > "$out" 2>"$errf" && rc=0 || rc=$?
+      _sprintmd_heartbeat_stop
     fi
 
     # ── Evaluate: success, hard failure, or transient? ──────────────
@@ -330,6 +341,11 @@ sprintmd_provider_interactive() {
       *)                      extra_args+=("$1"); shift ;;
     esac
   done
+
+  # Coerce Grok-only model ids if a caller bypassed lib resolve.
+  if declare -F sprintmd_coerce_model >/dev/null 2>&1; then
+    model="$(sprintmd_coerce_model "$model")"
+  fi
 
   local -a cmd=("$SPRINTMD_CLI")
   [ -n "$system_prompt" ] && cmd+=(--append-system-prompt "$system_prompt")

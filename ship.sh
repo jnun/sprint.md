@@ -197,10 +197,10 @@ bump_version() {
     printf '%s.%s.%s' "$major" "$minor" "$patch"
 }
 
-# ── Preflight: must be the sprint.md dev root ─────────────────────────
+# ── Preflight: must be the SprintBias dev root ─────────────────────────
 for required in "setup.sh" "src" "docs/sprintmd" "src/VERSION"; do
     if [ ! -e "$required" ]; then
-        echo -e "${RED}✗ Not in the sprint.md dev root (missing: $required)${NC}" >&2
+        echo -e "${RED}✗ Not in the SprintBias dev root (missing: $required)${NC}" >&2
         echo "  Run ./ship.sh from the repository root." >&2
         exit 1
     fi
@@ -214,7 +214,7 @@ if [ "$NO_BUMP" -eq 0 ] && ! bump_version "$(cat src/VERSION)" "$BUMP" >/dev/nul
     exit 1
 fi
 
-echo -e "${BOLD}sprint.md — ship${NC}"
+echo -e "${BOLD}SprintBias — ship${NC}"
 [ "$DRY_RUN" -eq 1 ] && echo -e "${YELLOW}(dry run — no files will change)${NC}"
 echo ""
 

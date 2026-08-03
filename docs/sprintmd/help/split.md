@@ -14,5 +14,9 @@ Usage:
 
 After running:
   - New atomic tasks are created in docs/tasks/backlog/
+  - Dependency edges are healed automatically: each child's Depends on is
+    made reciprocal (the other end lists it back), and the parent is folded
+    into its first child so anything that depended on the parent follows it
+    instead of a deleted id
   - Original task is deleted
   - Move the new tasks to next/ when ready to work them

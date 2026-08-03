@@ -1,6 +1,6 @@
-# sprint.md Documentation State
+# SprintBias Documentation State
 
-Part of the sprint.md documentation system, not source code for the host project.
+Part of the SprintBias documentation system, not source code for the host project.
 Managed by scripts in `docs/sprintmd/scripts/` and by `setup.sh`. Safe to edit by hand
 if you need to fix a counter — the field lines below are what scripts parse.
 
@@ -13,8 +13,8 @@ Fields:
 
 ---
 
-**Last Updated**: 2026-07-31
+**Last Updated**: 2026-08-02
 **sprint_VERSION**: 0.0.3
-**sprint_TASK_ID**: 326
+**sprint_TASK_ID**: 335
 **sprint_BUG_ID**: 3
-**sprint_PLAN_ID**: 14
+**sprint_PLAN_ID**: 15

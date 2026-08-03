@@ -1,5 +1,5 @@
 # Sync issue labels to GitHub Project status columns
-# Powered by sprint.md: https://github.com/jnun/sprint.md
+# Powered by SprintBias: https://github.com/jnun/sprintbias
 #
 # HOW IT WORKS:
 # When you (or the task sync workflow) apply a label to an issue that matches
@@ -43,7 +43,7 @@ jobs:
     permissions:
       issues: write
       contents: read
-    uses: jnun/sprint.md/.github/workflows/sync-status-to-label-reusable.yml@main
+    uses: jnun/sprintbias/.github/workflows/sync-status-to-label-reusable.yml@main
     with:
       label_name: ${{ github.event.label.name }}
       issue_number: ${{ github.event.issue.number }}

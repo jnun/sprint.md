@@ -12,16 +12,27 @@ MAX_TASKS=999
 FORCE=0
 
 _usage() {
-  echo "Usage: ./sprint.sh gate [folder] [limit] [--force]" >&2
+  echo "Usage: ./sprint.sh gate [folder] [limit] [--model <id>] [--force]" >&2
   echo "  folder: backlog|next|doing|blocked (default: next)" >&2
+  echo "  --model <id>: pin the model for this run only (see ./sprint.sh model)" >&2
   echo "  On next/: stamps READY/BLOCKED/COMPLETE and moves unready tasks." >&2
   echo "  On other folders: quality report only — no writes, no moves." >&2
   exit 1
 }
 
+_next_is_model=0
 for _arg in "$@"; do
+  # --model <id> pins the model for THIS run only via the resolver's per-run
+  # lever (SPRINTMD_MODEL_DEFAULT) — no config edit. See ./sprint.sh model.
+  if [ "$_next_is_model" -eq 1 ]; then
+    [ -n "$_arg" ] || { echo "✗ --model needs a model id" >&2; exit 1; }
+    export SPRINTMD_MODEL_DEFAULT="$_arg"
+    _next_is_model=0
+    continue
+  fi
   case "$_arg" in
     --force) FORCE=1 ;;
+    --model) _next_is_model=1 ;;
     backlog|next|doing|blocked) FOLDER="$_arg" ;;
     review|done)
       echo "Error: Cannot gate $_arg/ — those are completed tasks." >&2
@@ -32,7 +43,8 @@ for _arg in "$@"; do
     *) MAX_TASKS="$_arg" ;;
   esac
 done
-unset _arg
+[ "$_next_is_model" -eq 1 ] && { echo "✗ --model needs a model id" >&2; exit 1; }
+unset _arg _next_is_model
 
 # ── Config ───────────────────────────────────────────────────────────
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/lib.sh"
@@ -54,9 +66,9 @@ AI_MODE="$(sprintmd_ai_mode)"
 if [ "$FOLDER" != "next" ]; then
   timeout_sec=120
   MAX_TURNS=15
-  MODEL="$(sprintmd_resolve_model AUDIT)"
+  MODEL="$(sprintmd_tier_model AUDIT)"
   # Fall back to GATE if AUDIT is unset — one model surface for gate.
-  [ -z "$MODEL" ] && MODEL="$(sprintmd_resolve_model GATE)"
+  [ -z "$MODEL" ] && MODEL="$(sprintmd_tier_model GATE)"
 
   if [ "$AI_MODE" != "emit" ]; then
     command -v "$SPRINTMD_CLI" &>/dev/null || {
@@ -279,19 +291,19 @@ _chat_line() {
   printf '    ./sprint.sh chat %-4s %-44s%s\n' "$id" "$title" "$tail"
 }
 
-# Turn the tasks blocked this run into a dependency-ordered chat queue. The root
-# cause of a block is often an UPSTREAM task that isn't defined yet, so a flat
-# "these are blocked" list hides the real work. This orders it top-down: the
-# undefined upstream tasks (the real X-Y-Z to define) and dependency-free blocks
-# come first; blocks that wait on them come after. Chat the top of the list and
-# the rest often fall out READY on the next gate run.
+# Turn the tasks that need a decision/clarification this run into a
+# dependency-ordered chat queue. An open decision is often on an UPSTREAM task,
+# so a flat "these are blocked" list hides the real work. This orders it
+# top-down: dependency-free items and unresolved upstream deps first; dependents
+# that wait on them come after. Chat the top of the list and the rest often fall
+# out READY on the next gate run.
 # Args: the blocked task basenames (as in $BLOCKED_DIR).
 _chat_queue() {
   [ "$#" -gt 0 ] || return 0
   local name id f deps
   local blocked_ids="" roots="" waiters="" all_deps=""
 
-  # Partition the blocked tasks: dependency-free (roots) vs. waiting-on-others.
+  # Partition: no open deps (roots) vs. dependent on others (waiters — on hold).
   for name in "$@"; do
     blocked_ids="$blocked_ids ${name%%-*}"
   done
@@ -303,10 +315,10 @@ _chat_queue() {
     if [ -z "$deps" ]; then roots="$roots $id"; else waiters="$waiters $id"; fi
   done
 
-  # Upstream deps that aren't blocked themselves but still need DEFINING (not yet
-  # stamped READY). These are the tasks whose absence is really holding the sprint
-  # up — surface them ABOVE the blocks that depend on them. A READY-but-unfinished
-  # dep only needs `work` to run it, not chat, so it's left off this list.
+  # Upstream deps that aren't in blocked/ themselves but still need a decision
+  # or definition (not yet stamped READY). Surface them ABOVE the blocked tasks
+  # that depend on them. A READY-but-unfinished dep only needs `work` to run it
+  # (dependent/on hold), not chat, so it's left off this list.
   local upstream="" d dfile _res
   for d in $(printf '%s' "$all_deps" | tr ' ' '\n' | grep -E '^[0-9]+$' | sort -un); do
     case " $blocked_ids " in *" $d "*) continue ;; esac
@@ -317,12 +329,12 @@ _chat_queue() {
   done
 
   echo ""
-  echo "▸ Chat queue — define the blocking work, top-down:"
+  echo "▸ Chat queue — settle decisions/clarifications, top-down:"
   echo "  (the AI raises the questions, you make the calls)"
   echo ""
   local first_group=1
   if [ -n "$upstream$roots" ]; then
-    echo "  Chat these first — nothing upstream is blocking them:"
+    echo "  Chat these first — no open prerequisite decisions ahead of them:"
     for d in $(printf '%s' "$upstream" | tr ' ' '\n' | grep -E '^[0-9]+$' | sort -un); do
       _res="$(sprintmd_find_task "$d")" && _chat_line "$d" "${_res%%$'\t'*}" ""
     done
@@ -334,15 +346,16 @@ _chat_queue() {
   fi
   if [ -n "$waiters" ]; then
     [ "$first_group" -eq 0 ] && echo ""
-    echo "  Then these — they depend on the tasks above:"
+    echo "  Then these — they depend on the tasks above (dependent / on hold for sequencing,"
+    echo "  and still need their own decisions settled):"
     for id in $(printf '%s' "$waiters" | tr ' ' '\n' | grep -E '^[0-9]+$' | sort -un); do
       f="$(find "$BLOCKED_DIR" -maxdepth 1 -name "${id}-*.md" 2>/dev/null | head -1)"
       _chat_line "$id" "$f" "$(sprintmd_unmet_deps "$f")"
     done
   fi
   echo ""
-  echo "  Once a blocked task is defined, re-queue it:"
-  echo "    git mv $BLOCKED_DIR/<file> $NEXT_DIR/ || mv $BLOCKED_DIR/<file> $NEXT_DIR/"
+  echo "  Once decisions are settled, re-enter next/ only through the gate:"
+  echo "    bash docs/sprintmd/scripts/promote-to-sprint.sh $BLOCKED_DIR/<file>"
 }
 
 READY=0
@@ -377,12 +390,12 @@ for i in $(seq 0 $((COUNT - 1))); do
       BLOCKED=$((BLOCKED + 1))
       BLOCKED_TASKS+=("$TASK_NAME")
       echo ""
-      echo "⊘ Blocked → $BLOCKED_DIR/$TASK_NAME"
+      echo "⊘ Blocked (needs decision or clarification) → $BLOCKED_DIR/$TASK_NAME"
       echo "  Why (the file's ## BLOCKED section):"
       _show_blocked "$BLOCKED_DIR/$TASK_NAME"
-      echo "  Next: chat it through, or answer the questions inline, then re-queue:"
+      echo "  Next: chat it through, or answer the questions inline, then re-enter via the gate:"
       echo "    ./sprint.sh chat ${TASK_NAME%%-*}"
-      echo "    git mv $BLOCKED_DIR/$TASK_NAME $NEXT_DIR/ || mv $BLOCKED_DIR/$TASK_NAME $NEXT_DIR/"
+      echo "    bash docs/sprintmd/scripts/promote-to-sprint.sh $BLOCKED_DIR/$TASK_NAME"
       ;;
     COMPLETE)
       COMPLETE=$((COMPLETE + 1))
@@ -421,7 +434,7 @@ echo "▸ Done: $READY ready, $COMPLETE complete, $BLOCKED blocked, $ERRS errors
 
 if [ "$BLOCKED" -gt 0 ]; then
   echo ""
-  echo "⊘ Blocked — each file's ## BLOCKED section says why:"
+  echo "⊘ Blocked (need decision or clarification) — each file's ## BLOCKED section says why:"
   for _t in ${BLOCKED_TASKS[@]+"${BLOCKED_TASKS[@]}"}; do
     echo "    $BLOCKED_DIR/$_t"
   done

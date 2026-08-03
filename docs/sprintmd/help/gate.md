@@ -18,7 +18,7 @@ On **next/** (default) gate:
 
 Verdicts on next/ (workability stamps — **not** lifecycle folders):
   READY    — task stays in next/, ready for execution
-  BLOCKED  — task moves to blocked/, needs developer answers first
+  BLOCKED  — needs a decision or clarification; moves to blocked/
   COMPLETE — work already present in the codebase; task moves to **review/**
              (not `docs/tasks/done/`; you approve and move to done/ later)
 
@@ -37,6 +37,7 @@ Usage:
   ./sprint.sh gate backlog      # quality report on backlog/ (no moves)
   ./sprint.sh gate blocked 5    # report at most 5 blocked tasks
   ./sprint.sh gate next 1       # same as: gate 1
+  ./sprint.sh gate --model <id> # pin the model for this run only
 
 Folders: next (default), backlog, doing, blocked.
 review/ and done/ are not targets (completed work).
@@ -47,8 +48,8 @@ re-pay to review the whole queue each run. --force re-reviews all of them.
 
 After running on next/:
   - READY tasks: run ./sprint.sh work to execute them
-  - BLOCKED tasks: answer questions (or `./sprint.sh chat <id>`), then re-enter
-    next/ only via the shared gate again — never raw `git mv` into next/
+  - BLOCKED tasks: supply the decision or clarification (or `./sprint.sh chat <id>`),
+    then re-enter next/ only via the shared gate again — never raw `git mv` into next/
   - COMPLETE tasks: verify in review/, then move to done/ when you approve
 
 **Invariant:** nothing enters `next/` without this workability review. Surfaces
@@ -60,6 +61,13 @@ that promote (`plan start`, `chat backlog`/`blocked` `[w]`, `chat` close-loop,
 Provider for this run only (leading flags; does not rewrite config):
   ./sprint.sh -g gate                # Grok Build
   ./sprint.sh -c gate --force        # Claude Code
+
+Model for this run only: add --model <id> (e.g. ./sprint.sh gate --model opus)
+to pin the model without editing config. Precedence, highest first:
+  --model flag / SPRINTMD_MODEL_GATE env
+    → config MODEL_GATE → config MODEL_DEFAULT → tier default → CLI default
+On a folder report (gate backlog/doing/blocked) --model pins the audit model
+the same way. See and set persistent pins with ./sprint.sh model (help model).
 
 Related commands:
   gate    — this command: quality gate on next/, quality report elsewhere (off-spine)

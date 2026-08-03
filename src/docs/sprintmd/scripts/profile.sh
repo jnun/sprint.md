@@ -61,7 +61,7 @@ fi
 
 # ── Interactive create / update ──────────────────────────────────────
 
-_MODEL="$(sprintmd_resolve_model PROFILE)"
+_MODEL="$(sprintmd_tier_model PROFILE)"
 _model_args=()
 [ -n "$_MODEL" ] && _model_args=(--model "$_MODEL")
 

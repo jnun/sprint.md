@@ -1,24 +1,24 @@
 #!/usr/bin/env bash
 
 # migrate-to-submodule.sh
-# Migrates an existing sprint.md installation to use the submodule distribution
+# Migrates an existing SprintBias installation to use the submodule distribution
 
 set -euo pipefail
 
 echo "================================================"
-echo "  sprint.md - Migration to Submodule"
+echo "  SprintBias - Migration to Submodule"
 echo "================================================"
 echo ""
 
-# Check if we're in a project with sprint.md installed
+# Check if we're in a project with SprintBias installed
 if [ ! -f "docs/sprintmd/DOC_STATE.md" ] && [ ! -f "docs/STATE.md" ]; then
-    echo "❌ Error: No sprint.md installation found in current directory."
+    echo "❌ Error: No SprintBias installation found in current directory."
     echo "  Please run this script from your project root."
     exit 1
 fi
 
 # Check for existing work content
-echo "Checking existing sprint.md content..."
+echo "Checking existing SprintBias content..."
 TASK_COUNT=$(find docs/tasks -type f -name "*.md" 2>/dev/null | wc -l | tr -d ' ')
 BUG_COUNT=$(find docs/bugs -type f -name "*.md" 2>/dev/null | wc -l | tr -d ' ')
 DOC_COUNT=$(find docs -type f -name "*.md" 2>/dev/null | wc -l | tr -d ' ')
@@ -31,7 +31,7 @@ echo ""
 
 # Backup existing work
 echo "Creating backup of existing work..."
-BACKUP_DIR="sprint.md-backup-$(date +%Y%m%d-%H%M%S)"
+BACKUP_DIR="sprintbias-backup-$(date +%Y%m%d-%H%M%S)"
 mkdir -p "$BACKUP_DIR"
 
 # Backup docs directory structure
@@ -88,31 +88,31 @@ fi
 
 echo ""
 
-# Add submodule
-echo "Adding sprint.md as git submodule..."
-echo "Enter the sprint.md distribution repository URL:"
-echo "(e.g., https://github.com/yourusername/sprint.md.git)"
+# Add submodule (directory name matches the GitHub repo: sprintbias)
+echo "Adding SprintBias as git submodule..."
+echo "Enter the SprintBias distribution repository URL:"
+echo "(e.g., https://github.com/jnun/sprintbias.git)"
 read -r REPO_URL
 
 # Check if submodule already exists
-if [ -d "sprint.md" ] && [ -f ".gitmodules" ] && grep -q "sprint.md" .gitmodules; then
-    echo "⚠ Submodule sprint.md already exists. Updating instead..."
-    cd sprint.md
+if [ -d "sprintbias" ] && [ -f ".gitmodules" ] && grep -q "sprintbias" .gitmodules; then
+    echo "⚠ Submodule sprintbias already exists. Updating instead..."
+    cd sprintbias
     git pull origin main
     cd ..
 else
-    git submodule add "$REPO_URL" sprint.md
+    git submodule add "$REPO_URL" sprintbias
     git submodule update --init --recursive
 fi
 
-echo "  ✓ Added sprint.md submodule"
+echo "  ✓ Added sprintbias submodule"
 echo ""
 
 # Restore work content
 echo "Restoring your project content..."
 
 # Ensure directories exist (setup.sh will handle this safely too)
-./sprint.md/setup.sh
+./sprintbias/setup.sh
 
 # Restore task content
 if [ -d "$BACKUP_DIR/tasks" ]; then
@@ -162,7 +162,7 @@ echo "================================================"
 echo "  Migration Complete!"
 echo "================================================"
 echo ""
-echo "Your project has been migrated to use sprint.md as a submodule."
+echo "Your project has been migrated to use SprintBias as a submodule."
 echo ""
 echo "Next steps:"
 echo "1. Review the migration:"
@@ -171,12 +171,12 @@ echo "   - Verify docs/sprintmd/DOC_STATE.md has correct IDs"
 echo "   - Ensure docs/ has your documentation"
 echo ""
 echo "2. Commit the changes:"
-echo "   git add .gitmodules sprint.md"
-echo "   git commit -m \"Migrate to sprint.md submodule\""
+echo "   git add .gitmodules sprintbias"
+echo "   git commit -m \"Migrate to SprintBias submodule\""
 echo ""
-echo "3. Use sprint.md commands:"
-echo "   ./sprint.md/sprint.sh status"
-echo "   ./sprint.md/sprint.sh new \"Your task\""
+echo "3. Use SprintBias commands:"
+echo "   ./sprintbias/sprint.sh status"
+echo "   ./sprintbias/sprint.sh newtask \"Your task\""
 echo ""
 echo "Backup preserved at: $BACKUP_DIR"
 echo "(You can remove this after verifying the migration)"

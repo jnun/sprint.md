@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
-# setup.sh - sprint.md unified installer and updater
+# setup.sh - SprintBias unified installer and updater
 # Usage:
 #   ./setup.sh                  # prompt (default: current directory)
 #   ./setup.sh /path/to/project # install/update into that path
-#   ./setup.sh .                # install into cwd
+#   ./setup.sh ~/code/my-app    # ~ is expanded (target must already exist)
 #   SPRINT_TARGET=./my-app ./setup.sh
 #
 # One-liner from any project (fetches source, then runs this):
-#   curl -fsSL https://raw.githubusercontent.com/jnun/sprint.md/main/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/jnun/sprintbias/main/install.sh | bash
 #
 # This script handles both fresh installations and updates with version migrations.
 # Distribution: src/ mirrors the deployed layout — setup.sh walks it recursively.
@@ -44,7 +44,7 @@ if [ -p /dev/stdin ]; then
     { exec < /dev/tty; } 2>/dev/null || true
 fi
 
-# Get the sprint.md source directory (where this script lives)
+# Get the SprintBias source directory (where this script lives)
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SPRINTMD_SOURCE_DIR="$SCRIPT_DIR"
 
@@ -159,7 +159,7 @@ else
 fi
 
 echo "================================================"
-echo "  sprint.md - Project Documentation Setup"
+echo "  SprintBias - Project Documentation Setup"
 echo "================================================"
 echo "  Version: $CURRENT_VERSION"
 echo ""
@@ -170,7 +170,7 @@ if [ -n "${1:-}" ]; then
 elif [ -n "${SPRINT_TARGET:-}" ]; then
     TARGET_PATH="$SPRINT_TARGET"
 else
-    echo "Enter the path to your project where sprint.md should be installed:"
+    echo "Enter the path to your project where SprintBias should be installed:"
     echo "(default: current directory — press Enter for .)"
     read -r TARGET_PATH
     TARGET_PATH="${TARGET_PATH:-.}"
@@ -204,7 +204,7 @@ cd "$TARGET_PATH" || exit 1
 
 # Self-targeting detection
 if [ "$TARGET_PATH" = "$SPRINTMD_SOURCE_DIR" ]; then
-    echo "Note: Target is the sprint.md source directory."
+    echo "Note: Target is the SprintBias source directory."
     echo "   This will sync src/ to docs/ for development/testing."
     echo ""
 fi
@@ -216,7 +216,7 @@ fi
 INSTALLED_VERSION=""
 UPDATE_MODE=false
 
-# Check if sprint.md is already installed. Product version lives only in
+# Check if SprintBias is already installed. Product version lives only in
 # docs/sprintmd/DOC_STATE.md (written from src/VERSION). There is no separate
 # migration-epoch ladder — layout cleanups below are path-presence only.
 if [ -f "docs/sprintmd/DOC_STATE.md" ]; then
@@ -224,7 +224,7 @@ if [ -f "docs/sprintmd/DOC_STATE.md" ]; then
     [ -n "$INSTALLED_VERSION" ] || INSTALLED_VERSION="unknown"
 
     UPDATE_MODE=true
-    echo "Existing sprint.md installation detected (version $INSTALLED_VERSION)"
+    echo "Existing SprintBias installation detected (version $INSTALLED_VERSION)"
     echo "This will update to version $CURRENT_VERSION"
     echo ""
 elif [ -f "docs/STATE.md" ]; then
@@ -233,14 +233,14 @@ elif [ -f "docs/STATE.md" ]; then
     [ -n "$INSTALLED_VERSION" ] || INSTALLED_VERSION="unknown"
 
     UPDATE_MODE=true
-    echo "Existing sprint.md installation detected (version $INSTALLED_VERSION, older layout)"
+    echo "Existing SprintBias installation detected (version $INSTALLED_VERSION, older layout)"
     echo "This will update to version $CURRENT_VERSION"
     echo ""
 elif [ -d "docs/tasks" ] || [ -d "work/tasks" ] || [ -d "docs/work/tasks" ]; then
     INSTALLED_VERSION="unknown"
     UPDATE_MODE=true
     echo "Existing project docs structure detected"
-    echo "This will install/update sprint.md to version $CURRENT_VERSION"
+    echo "This will install/update SprintBias to version $CURRENT_VERSION"
     echo ""
 elif [ -f "DOCUMENTATION.md" ]; then
     INSTALLED_VERSION="unknown"
@@ -305,46 +305,31 @@ if $UPDATE_MODE && [ -f "docs/.platform-config" ]; then
     CURRENT_PLATFORM=$(grep '^PLATFORM=' docs/.platform-config | cut -d'"' -f2)
 fi
 
-if $UPDATE_MODE; then
-    echo "Select your platform configuration:"
-    echo "  Current: ${CURRENT_PLATFORM:-none (default)}"
-else
-    echo "Select your platform configuration:"
-fi
-echo "1) GitHub Issues"
-echo "2) No sync — opt out of GitHub issue tracking (default)"
+# --- Two doors: the whole first impression --------------------------------
+# [Enter] Claude Code, [g] Grok Build. Both doors run the identical silent
+# scaffold batch below — the only difference is the agent CLI/provider written
+# into docs/sprintmd/config. No other rows, no other questions here.
+echo "Which coding agent will drive SprintBias?"
+echo "  [Enter]  Claude Code"
+echo "  [g]      Grok Build"
 echo ""
-if $UPDATE_MODE && [ -n "$CURRENT_PLATFORM" ]; then
-    echo "Enter your choice (1-2, or press Enter to keep current):"
-else
-    echo "Enter your choice (1-2, or press Enter for no sync):"
-fi
-read -r PLATFORM_CHOICE
-
-case "$PLATFORM_CHOICE" in
-    1)
-        PLATFORM="github-issues"
-        echo "Selected: GitHub Issues"
-        ;;
-    2)
-        PLATFORM="none"
-        echo "Selected: No sync — opting out of issue tracker integration"
-        ;;
-    "")
-        if $UPDATE_MODE && [ -n "$CURRENT_PLATFORM" ]; then
-            PLATFORM="$CURRENT_PLATFORM"
-            echo "Keeping current: $PLATFORM"
-        else
-            PLATFORM="none"
-            echo "Selected: No sync — opting out of issue tracker integration"
-        fi
-        ;;
-    *)
-        PLATFORM="none"
-        echo "Selected: No sync — opting out of issue tracker integration"
-        ;;
+printf "Choose [Enter=Claude / g=Grok]: "
+read -r DOOR_CHOICE
+case "$DOOR_CHOICE" in
+    g|G|grok|Grok|GROK) SELECTED_CLI="grok";   SELECTED_PROVIDER="grok-build"  ;;
+    *)                  SELECTED_CLI="claude"; SELECTED_PROVIDER="claude-code" ;;
 esac
+msg_success "Agent: $SELECTED_CLI (provider tier: $SELECTED_PROVIDER)"
 echo ""
+
+# GitHub Issues sync is opt-in behind "More options?" at the end. Default to no
+# sync; on update, keep whatever the project already had until the user changes
+# it there.
+if $UPDATE_MODE && [ -n "$CURRENT_PLATFORM" ]; then
+    PLATFORM="$CURRENT_PLATFORM"
+else
+    PLATFORM="none"
+fi
 
 # ============================================================================
 # CREATE DIRECTORY STRUCTURE
@@ -394,9 +379,9 @@ safe_mkdir "docs/sprintmd"
 if [ ! -f "docs/sprintmd/DOC_STATE.md" ]; then
     # Create new DOC_STATE.md
     if cat > docs/sprintmd/DOC_STATE.md << STATE_EOF
-# sprint.md Documentation State
+# SprintBias Documentation State
 
-Part of the sprint.md documentation system, not source code for the host project.
+Part of the SprintBias documentation system, not source code for the host project.
 Managed by scripts in \`docs/sprintmd/scripts/\` and by \`setup.sh\`. Safe to edit by hand
 if you need to fix a counter — the field lines below are what scripts parse.
 
@@ -436,9 +421,9 @@ else
     [[ "$EXISTING_PLAN_ID" =~ ^[0-9]+$ ]] || EXISTING_PLAN_ID=0
 
     if cat > docs/sprintmd/DOC_STATE.md << STATE_EOF
-# sprint.md Documentation State
+# SprintBias Documentation State
 
-Part of the sprint.md documentation system, not source code for the host project.
+Part of the SprintBias documentation system, not source code for the host project.
 Managed by scripts in \`docs/sprintmd/scripts/\` and by \`setup.sh\`. Safe to edit by hand
 if you need to fix a counter — the field lines below are what scripts parse.
 
@@ -466,7 +451,7 @@ fi
 
 # Store platform configuration
 cat > docs/.platform-config << CONFIG_EOF
-# sprint.md Platform Configuration
+# SprintBias Platform Configuration
 # Generated: $(date +%Y-%m-%d)
 PLATFORM="$PLATFORM"
 CONFIG_EOF
@@ -483,7 +468,7 @@ FILES_COPIED=0
 # README.md — we don't ship one (the user owns theirs). If a README exists,
 # prepend a pointer to DOCUMENTATION.md so readers know where the project
 # docs live. Same pattern as the AI instruction files below.
-README_POINTER='> **Project documentation** → see [`DOCUMENTATION.md`](DOCUMENTATION.md) (managed by [sprint.md](https://github.com/jnun/sprint.md))'
+README_POINTER='> **Project documentation** → see [`DOCUMENTATION.md`](DOCUMENTATION.md) (managed by [SprintBias](https://sprintbias.com))'
 
 # ----------------------------------------------------------------------------
 # Detection markers + pure decision helpers
@@ -491,7 +476,7 @@ README_POINTER='> **Project documentation** → see [`DOCUMENTATION.md`](DOCUMEN
 #
 # setup.sh writes into other people's projects, so "did WE already install
 # this?" must never be answered by an incidental substring (a stray path, a
-# comment, an unrelated tool that happens to mention "sprint.md" or
+# comment, an unrelated tool that happens to mention "SprintBias" or
 # "DOCUMENTATION.md"). A wrong "yes" silently skips real work; a wrong "no"
 # risks duplicating content. Each update path therefore matches a distinctive
 # fragment of the exact text we write — an unambiguous "this is ours" marker —
@@ -504,10 +489,12 @@ README_POINTER='> **Project documentation** → see [`DOCUMENTATION.md`](DOCUMEN
 # The block between the SENTINEL lines below is pure (no file I/O, no state) and
 # is extracted verbatim by docs/tests/test-setup-detection.sh so the helpers can
 # be unit-tested without running the installer. Keep it self-contained.
-# >>> sprint.md detection helpers (unit-tested) >>>
-SPRINT_README_MARKER='managed by [sprint.md]'                               # in README_POINTER
+# >>> SprintBias detection helpers (unit-tested) >>>
+SPRINT_README_MARKER='managed by [SprintBias]'                               # in README_POINTER
+SPRINT_README_MARKER_LEGACY='managed by [sprint.md]'                         # pre-rebrand pointer
 SPRINT_AI_MARKER='single source of truth for how this project is organized' # in every AI pointer + AI_FALLBACK
-SPRINT_GITIGNORE_MARKER='# === sprint.md Recommended Entries ==='            # header written into .gitignore
+SPRINT_GITIGNORE_MARKER='# === SprintBias Recommended Entries ==='            # header written into .gitignore
+SPRINT_GITIGNORE_MARKER_LEGACY='# === sprint.md Recommended Entries ==='     # pre-rebrand header
 
 # already_ours MARKER CONTENT
 # True (0) when CONTENT contains the fixed-string MARKER — i.e. text we wrote
@@ -519,6 +506,13 @@ already_ours() {
         *"$marker"*) return 0 ;;
         *)           return 1 ;;
     esac
+}
+
+# already_ours_readme CONTENT — true when CONTENT has our current or legacy
+# README pointer marker (pre-SprintBias installs used "managed by [sprint.md]").
+already_ours_readme() {
+    already_ours "$SPRINT_README_MARKER" "$1" \
+        || already_ours "$SPRINT_README_MARKER_LEGACY" "$1"
 }
 
 # gitignore_merge RECOMMENDED EXISTING
@@ -562,7 +556,31 @@ gitignore_merge() {
 
     printf '%s' "$filtered"
 }
-# <<< sprint.md detection helpers <<<
+
+# sprint_marker_version CONTENT
+# Print the product version stamped in CONTENT (X.Y.Z), or empty if none.
+# Recognizes current and legacy ownership markers:
+#   Markdown   <!-- SprintBias vX.Y.Z -->   (current)
+#              <!-- sprint.md vX.Y.Z -->    (legacy)
+#   .gitignore # SprintBias vX.Y.Z         (current)
+#              # sprint.md vX.Y.Z          (legacy)
+# The presence of a version here is the ONLY signal that a file is ours — a bare
+# product-name mention never matches. Pure: reads only its string argument.
+sprint_marker_version() {
+    printf '%s\n' "$1" \
+        | grep -oE '(SprintBias|sprint\.md) v[0-9]+\.[0-9]+\.[0-9]+' \
+        | head -n1 \
+        | sed 's/^.*v//'
+}
+
+# ver_lt A B — true (0) when semver A is strictly older than B, else false.
+# Numeric field compare (not string), so v0.0.9 < v0.0.10 sorts correctly.
+# Pure: no file I/O.
+ver_lt() {
+    [ "$1" = "$2" ] && return 1
+    [ "$(printf '%s\n%s\n' "$1" "$2" | sort -t. -k1,1n -k2,2n -k3,3n | head -n1)" = "$1" ]
+}
+# <<< SprintBias detection helpers <<<
 
 # Strict yes/no prompt — loops until the user gives an unambiguous answer.
 # Sets the variable named in $1 to "yes" or "no". $2 is the prompt text.
@@ -602,7 +620,7 @@ prompt_yes_no() {
 
 if [ ! -f "README.md" ]; then
     echo ""
-    prompt_yes_no README_CHOICE "No README.md found. Create one with a sprint.md documentation pointer?"
+    prompt_yes_no README_CHOICE "No README.md found. Create one with a SprintBias documentation pointer?"
 
     if [ "$README_CHOICE" = "yes" ]; then
         if printf '%s\n' "$README_POINTER" > "README.md" 2>/dev/null; then
@@ -615,11 +633,11 @@ if [ ! -f "README.md" ]; then
         msg_step "Skipped README.md creation"
     fi
 else
-    if already_ours "$SPRINT_README_MARKER" "$(cat "README.md" 2>/dev/null)"; then
+    if already_ours_readme "$(cat "README.md" 2>/dev/null)"; then
         msg_step "README.md already references DOCUMENTATION.md"
     else
         echo ""
-        prompt_yes_no README_PREPEND_CHOICE "README.md exists but does not reference DOCUMENTATION.md. Prepend a sprint.md documentation pointer to it?"
+        prompt_yes_no README_PREPEND_CHOICE "README.md exists but does not reference DOCUMENTATION.md. Prepend a SprintBias documentation pointer to it?"
 
         if [ "$README_PREPEND_CHOICE" = "yes" ]; then
             tmpfile=""
@@ -634,7 +652,7 @@ else
                    && mv -f "$tmpfile" "README.md"; then
                     tmpfile=""
                     trap - EXIT INT TERM
-                    msg_success "Prepended sprint.md documentation pointer to README.md"
+                    msg_success "Prepended SprintBias documentation pointer to README.md"
                 else
                     rm -f "$tmpfile"
                     tmpfile=""
@@ -665,15 +683,21 @@ fi
 
 msg_header "Installing distribution files..."
 
+# Handled by the silent scaffold batch (marker-guarded), not the plain walk:
+# GETSTARTED.md, DOCUMENTATION.md, CLAUDE.md and AGENTS.md. Skipping them here
+# keeps the walk from overwriting a user-owned copy.
 SKIP_FILES=(
     "VERSION"
     ".gitignore.template"
     "GETSTARTED.md"
-)
-
-PREPEND_FILES=(
+    "DOCUMENTATION.md"
     "CLAUDE.md"
     "AGENTS.md"
+)
+
+# The residual AI dotfiles: silently prepended into pre-existing files, and
+# push-created only under "More options? → Add all AI instructions".
+PREPEND_FILES=(
     ".cursorrules"
     ".windsurfrules"
     ".github/copilot-instructions.md"
@@ -693,7 +717,7 @@ _in_list() {
 }
 
 # Fallback content if source AI templates not found
-AI_FALLBACK='Read `DOCUMENTATION.md` before making any changes. It is the single source of truth for how this project is organized, how tasks are managed, and how to use the sprint.md system.'
+AI_FALLBACK='Read `DOCUMENTATION.md` before making any changes. It is the single source of truth for how this project is organized, how tasks are managed, and how to use the SprintBias system.'
 
 # setup_ai_file "source_template" "target_path" "display_name" [create]
 # - If target doesn't exist and create=yes, create it (no prompt)
@@ -701,52 +725,40 @@ AI_FALLBACK='Read `DOCUMENTATION.md` before making any changes. It is the single
 # - If target exists without DOCUMENTATION.md reference, prepend automatically
 # - If target already references DOCUMENTATION.md, skip
 setup_ai_file() {
-    local src="$1"
     local target="$2"
     local name="$3"
     local create="${4:-}"
+    local block cls
+    block="$(pointer_block)"
+    cls="$(classify_target "$target")"
 
-    local content
-    if [ -f "$src" ]; then
-        content=$(cat "$src")
-    else
-        content="$AI_FALLBACK"
-    fi
-
-    if [ ! -f "$target" ]; then
-        if [ "$create" = "yes" ]; then
+    case "$cls" in
+        absent)
+            [ "$create" = "yes" ] || return 0
             local target_dir
             target_dir="$(dirname "$target")"
-            if [ "$target_dir" != "." ]; then
-                safe_mkdir "$target_dir"
-            fi
-
-            if printf '%s\n' "$content" > "$target" 2>/dev/null; then
+            [ "$target_dir" != "." ] && safe_mkdir "$target_dir"
+            if printf '%s\n' "$block" > "$target" 2>/dev/null; then
                 msg_success "Created $name"
                 ((FILES_COPIED++))
             else
                 msg_error "Failed to create $name"
-            fi
-        fi
-    else
-        if already_ours "$SPRINT_AI_MARKER" "$(cat "$target" 2>/dev/null)"; then
-            msg_step "$name already references DOCUMENTATION.md"
-        else
-            local tmpfile
-            tmpfile="$(mktemp "${target}.XXXXXX")" || {
-                msg_error "Failed to create temp file for $name"
-                return 1
-            }
-
-            if { printf '%s\n' "$content"; echo ""; cat "$target"; } > "$tmpfile" 2>/dev/null; then
-                mv -f "$tmpfile" "$target"
-                msg_success "Prepended sprint.md reference to $name"
+            fi ;;
+        ours-current:*)
+            msg_step "$name up to date (v${cls#ours-current:})" ;;
+        ours-old:*)
+            if _replace_md_block "$target" "$block"; then
+                msg_success "$name upgraded (${cls#ours-old:} → $CURRENT_VERSION)"
             else
-                rm -f "$tmpfile"
+                msg_error "Failed to upgrade $name"
+            fi ;;
+        theirs)
+            if _prepend_md_block "$target" "$block"; then
+                msg_success "Prepended SprintBias pointer to $name"
+            else
                 msg_error "Failed to prepend to $name"
-            fi
-        fi
-    fi
+            fi ;;
+    esac
 }
 
 # Human-friendly label for each AI instruction file path
@@ -759,6 +771,213 @@ _ai_label() {
         .windsurfrules)                  echo "Windsurf" ;;
         *)                               echo "$1" ;;
     esac
+}
+
+# ----------------------------------------------------------------------------
+# Version-marked scaffold: classify, stamp, prepend, upgrade
+# ----------------------------------------------------------------------------
+# Every scaffold file we ship or prepend carries a version-stamped marker
+# (<!-- SprintBias vX.Y.Z --> for Markdown, "# SprintBias vX.Y.Z" for .gitignore).
+# That marker is the ONLY thing that authorizes an overwrite — a file with no
+# marker is the user's, and we never clobber it. classify_target decides which
+# of four states a path is in; the scaffold_* helpers act on that state and emit
+# one outcome line each so a silent batch still reports what it did.
+
+# classify_target TARGET -> echoes: absent | ours-current:VER | ours-old:VER | theirs
+classify_target() {
+    local target="$1" v
+    if [ ! -f "$target" ]; then echo "absent"; return; fi
+    v="$(sprint_marker_version "$(cat "$target" 2>/dev/null)")"
+    if [ -z "$v" ]; then echo "theirs"; return; fi
+    if ver_lt "$v" "$CURRENT_VERSION"; then echo "ours-old:$v"; else echo "ours-current:$v"; fi
+}
+
+# The Markdown pointer block we write into CLAUDE.md / AGENTS.md / dotfiles.
+# Points at $MANUAL_FILE, which is DOCUMENTATION.md unless the user already owns
+# one, in which case our manual installs as SPRINTDOCUMENTATION.md.
+pointer_block() {
+    printf '<!-- SprintBias v%s -->\nRead `%s` before making any changes. It is the single source of truth for how this project is organized, how tasks are managed, and how to use the SprintBias system.\n<!-- end SprintBias -->' \
+        "$CURRENT_VERSION" "$MANUAL_FILE"
+}
+
+# _copy_stamped SRC TARGET — copy SRC to TARGET, normalizing its marker line to
+# the current version (atomic via temp file). Rewrites both current SprintBias
+# and legacy sprint.md version stamps to the new form.
+_copy_stamped() {
+    local src="$1" target="$2" tmp
+    [ -f "$src" ] || { msg_error "Source missing: $src"; return 1; }
+    tmp="$(mktemp "${target}.XXXXXX")" || return 1
+    if sed -E "s|(SprintBias|sprint\\.md) v[0-9][0-9A-Za-z.]*|SprintBias v${CURRENT_VERSION}|g" "$src" > "$tmp" 2>/dev/null \
+       && mv -f "$tmp" "$target"; then
+        return 0
+    fi
+    rm -f "$tmp"; return 1
+}
+
+# _prepend_md_block TARGET BLOCK — put BLOCK above TARGET's existing body.
+_prepend_md_block() {
+    local target="$1" block="$2" tmp
+    tmp="$(mktemp "${target}.XXXXXX")" || return 1
+    if { printf '%s\n\n' "$block"; cat "$target"; } > "$tmp" 2>/dev/null \
+       && mv -f "$tmp" "$target"; then
+        return 0
+    fi
+    rm -f "$tmp"; return 1
+}
+
+# _replace_md_block TARGET BLOCK — swap our existing (older) block for BLOCK,
+# leaving the user's body untouched. Matches current SprintBias and legacy
+# sprint.md ownership blocks.
+_replace_md_block() {
+    local target="$1" block="$2" tmp
+    tmp="$(mktemp "${target}.XXXXXX")" || return 1
+    if { printf '%s\n' "$block"; awk '
+        BEGIN{drop=0}
+        /<!-- (SprintBias|sprint\.md) v/ {drop=1; next}
+        drop==1 && /<!-- end (SprintBias|sprint\.md) -->/ {drop=0; next}
+        drop==0 {print}
+    ' "$target"; } > "$tmp" 2>/dev/null && mv -f "$tmp" "$target"; then
+        return 0
+    fi
+    rm -f "$tmp"; return 1
+}
+
+# install_owned_doc SRC TARGET NAME — a whole document that is entirely ours
+# (GETSTARTED.md, the manual). Create when absent, upgrade when our marker is
+# older, skip a user's own file (never clobber).
+install_owned_doc() {
+    local src="$1" target="$2" name="$3" cls
+    cls="$(classify_target "$target")"
+    case "$cls" in
+        absent)
+            if _copy_stamped "$src" "$target"; then msg_success "$name ensured"; ((FILES_COPIED++)); else msg_error "Failed to write $name"; fi ;;
+        ours-current:*) msg_step "$name up to date (v${cls#ours-current:})" ;;
+        ours-old:*)
+            if _copy_stamped "$src" "$target"; then msg_success "$name upgraded (${cls#ours-old:} → $CURRENT_VERSION)"; else msg_error "Failed to upgrade $name"; fi ;;
+        theirs) msg_step "Skipped $name (yours left in place)" ;;
+    esac
+}
+
+# scaffold_pointer TARGET NAME — an AI pointer file (CLAUDE.md / AGENTS.md).
+# Handles create/upgrade/no-op silently; defers a user-owned file to CONFLICTS
+# so the batch never prepends-then-unwinds ahead of a possible "Replace".
+scaffold_pointer() {
+    local target="$1" name="$2" block cls
+    block="$(pointer_block)"
+    cls="$(classify_target "$target")"
+    case "$cls" in
+        absent)
+            if printf '%s\n' "$block" > "$target" 2>/dev/null; then msg_success "$name ensured"; ((FILES_COPIED++)); else msg_error "Failed to write $name"; fi ;;
+        ours-current:*) msg_step "$name up to date (v${cls#ours-current:})" ;;
+        ours-old:*)
+            if _replace_md_block "$target" "$block"; then msg_success "$name upgraded (${cls#ours-old:} → $CURRENT_VERSION)"; else msg_error "Failed to upgrade $name"; fi ;;
+        theirs) CONFLICTS+=("pointer|$target|$name") ;;
+    esac
+}
+
+# --- .gitignore variants (hash-comment marker + per-line entry merge) --------
+_gitignore_block_open()  { printf '# SprintBias v%s\n' "$CURRENT_VERSION"; }
+_gitignore_block_close() { printf '# end SprintBias\n'; }
+
+_write_gitignore_fresh() {
+    { _gitignore_block_open; printf '%s\n' "$GITIGNORE_CONTENT"; _gitignore_block_close; } > .gitignore 2>/dev/null
+}
+
+_prepend_gitignore() {
+    local existing filtered tmp
+    existing="$(cat .gitignore 2>/dev/null)"
+    filtered="$(gitignore_merge "$GITIGNORE_CONTENT" "$existing")"
+    if [ -z "$filtered" ]; then msg_step ".gitignore already has all recommended entries"; return 0; fi
+    tmp="$(mktemp ".gitignore.XXXXXX")" || return 1
+    if { _gitignore_block_open; printf '%s\n' "$filtered"; _gitignore_block_close; printf '\n%s\n' "$existing"; } > "$tmp" 2>/dev/null \
+       && mv -f "$tmp" .gitignore; then return 0; fi
+    rm -f "$tmp"; return 1
+}
+
+_upgrade_gitignore() {
+    local body filtered tmp
+    # Drop current SprintBias or legacy sprint.md ownership blocks, keep body.
+    body="$(awk 'BEGIN{d=0} /^# (SprintBias|sprint\.md) v/{d=1;next} d==1 && /^# end (SprintBias|sprint\.md)/{d=0;next} d==0{print}' .gitignore)"
+    filtered="$(gitignore_merge "$GITIGNORE_CONTENT" "$body")"
+    tmp="$(mktemp ".gitignore.XXXXXX")" || return 1
+    if { _gitignore_block_open; printf '%s\n' "$filtered"; _gitignore_block_close; printf '\n%s\n' "$body"; } > "$tmp" 2>/dev/null \
+       && mv -f "$tmp" .gitignore; then return 0; fi
+    rm -f "$tmp"; return 1
+}
+
+scaffold_gitignore() {
+    local cls
+    cls="$(classify_target ".gitignore")"
+    case "$cls" in
+        absent)
+            if _write_gitignore_fresh; then msg_success ".gitignore ensured"; else msg_error "Failed to write .gitignore"; fi ;;
+        ours-current:*) msg_step ".gitignore up to date (v${cls#ours-current:})" ;;
+        ours-old:*)
+            if _upgrade_gitignore; then msg_success ".gitignore upgraded (${cls#ours-old:} → $CURRENT_VERSION)"; else msg_error "Failed to upgrade .gitignore"; fi ;;
+        theirs) CONFLICTS+=("gitignore|.gitignore|.gitignore") ;;
+    esac
+}
+
+# apply_conflict KIND TARGET NAME ACTION — write one deferred conflict.
+# ACTION is prepend | replace | leave.
+apply_conflict() {
+    local kind="$1" target="$2" name="$3" action="$4"
+    case "$action" in
+        leave) msg_step "Left $name as it is" ;;
+        replace)
+            if [ "$kind" = "gitignore" ]; then
+                _write_gitignore_fresh && msg_success "Replaced $name" || msg_error "Failed to replace $name"
+            else
+                printf '%s\n' "$(pointer_block)" > "$target" 2>/dev/null && msg_success "Replaced $name" || msg_error "Failed to replace $name"
+            fi ;;
+        prepend|*)
+            if [ "$kind" = "gitignore" ]; then
+                _prepend_gitignore && msg_success "Prepended SprintBias entries to $name" || msg_error "Failed to prepend to $name"
+            else
+                _prepend_md_block "$target" "$(pointer_block)" && msg_success "Prepended SprintBias pointer to $name" || msg_error "Failed to prepend to $name"
+            fi ;;
+    esac
+}
+
+# resolve_conflict_interactive KIND TARGET NAME — the three-way override, only
+# reachable under "More options?". Enter = Prepend (parity with the silent
+# default); Replace is the one deliberate keystroke that overwrites a user file.
+resolve_conflict_interactive() {
+    local kind="$1" target="$2" name="$3" ans
+    echo ""
+    echo "$name already exists and isn't ours:"
+    echo "  [Enter]  Prepend  — add our block above your file, keep your content"
+    echo "  r)       Replace  — overwrite your $name with ours"
+    echo "  l)       Leave    — leave $name exactly as it is"
+    printf "Choose [Enter=Prepend / r / l]: "
+    read -r ans
+    case "$ans" in
+        r|R) apply_conflict "$kind" "$target" "$name" replace ;;
+        l|L) apply_conflict "$kind" "$target" "$name" leave ;;
+        *)   apply_conflict "$kind" "$target" "$name" prepend ;;
+    esac
+}
+
+# install_github_sync — copy the GitHub Issues sync workflows and issue/PR
+# templates from src/.github (the copilot dotfile is handled with the other AI
+# instructions, not here). Reachable only under "More options?".
+install_github_sync() {
+    PLATFORM="github-issues"
+    safe_mkdir ".github/workflows"
+    safe_mkdir ".github/ISSUE_TEMPLATE"
+    local gf rel
+    while IFS= read -r gf; do
+        rel="${gf#"$SRC_DIR"/}"
+        [ "$rel" = ".github/copilot-instructions.md" ] && continue
+        safe_mkdir "$(dirname "$rel")"
+        if safe_copy "$gf" "$rel" "$rel"; then ((FILES_COPIED++)); fi
+    done < <(find "$SRC_DIR/.github" -type f)
+    cat > docs/.platform-config <<CFG
+# SprintBias Platform Configuration
+# Generated: $(date +%Y-%m-%d)
+PLATFORM="$PLATFORM"
+CFG
+    msg_success "GitHub Issues sync installed"
 }
 
 # --- Platform=none cleanup: remove sync workflows from prior installs ---
@@ -831,118 +1050,35 @@ done
 exec 3<&-
 rm -f "$_find_fifo" && rmdir "$(dirname "$_find_fifo")" 2>/dev/null
 
-# --- Optional: GETSTARTED.md quickstart at the project root ---
-# Skipped in the walk above (SKIP_FILES); placed only when the user opts in.
-if [ -f "$SRC_DIR/GETSTARTED.md" ]; then
-    echo ""
-    prompt_yes_no GETSTARTED_CHOICE "Add a GETSTARTED.md quickstart at the project root?" "no"
-    if [ "$GETSTARTED_CHOICE" = "yes" ]; then
-        if safe_copy "$SRC_DIR/GETSTARTED.md" "GETSTARTED.md" "GETSTARTED.md"; then
-            ((FILES_COPIED++))
-        fi
+# The manual is DOCUMENTATION.md unless the user already owns one — then ours
+# installs as SPRINTDOCUMENTATION.md and every pointer (CLAUDE.md, AGENTS.md,
+# and the dotfiles below) targets that name. Decided up front so every pointer
+# written this run agrees on the manual's filename.
+if [ "$(classify_target "DOCUMENTATION.md")" = "theirs" ]; then
+    MANUAL_FILE="SPRINTDOCUMENTATION.md"
+else
+    MANUAL_FILE="DOCUMENTATION.md"
+fi
+
+# --- AI dotfiles (deferred from the walk above) ---------------------------
+# Pre-existing dotfiles get a silent version-marked prepend; absent ones are
+# collected into NEED_CREATE and push-created only under "More options?".
+NEED_CREATE=()
+for entry in "${PENDING_PREPEND[@]}"; do
+    rel_path="${entry#*|}"
+    if [ -f "$rel_path" ]; then
+        setup_ai_file "" "$rel_path" "$rel_path"
     else
-        msg_step "Skipped GETSTARTED.md"
+        NEED_CREATE+=("$entry")
     fi
-fi
+done
 
-# --- AI instruction files (deferred from the walk above) ---
-# Grouped here so interactive create/prepend prompts appear together rather
-# than scattered between file-copy messages.
-if [ ${#PENDING_PREPEND[@]} -gt 0 ]; then
-    msg_header "Setting up AI instruction files..."
-
-    # Separate into files that already exist (handle silently) vs need creating
-    NEED_CREATE=()
-    for entry in "${PENDING_PREPEND[@]}"; do
-        src_file="${entry%%|*}"
-        rel_path="${entry#*|}"
-        if [ -f "$rel_path" ]; then
-            setup_ai_file "$src_file" "$rel_path" "$rel_path"
-        else
-            NEED_CREATE+=("$entry")
-        fi
-    done
-
-    # Popularity-ordered list for the menu
-    AI_ORDER=("CLAUDE.md" ".cursorrules" ".github/copilot-instructions.md" "AGENTS.md" ".windsurfrules")
-
-    # Build ordered menu from files that need creating
-    MENU_ENTRIES=()
-    for ordered_path in "${AI_ORDER[@]}"; do
-        for entry in "${NEED_CREATE[@]}"; do
-            rel_path="${entry#*|}"
-            if [ "$rel_path" = "$ordered_path" ]; then
-                MENU_ENTRIES+=("$entry")
-                break
-            fi
-        done
-    done
-    # Catch any entries not in AI_ORDER
-    for entry in "${NEED_CREATE[@]}"; do
-        rel_path="${entry#*|}"
-        _found=false
-        for ordered_path in "${AI_ORDER[@]}"; do
-            if [ "$rel_path" = "$ordered_path" ]; then _found=true; break; fi
-        done
-        if ! $_found; then MENU_ENTRIES+=("$entry"); fi
-    done
-
-    if [ ${#MENU_ENTRIES[@]} -gt 0 ]; then
-        echo ""
-        echo "Which AI instruction files would you like to create?"
-        echo "(Existing files that already point at DOCUMENTATION.md are left alone.)"
-        echo ""
-        for i in "${!MENU_ENTRIES[@]}"; do
-            entry="${MENU_ENTRIES[$i]}"
-            rel_path="${entry#*|}"
-            label=$(_ai_label "$rel_path")
-            printf "  %d) %s  (%s)\n" $((i + 1)) "$label" "$rel_path"
-        done
-        echo ""
-        printf "  A) All of the above\n"
-        echo ""
-        echo "Enter choices (e.g. 1 3, or A for all). Press Enter to skip:"
-        read -r AI_MENU_CHOICE
-
-        # Parse selection
-        SELECTED=()
-        if [[ "$AI_MENU_CHOICE" =~ ^[Aa]$ ]]; then
-            for i in "${!MENU_ENTRIES[@]}"; do
-                SELECTED+=("$i")
-            done
-        else
-            for token in $AI_MENU_CHOICE; do
-                if [[ "$token" =~ ^[0-9]+$ ]] && [ "$token" -ge 1 ] && [ "$token" -le ${#MENU_ENTRIES[@]} ]; then
-                    SELECTED+=("$((token - 1))")
-                fi
-            done
-        fi
-
-        if [ ${#SELECTED[@]} -eq 0 ]; then
-            msg_step "Skipped AI instruction files"
-        else
-            for idx in "${SELECTED[@]}"; do
-                entry="${MENU_ENTRIES[$idx]}"
-                src_file="${entry%%|*}"
-                rel_path="${entry#*|}"
-                setup_ai_file "$src_file" "$rel_path" "$rel_path" "yes"
-            done
-        fi
-    fi
-fi
-
-# ============================================================================
-# HANDLE .GITIGNORE
-# ============================================================================
-
-msg_header "Checking .gitignore..."
-
-# Load gitignore content from template or use inline fallback
+# Recommended .gitignore entries (template or inline fallback). Loaded here so
+# the scaffold batch below can merge them.
 GITIGNORE_TEMPLATE="$SPRINTMD_SOURCE_DIR/src/.gitignore.template"
 if [ -f "$GITIGNORE_TEMPLATE" ]; then
     GITIGNORE_CONTENT=$(cat "$GITIGNORE_TEMPLATE")
 else
-    # Fallback if template not found
     GITIGNORE_CONTENT="# OS Files
 .DS_Store
 Thumbs.db
@@ -979,70 +1115,29 @@ docs/designs/*.sketch
 docs/designs/*.fig"
 fi
 
-if [ ! -f ".gitignore" ]; then
-    # No .gitignore exists — opt-in only (Enter = skip)
-    echo ""
-    prompt_yes_no GITIGNORE_CREATE "No .gitignore found. Create one with sprint.md recommended entries?" "no"
+# ============================================================================
+# SILENT SCAFFOLD BATCH — identical for both doors, asks nothing
+# ============================================================================
+# One keystroke laid down the full SprintBias scaffold. Every file below is
+# marker-guarded: absent → create, our marker + older version → upgrade, our
+# marker + current version → no-op, no marker (user's) → prepend/skip/rename.
+# Nothing here overwrites a user-owned file; that lives behind "More options?".
+# A user-owned file that would take a prepend is deferred into CONFLICTS so the
+# batch never prepends-then-unwinds ahead of a later "Replace".
 
-    if [ "$GITIGNORE_CREATE" = "yes" ]; then
-        if echo "$GITIGNORE_CONTENT" > .gitignore 2>/dev/null; then
-            msg_success "Created .gitignore"
-        else
-            msg_error "Failed to create .gitignore"
-        fi
-    else
-        msg_step "Skipped .gitignore creation"
-    fi
-else
-    # .gitignore exists. We deliberately do NOT gate on an incidental
-    # "sprint.md" substring here — a stray path or comment mentioning it would
-    # falsely skip the merge. Instead, gitignore_merge does authoritative
-    # per-line dedup: it returns only the entries this file lacks (empty when
-    # everything is already present), which is both the "already installed"
-    # signal and idempotent on re-run.
-    FILTERED_CONTENT="$(gitignore_merge "$GITIGNORE_CONTENT" "$(cat .gitignore 2>/dev/null)")"
+msg_header "Scaffolding SprintBias files..."
 
-    if [ -z "$FILTERED_CONTENT" ]; then
-        msg_step ".gitignore already contains all recommended entries"
-    else
-        echo ""
-        echo "Existing .gitignore found. Add sprint.md recommended entries?"
-        echo "1) Prepend (add at the beginning)"
-        echo "2) Append (add at the end)"
-        echo "3) Skip (default)"
-        echo ""
-        echo "Enter your choice (1-3, or press Enter to skip):"
-        read -r GITIGNORE_CHOICE
+CONFLICTS=()
 
-        case "$GITIGNORE_CHOICE" in
-            1)
-                # Prepend — atomic write via temp file so a partial
-                # failure cannot truncate the original .gitignore
-                EXISTING_CONTENT=$(cat .gitignore)
-                TMPFILE=$(mktemp ".gitignore.tmp.XXXXXX" 2>/dev/null)
-                if [ -z "$TMPFILE" ]; then
-                    msg_error "Failed to create temp file for .gitignore"
-                elif { echo "$SPRINT_GITIGNORE_MARKER"; printf '%s\n' "$FILTERED_CONTENT"; echo "# === Project-Specific Entries ==="; printf '%s\n' "$EXISTING_CONTENT"; } > "$TMPFILE" 2>/dev/null && mv -f "$TMPFILE" .gitignore 2>/dev/null; then
-                    msg_success "Prepended sprint.md entries to .gitignore"
-                else
-                    msg_error "Failed to prepend to .gitignore"
-                    rm -f "$TMPFILE" 2>/dev/null
-                fi
-                ;;
-            2)
-                # Append
-                if { echo ""; echo "$SPRINT_GITIGNORE_MARKER"; printf '%s\n' "$FILTERED_CONTENT"; } >> .gitignore 2>/dev/null; then
-                    msg_success "Appended sprint.md entries to .gitignore"
-                else
-                    msg_error "Failed to append to .gitignore"
-                fi
-                ;;
-            *)
-                msg_step "Skipped .gitignore modification"
-                ;;
-        esac
-    fi
+# 1) GETSTARTED.md   2) CLAUDE.md   3) the manual   4) .gitignore   5) AGENTS.md
+install_owned_doc "$SRC_DIR/GETSTARTED.md" "GETSTARTED.md" "GETSTARTED.md"
+scaffold_pointer "CLAUDE.md" "CLAUDE.md"
+if [ "$MANUAL_FILE" = "SPRINTDOCUMENTATION.md" ]; then
+    msg_step "Your DOCUMENTATION.md left in place; installing manual as SPRINTDOCUMENTATION.md"
 fi
+install_owned_doc "$SRC_DIR/DOCUMENTATION.md" "$MANUAL_FILE" "$MANUAL_FILE"
+scaffold_gitignore
+scaffold_pointer "AGENTS.md" "AGENTS.md"
 
 # ============================================================================
 # LAYOUT CLEANUP (path-presence only — no version ladder)
@@ -1260,8 +1355,9 @@ if [ -f "docs/sprintmd/config" ]; then
 fi
 
 # ============================================================================
-# AI CLI PICKER
+# AI CLI CONFIG — write the door's choice into config
 # ============================================================================
+# SELECTED_CLI / SELECTED_PROVIDER were set by the two-door pick at the top.
 
 msg_header "AI CLI configuration..."
 
@@ -1273,46 +1369,6 @@ if [ -f "$_LIB_FILE" ]; then
     # shellcheck source=/dev/null
     source "$_LIB_FILE"
 fi
-
-# Detect current CLI on upgrade
-CURRENT_CLI=""
-if $UPDATE_MODE && [ -f "$CONFIG_FILE" ]; then
-    if declare -F sprintmd_cfg >/dev/null 2>&1; then
-        CURRENT_CLI=$(sprintmd_cfg CLI)
-    else
-        CURRENT_CLI=$(awk -F= '/^CLI=/ { print $2 }' "$CONFIG_FILE" | tail -1)
-    fi
-fi
-
-# Proven providers only for now — choice must be intentional (no Enter default).
-SELECTED_CLI=""
-while [ -z "$SELECTED_CLI" ]; do
-    echo ""
-    echo "Which AI CLI do you use?"
-    if $UPDATE_MODE && [ -n "$CURRENT_CLI" ]; then
-        echo "  Current: $CURRENT_CLI"
-    fi
-    echo "  1) Claude Code"
-    echo "  2) Grok Build"
-    echo ""
-    echo "Enter your choice (1-2):"
-    read -r CLI_CHOICE
-    case "$CLI_CHOICE" in
-        1) SELECTED_CLI="claude" ;;
-        2) SELECTED_CLI="grok"   ;;
-        *) echo "Please enter 1 or 2." ;;
-    esac
-done
-
-# Derive the capability tier from the chosen CLI binary. This mirrors the
-# inference in lib.sh:sprintmd_ai_tier exactly, so config and library agree.
-case "$SELECTED_CLI" in
-    claude)              SELECTED_PROVIDER="claude-code" ;;
-    grok)                SELECTED_PROVIDER="grok-build"  ;;
-    cursor-agent|cursor) SELECTED_PROVIDER="cursor"      ;;
-    codex)               SELECTED_PROVIDER="openai"      ;;
-    *)                   SELECTED_PROVIDER="generic"     ;;
-esac
 
 # Write CLI and provider tier into the config file
 if [ -f "$CONFIG_FILE" ]; then
@@ -1374,23 +1430,51 @@ else
     msg_warning "Config file not found: $CONFIG_FILE"
 fi
 
-# Provider-specific instruction file. When Claude Code or Cursor is the tier,
-# offer to create the matching AI instruction file if it doesn't exist yet.
-# Grok Build auto-loads AGENTS.md / CLAUDE.md when present — no extra file
-# invented here (plan 5 v1: none extra). Reuses prepend-never-clobber.
-case "$SELECTED_PROVIDER" in
-    claude-code) PROVIDER_AI_FILE="CLAUDE.md"    ;;
-    cursor)      PROVIDER_AI_FILE=".cursorrules" ;;
-    *)           PROVIDER_AI_FILE=""             ;;
-esac
-if [ -n "$PROVIDER_AI_FILE" ] && [ ! -f "$PROVIDER_AI_FILE" ] \
-   && declare -F setup_ai_file >/dev/null 2>&1; then
+# ============================================================================
+# MORE OPTIONS — everything past the Easy Button hides here (Enter = No)
+# ============================================================================
+# The default path never reaches this: GitHub Issues sync, the residual AI
+# dotfiles, and the per-file override (the only place a user file can be
+# Replaced) all live behind one opt-in.
+
+echo ""
+prompt_yes_no MORE_OPTIONS "More options? (GitHub Issues sync, extra AI files, per-file choices)" "no"
+
+if [ "$MORE_OPTIONS" = "yes" ]; then
+    # --- GitHub Issues sync ---
     echo ""
-    echo "Create the $(_ai_label "$PROVIDER_AI_FILE") instruction file (${PROVIDER_AI_FILE}) for your provider? [Y]es/No"
-    read -r PROVIDER_FILE_CHOICE
-    if [[ -z "$PROVIDER_FILE_CHOICE" ]] || [[ "$PROVIDER_FILE_CHOICE" =~ ^[Yy] ]]; then
-        setup_ai_file "$SRC_DIR/$PROVIDER_AI_FILE" "$PROVIDER_AI_FILE" "$PROVIDER_AI_FILE" "yes"
+    prompt_yes_no GH_SYNC "Enable GitHub Issues sync (workflows + issue/PR templates)?" "no"
+    if [ "$GH_SYNC" = "yes" ]; then
+        install_github_sync
+    else
+        msg_step "Skipped GitHub Issues sync"
     fi
+
+    # --- Extra AI instruction dotfiles (Cursor, Windsurf, Copilot) ---
+    if [ ${#NEED_CREATE[@]} -gt 0 ]; then
+        echo ""
+        prompt_yes_no ADD_ALL_AI "Add all AI instructions (Cursor, Windsurf, Copilot)?" "no"
+        if [ "$ADD_ALL_AI" = "yes" ]; then
+            for entry in "${NEED_CREATE[@]}"; do
+                rel_path="${entry#*|}"
+                setup_ai_file "" "$rel_path" "$rel_path" "yes"
+            done
+        else
+            msg_step "Skipped extra AI instruction files"
+        fi
+    fi
+
+    # --- Per-file override for conflicted (user-owned) scaffold files ---
+    for entry in "${CONFLICTS[@]}"; do
+        _ck="${entry%%|*}"; _rest="${entry#*|}"; _ct="${_rest%%|*}"; _cn="${_rest#*|}"
+        resolve_conflict_interactive "$_ck" "$_ct" "$_cn"
+    done
+else
+    # Default path: apply the silent safe default (prepend) to each conflict.
+    for entry in "${CONFLICTS[@]}"; do
+        _ck="${entry%%|*}"; _rest="${entry#*|}"; _ct="${_rest%%|*}"; _cn="${_rest#*|}"
+        apply_conflict "$_ck" "$_ct" "$_cn" prepend
+    done
 fi
 
 echo ""
@@ -1458,7 +1542,7 @@ if ! $UPDATE_MODE; then
         echo ""
         prompt_yes_no SPRINT_ALIAS_CHOICE "Add a 'sprint' shortcut so you can type 'sprint <cmd>' instead of './sprint.sh <cmd>'? (adds an alias to $SPRINT_SHELL_RC)"
         if [ "$SPRINT_ALIAS_CHOICE" = "yes" ]; then
-            if printf '\n# sprint.md shortcut — runs ./sprint.sh from a project root (see docs/sprintmd/guides/sprint_command.md)\n%s\n' "$SPRINT_ALIAS_LINE" >> "$SPRINT_SHELL_RC" 2>/dev/null; then
+            if printf '\n# SprintBias shortcut — runs ./sprint.sh from a project root (see docs/sprintmd/guides/sprint_command.md)\n%s\n' "$SPRINT_ALIAS_LINE" >> "$SPRINT_SHELL_RC" 2>/dev/null; then
                 msg_success "Added 'sprint' shortcut to $SPRINT_SHELL_RC"
                 msg_step "Run 'source $SPRINT_SHELL_RC' (or open a new terminal), then use 'sprint help'"
             else
@@ -1506,7 +1590,7 @@ fi
 echo ""
 
 if $UPDATE_MODE; then
-    msg_success "sprint.md updated to version $CURRENT_VERSION"
+    msg_success "SprintBias updated to version $CURRENT_VERSION"
     echo ""
     if [ -n "${ORIGINAL_VERSION:-}" ] && [ "$ORIGINAL_VERSION" != "$CURRENT_VERSION" ]; then
         echo "  Version:       $ORIGINAL_VERSION → $CURRENT_VERSION"
@@ -1516,7 +1600,7 @@ if $UPDATE_MODE; then
     echo "  Files synced:  $FILES_COPIED"
     echo "  Scripts synced from src/ and DOC_STATE.md reconciled"
 else
-    msg_success "sprint.md installed to: $TARGET_PATH"
+    msg_success "SprintBias installed to: $TARGET_PATH"
     echo "Platform: $PLATFORM"
     echo "Files installed: $FILES_COPIED"
     echo ""

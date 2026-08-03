@@ -13,11 +13,37 @@ RUN_EXCELLENCE=0
 FORCE=0
 _NO_LIMITS=0
 _next_is_jobs=0
+_next_is_model=0
+_next_is_count=0
 VERBOSE=0
+# A bare number is now a TASK ID (work just that one task). The old
+# "run at most N" cap moved behind the `count` sub-word. _SINGLE latches
+# the single-named-task path so the queue scan / readiness gate / prereq
+# drain are skipped for it.
+TASK_ID=""
+_SINGLE=0
 for arg in "$@"; do
   if [ "$_next_is_jobs" -eq 1 ]; then
     MAX_JOBS="$arg"
     _next_is_jobs=0
+    continue
+  fi
+  # --model <id> pins the model for THIS run only by exporting the resolver's
+  # per-run lever (SPRINTMD_MODEL_DEFAULT) — no config edit. See ./sprint.sh model.
+  if [ "$_next_is_model" -eq 1 ]; then
+    [ -n "$arg" ] || { echo "✗ --model needs a model id" >&2; exit 1; }
+    export SPRINTMD_MODEL_DEFAULT="$arg"
+    _next_is_model=0
+    continue
+  fi
+  # `count N` restores the old "run at most N tasks" cap under a plain-language
+  # sub-word, freeing the bare number to mean a task id.
+  if [ "$_next_is_count" -eq 1 ]; then
+    case "$arg" in
+      ''|*[!0-9]*) echo "✗ count needs a number: ./sprint.sh work count N" >&2; exit 1 ;;
+      *) MAX_TASKS="$arg" ;;
+    esac
+    _next_is_count=0
     continue
   fi
   case "$arg" in
@@ -30,17 +56,33 @@ for arg in "$@"; do
     --force)    FORCE=1 ;;
     --assist)   _ASSIST=1 ;;
     --jobs)     _next_is_jobs=1 ;;
+    --model)    _next_is_model=1 ;;
     --verbose)  VERBOSE=1 ;;
-    [0-9]*)     MAX_TASKS="$arg" ;;
+    count)      _next_is_count=1 ;;
+    # A bare number is a TASK ID — work just that task. Two ids is a usage
+    # error, not "work both"; the count cap now lives behind `count N`.
+    [0-9]*)
+      if [ -n "$TASK_ID" ]; then
+        echo "✗ work takes one task id — got '$TASK_ID' and '$arg'" >&2
+        echo "  For a count cap use: ./sprint.sh work count N" >&2
+        exit 1
+      fi
+      TASK_ID="$arg"
+      ;;
+    # No silent ignore: an unknown flag or stray token is a mistake, not a no-op.
+    *) echo "✗ Unknown argument: $arg" >&2; echo "  See: ./sprint.sh help work" >&2; exit 1 ;;
   esac
 done
-unset _next_is_jobs
+[ "$_next_is_jobs" -eq 1 ] && { echo "✗ --jobs needs a number" >&2; exit 1; }
+[ "$_next_is_model" -eq 1 ] && { echo "✗ --model needs a model id" >&2; exit 1; }
+[ "$_next_is_count" -eq 1 ] && { echo "✗ count needs a number: ./sprint.sh work count N" >&2; exit 1; }
+unset _next_is_jobs _next_is_model _next_is_count
 
 # ── Interactive assist mode ─────────────────────────────────────────
 if [ "${_ASSIST:-0}" -eq 1 ]; then
   echo ""
   echo "  ┌─────────────────────────────────────────┐"
-  echo "  │         sprint.md Task Runner             │"
+  echo "  │         SprintBias Task Runner             │"
   echo "  └─────────────────────────────────────────┘"
   echo ""
   echo "  Pick a run mode:"
@@ -82,15 +124,26 @@ WORKING_DIR="docs/tasks/doing"
 REVIEW_DIR="docs/tasks/review"
 BLOCKED_DIR="docs/tasks/blocked"
 LOG_DIR="docs/tmp"
+# Basenames that land in review/ this run (human sign-off or promote).
+TO_REVIEW=()
 
 # ── Config ───────────────────────────────────────────────────────────
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/lib.sh"
+# Shared workability gate — same code `gate` and `plan start` run. `work N`
+# reuses it to screen-and-promote a named backlog/blocked task inline instead
+# of growing work's own argument surface.
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/gate-lib.sh"
+
+# Record a basename that moved to review/ this run.
+_note_review() {
+  TO_REVIEW+=("$1")
+}
 
 # To run one invocation against a different CLI or mode, prefix the command:
 #   SPRINTMD_CLI=codex ./sprint.sh work       (exec that CLI in a plain terminal)
 #   SPRINTMD_MODE=emit ./sprint.sh work       (force prompt emit for any agent)
 
-MODEL="$(sprintmd_resolve_model WORK)"
+MODEL="$(sprintmd_tier_model WORK)"
 
 TOOLS="Read,Edit,Write,Bash,Grep,Glob,Agent"
 PERMISSIONS="auto"
@@ -119,6 +172,161 @@ for dir in "$NEXT_DIR" "$WORKING_DIR" "$REVIEW_DIR" "$BLOCKED_DIR"; do
   fi
 done
 
+# Drop a finished task's '## Completed' / '### Files changed' audit block so a
+# re-run is real: the completion router keys off the presence of '## Completed'
+# (see _route_result), so an un-reset review/done task would route straight back
+# to review/ without ever being worked. Removes from the '## Completed' heading
+# to the next '## ' heading (or EOF — the block is normally last).
+_reset_completed() {
+  local file="$1" tmp="$1.reset.$$"
+  awk '
+    /^## Completed[[:space:]]*$/ { skip=1; next }
+    skip && /^## / { skip=0 }
+    !skip { print }
+  ' "$file" > "$tmp" && mv "$tmp" "$file"
+}
+
+# Strip any existing '## Outcome' block (heading to the next '## ' or EOF).
+# Shared by the stamp (rewrite-in-place) and the success route (clear a stale
+# failure stamp so a task that later completes doesn't carry a dead Outcome
+# into review/).
+_strip_outcome() {
+  local file="$1" tmp="$1.outcome.$$"
+  [ -f "$file" ] || return 0
+  awk '
+    /^## Outcome[[:space:]]*$/ { skip=1; next }
+    skip && /^## / { skip=0 }
+    !skip { print }
+  ' "$file" > "$tmp" && mv "$tmp" "$file"
+}
+
+# Stamp a durable '## Outcome' block on a task file (plan 15 §5). A route to
+# blocked/, an incomplete stop, or a hard fail records why here so the next run
+# and every dependent's hold line can name the reason instead of reading as a
+# mystery hold. Idempotent: replaces any prior Outcome block.
+#   _stamp_outcome FILE RESULT REASON     RESULT ∈ incomplete|failed|blocked
+_stamp_outcome() {
+  local file="$1" result="$2" reason="$3" today
+  [ -f "$file" ] || return 0
+  today="${SPRINTMD_TODAY:-$(date +%Y-%m-%d)}"
+  _strip_outcome "$file"
+  printf '\n## Outcome\n**Result**: %s\n**Reason**: %s\n**At**: %s\n' \
+    "$result" "$reason" "$today" >> "$file"
+}
+
+# Read a task's '## Outcome' stamp as a short "result: reason" phrase for hold
+# lines (empty when unstamped). Lets a dependent's needs-clause say
+# `9032 (blocked/ — incomplete: budget)` instead of a bare stage.
+_outcome_brief() {
+  local file="$1" result reason
+  [ -f "$file" ] || return 0
+  result="$(sprintmd_meta_value "$file" "Result")"
+  [ -n "$result" ] || return 0
+  reason="$(sprintmd_meta_value "$file" "Reason" \
+    | tr '\n' ' ' | cut -c1-60 | sed 's/[[:space:]]*$//')"
+  if [ -n "$reason" ]; then
+    printf '%s: %s' "$result" "$reason"
+  else
+    printf '%s' "$result"
+  fi
+}
+
+# ── Single named task (work N) ───────────────────────────────────────
+# `work N` resolves task N by number and runs just that one task, screening
+# and promoting it into the sprint first if needed — the same screen-and-run
+# steps a user would do by hand (resolve → gate/promote → dependency check),
+# then handing off to the normal runner. It narrows the run to a single-task
+# TASK_FILES/COUNT=1 BEFORE the emit/exec branch, so it behaves identically in
+# emit mode (the repo default) and exec mode.
+if [ -n "$TASK_ID" ]; then
+  _stage="$(sprintmd_task_stage "$TASK_ID" 2>/dev/null || true)"
+  _path="$(sprintmd_task_path "$TASK_ID" 2>/dev/null || true)"
+  if [ -z "$_stage" ] || [ -z "$_path" ]; then
+    echo "✗ No task $TASK_ID found in any lifecycle folder."
+    echo "  Checked backlog/, next/, doing/, blocked/, review/, done/."
+    exit 1
+  fi
+  _name="${_path##*/}"
+
+  # doing/ is in flight — a run owns it. Refuse and leave it untouched; its
+  # crash recovery is the loop's orphan sweep, not work's job.
+  if [ "$_stage" = "doing" ]; then
+    echo "✗ $TASK_ID is in doing/ — a run owns it."
+    echo "  Leaving it in place; crash recovery is the loop's orphan sweep."
+    exit 1
+  fi
+
+  # Promotion is earned by runnability, not just definition clarity: check
+  # dependencies BEFORE any promote. An unmet prerequisite holds the task and
+  # changes nothing — no promote, no demote, no work — and the prerequisite is
+  # NOT pulled in behind it. A well-defined backlog/ task merely waiting on a
+  # prereq stays in backlog/; a next/ task stays queued in place.
+  _unmet="$(sprintmd_unmet_deps "$_path")"
+  if [ -n "$_unmet" ]; then
+    echo "⏳ held: waiting on $(printf '%s' "$_unmet" | tr ' ' ',')"
+    echo "   $TASK_ID depends on unfinished work — run that first, or work the"
+    echo "   sprint so the chain drains in order. Left in $_stage/ untouched."
+    exit 0
+  fi
+
+  case "$_stage" in
+    next)
+      # Already in the sprint: work it exactly as the queue would, unless it
+      # is not stamped READY (unvetted) and --force was not passed.
+      if [ "$FORCE" -ne 1 ] && [ "$(sprintmd_review_verdict "$_path")" != "READY" ]; then
+        echo "⊘ $TASK_ID is in next/ but not stamped READY — held (unvetted)."
+        echo "  Vet it:         ./sprint.sh gate"
+        echo "  Or run anyway:  ./sprint.sh work $TASK_ID --force"
+        exit 0
+      fi
+      TASK_FILES=("$_path")
+      ;;
+    backlog|blocked)
+      # Screen-and-promote through the shared gate — the same pathway plan
+      # start uses. READY → next/ (then work it); BLOCKED → blocked/ (report,
+      # do NOT work); COMPLETE → review/ (work already in the codebase).
+      echo "▸ $TASK_ID is in $_stage/ — screening it through the gate before working…"
+      echo ""
+      sprintmd_promote_to_sprint "$_path" work
+      case "${SPRINTMD_GATE_VERDICT:-}" in
+        READY)
+          sprintmd_promote_summary "$_name"
+          echo ""
+          TASK_FILES=("$NEXT_DIR/$_name")
+          ;;
+        EMIT)
+          # Emit mode: the surrounding agent runs the gate + move itself, so
+          # the promote can't chain into work in this process. Land it READY
+          # first, then re-run work N to execute it.
+          echo ""
+          echo "▸ Gate review emitted for $_name — run the prompt above."
+          echo "  When it lands READY in next/, run: ./sprint.sh work $TASK_ID"
+          exit 0
+          ;;
+        *)
+          sprintmd_promote_summary "$_name"
+          echo ""
+          echo "  Not worked — resolve the above, then re-run: ./sprint.sh work $TASK_ID"
+          exit 0
+          ;;
+      esac
+      ;;
+    review|done)
+      # Re-run: pull it back to doing/, reset the old ## Completed audit block
+      # so the router doesn't short-circuit, rework it, and re-route to review/.
+      echo "▸ $TASK_ID is in $_stage/ — re-running it (reset audit block + rework)."
+      echo ""
+      move_file "$_path" "$WORKING_DIR/$_name"
+      _reset_completed "$WORKING_DIR/$_name"
+      TASK_FILES=("$WORKING_DIR/$_name")
+      ;;
+  esac
+
+  MAX_TASKS=1
+  _SINGLE=1
+fi
+
+if [ "$_SINGLE" -eq 0 ]; then
 TASK_FILES=()
 while IFS= read -r f; do
   TASK_FILES+=("$f")
@@ -133,21 +341,24 @@ if [ ${#TASK_FILES[@]} -eq 0 ]; then
   echo "No tasks in $NEXT_DIR"
   exit 0
 fi
+fi
 
 # ── Readiness gate ──────────────────────────────────────────────────
 # gate (and plan start) stamps '**Status: READY**' into tasks it has vetted. A task
 # without that verdict hasn't been checked for clarity — and a headless
 # run can't ask clarifying questions, so ambiguity turns into wandering
 # and failure. Undefined tasks are skipped, not executed. --force overrides.
-# A dependency wait is separate from readiness: gate stamps a task READY once
-# it is fully defined, but records unfinished prerequisites in '**Depends on**'
-# instead of blocking on them. This gate holds such a task in next/ until every
-# prerequisite reaches review/ or done/, then releases it automatically — so
-# nothing executes out of order and no human has to babysit the sequence.
-# (Dependency state is evaluated once, up front. If task B depends on task A and
-# both are queued in this run, B is held this pass and becomes runnable on the
-# next one, after A has landed in review/. --force bypasses both gates.)
-if [ "$FORCE" -ne 1 ]; then
+# A dependency wait is separate from readiness (and from blocked/): gate stamps
+# a task READY once it is fully defined, and records unfinished prerequisites in
+# '**Depends on**'. That task is DEPENDENT (on hold) — not blocked. This gate
+# holds it in next/ until every prerequisite reaches review/ or done/, then
+# releases it automatically — so nothing executes out of order and no human has
+# to babysit the sequence. (Dependency state is re-checked as each task routes
+# to review/, so A→B→C queued together drains in one pass. --force bypasses the
+# READY stamp only, not dependency order.)
+# Skipped for work N: the single-task path above already resolved readiness
+# (next/ must be READY unless --force; a promoted task graded READY at the gate).
+if [ "$FORCE" -ne 1 ] && [ "$_SINGLE" -eq 0 ]; then
   _defined=()
   _skipped=()
   for _f in "${TASK_FILES[@]}"; do
@@ -169,35 +380,281 @@ if [ "$FORCE" -ne 1 ]; then
     echo "No ready tasks in $NEXT_DIR"
     exit 0
   fi
-  # Dependency-waiting tasks are NO LONGER dropped from the run. The scheduler
-  # below re-checks dependencies as each task lands in review/, so a chain
-  # (A→B→C queued together) drains in a single pass and independent tasks run
-  # first. This is purely informational — the tasks still execute.
-  _waiting=()
-  for _f in "${TASK_FILES[@]}"; do
-    _unmet="$(sprintmd_unmet_deps "$_f")"
-    [ -n "$_unmet" ] && _waiting+=("${_f##*/}  (needs: ${_unmet})")
-  done
-  if [ ${#_waiting[@]} -gt 0 ]; then
-    echo "⏳ ${#_waiting[@]} task(s) start blocked on dependencies — released automatically"
-    echo "   as those prerequisites land in review/ during this run:"
-    for _w in "${_waiting[@]}"; do echo "    ${_w}"; done
-    echo ""
-  fi
-  unset _defined _skipped _waiting _f _w _unmet
+  unset _defined _skipped _f
 fi
 
+# ── Prerequisite resolution (stage-aware) ─────────────────────────────
+# For every READY next/ task, walk each unmet Depends-on id by stage:
+#   review/done → already complete (not unmet)
+#   doing/      → resume this run (route to review if ## Completed already;
+#                 otherwise pull into the queue and re-run)
+#   next/       → frontier ordering; runs when READY and its own deps clear
+#   backlog/    → not auto-lifted (not fully vetted); surface chat <id>
+#   blocked/    → needs a decision; surface chat <id>
+# Dependents stay in next/ on hold until prereqs land in review/done.
+#
+# Format a single unmet dep id for human messages (stage + next action).
+_format_dep() {
+  local id="$1" stage path verdict oc
+  stage="$(sprintmd_task_stage "$id" 2>/dev/null || true)"
+  case "$stage" in
+    doing)
+      path="$(sprintmd_task_path "$id" 2>/dev/null || true)"
+      if [ -n "$path" ] && grep -q '^## Completed' "$path" 2>/dev/null; then
+        printf '%s (doing/ — ## Completed, routing to review/)' "$id"
+      else
+        oc="$(_outcome_brief "$path")"
+        if [ -n "$oc" ]; then
+          printf '%s (doing/ — %s)' "$id" "$oc"
+        else
+          printf '%s (doing/ — resuming unfinished work this run)' "$id"
+        fi
+      fi
+      ;;
+    next)
+      path="$(sprintmd_task_path "$id" 2>/dev/null || true)"
+      verdict=""
+      [ -n "$path" ] && verdict="$(sprintmd_review_verdict "$path")"
+      if [ "$verdict" = "READY" ]; then
+        printf '%s (next/ — runs when its own deps clear)' "$id"
+      else
+        printf '%s (next/ — not READY; ./sprint.sh chat %s or gate)' "$id" "$id"
+      fi
+      ;;
+    backlog)
+      printf '%s (backlog/ — not vetted for work; ./sprint.sh chat %s)' "$id" "$id"
+      ;;
+    blocked)
+      path="$(sprintmd_task_path "$id" 2>/dev/null || true)"
+      oc="$(_outcome_brief "$path")"
+      if [ -n "$oc" ]; then
+        printf '%s (blocked/ — %s) — chat %s' "$id" "$oc" "$id"
+      else
+        printf '%s (blocked/ — needs a decision; ./sprint.sh chat %s)' "$id" "$id"
+      fi
+      ;;
+    review|done)
+      printf '%s (%s/)' "$id" "$stage"
+      ;;
+    *)
+      # No file resolves anywhere — classify via #328 rather than the old
+      # "treated complete" silent green. A fold marker means the edge should
+      # point at the fold target; otherwise it is a broken reference.
+      case "$(sprintmd_classify_dep "$id" missing)" in
+        folded)
+          path="$(sprintmd_fold_target "$(sprintmd_task_path "$id" 2>/dev/null || true)")"
+          printf '%s (folded into %s — update **Depends on**)' "$id" "${path:-?}"
+          ;;
+        *)
+          printf '%s (broken ref — no such task; fix **Depends on** or ./sprint.sh chat %s)' "$id" "$id"
+          ;;
+      esac
+      ;;
+  esac
+}
+
+# Build a "needs: …" clause for one task file from its current unmet deps.
+_needs_clause() {
+  local file="$1" unmet id parts=""
+  unmet="$(sprintmd_unmet_deps "$file")"
+  [ -z "$unmet" ] && return 0
+  for id in $unmet; do
+    [ -n "$parts" ] && parts="$parts; "
+    parts="${parts}$(_format_dep "$id")"
+  done
+  printf '%s' "$parts"
+}
+
+# Resume/route open prereqs that sit in doing/; collect backlog/blocked advice.
+# Prepends incomplete doing/ prereqs onto TASK_FILES so the scheduler runs them
+# before their dependents. Idempotent for ids already queued.
+_PREREQ_ROUTED=0
+_PREREQ_RESUME=()
+_PREREQ_ADVICE=()
+_PREREQ_BROKEN=()
+_PREREQ_FOLDED=()
+_seen_resume=" "
+_seen_advice=" "
+_seen_broken=" "
+
+# Classify EVERY declared Depends-on id (not just the unmet ones the gate holds
+# on) so a missing or folded reference surfaces loudly instead of reading as a
+# silent green. sprintmd_unmet_deps drops missing/folded ids from the gate (a
+# stale ref must never wedge the queue); this pass names them for the human via
+# #328's sprintmd_classify_dep. Archived-complete (review/done) ids are truly
+# done and stay quiet.
+_scan_broken_deps_from() {
+  local file="$1" raw kind id target
+  raw="$(sprintmd_meta_value "$file" "Depends on")"
+  [ -z "$raw" ] && return 0
+  while read -r kind id; do
+    [ "$kind" = "id" ] || continue
+    case "$(sprintmd_classify_dep "$id" missing)" in
+      missing)
+        case "$_seen_broken" in *" m$id "*) continue ;; esac
+        _seen_broken="$_seen_broken m$id "
+        _PREREQ_BROKEN+=("$id  (referenced by ${file##*/})")
+        ;;
+      folded)
+        case "$_seen_broken" in *" f$id "*) continue ;; esac
+        _seen_broken="$_seen_broken f$id "
+        target="$(sprintmd_fold_target "$(sprintmd_task_path "$id" 2>/dev/null || true)")"
+        _PREREQ_FOLDED+=("$id → ${target:-?}  (referenced by ${file##*/})")
+        ;;
+    esac
+  done <<EOF
+$(sprintmd_iter_id_list "$raw")
+EOF
+}
+
+_collect_prereqs_from() {
+  local file="$1" id stage path name
+  for id in $(sprintmd_unmet_deps "$file"); do
+    stage="$(sprintmd_task_stage "$id" 2>/dev/null || true)"
+    case "$stage" in
+      doing)
+        path="$(sprintmd_task_path "$id" 2>/dev/null || true)"
+        [ -n "$path" ] || continue
+        name="${path##*/}"
+        if grep -q '^## Completed' "$path" 2>/dev/null; then
+          # Prior run finished the work but never routed — complete the move.
+          move_file "$path" "$REVIEW_DIR/$name"
+          _PREREQ_ROUTED=$((_PREREQ_ROUTED + 1))
+          _note_review "$name"
+          echo "  ✓ Prerequisite $name already has ## Completed → $REVIEW_DIR/"
+        else
+          case "$_seen_resume" in *" $id "*) continue ;; esac
+          _seen_resume="$_seen_resume$id "
+          _PREREQ_RESUME+=("$path")
+          echo "  ↻ Will resume unfinished prerequisite: $name (in doing/)"
+        fi
+        ;;
+      backlog)
+        case "$_seen_advice" in *" b$id "*) continue ;; esac
+        _seen_advice="$_seen_advice b$id "
+        _PREREQ_ADVICE+=("This task depends on $id, which is still in backlog/. Consider: ./sprint.sh chat $id")
+        ;;
+      blocked)
+        case "$_seen_advice" in *" x$id "*) continue ;; esac
+        _seen_advice="$_seen_advice x$id "
+        _PREREQ_ADVICE+=("This task depends on $id, which still needs a decision in blocked/. Consider: ./sprint.sh chat $id")
+        ;;
+    esac
+  done
+}
+
+if [ ${#TASK_FILES[@]} -gt 0 ]; then
+  _had_prereq_action=0
+  for _f in "${TASK_FILES[@]}"; do
+    [ -n "$(sprintmd_unmet_deps "$_f")" ] || continue
+    _had_prereq_action=1
+    break
+  done
+  if [ "$_had_prereq_action" -eq 1 ]; then
+    echo "▸ Resolving open prerequisites for tasks in $NEXT_DIR/..."
+    for _f in "${TASK_FILES[@]}"; do
+      _collect_prereqs_from "$_f"
+    done
+    # Re-scan: routing a completed doing/ prereq may clear several dependents;
+    # also catch transitive resumes (A needs B in doing, B needs C in doing).
+    _pass=0
+    while [ "$_pass" -lt 8 ]; do
+      _pass=$((_pass + 1))
+      _before=${#_PREREQ_RESUME[@]}
+      _before_routed=$_PREREQ_ROUTED
+      for _p in ${_PREREQ_RESUME[@]+"${_PREREQ_RESUME[@]}"}; do
+        _collect_prereqs_from "$_p"
+      done
+      for _f in "${TASK_FILES[@]}"; do
+        _collect_prereqs_from "$_f"
+      done
+      [ ${#_PREREQ_RESUME[@]} -eq "$_before" ] && [ "$_PREREQ_ROUTED" -eq "$_before_routed" ] && break
+    done
+    if [ "$_PREREQ_ROUTED" -gt 0 ] || [ ${#_PREREQ_RESUME[@]} -gt 0 ]; then
+      echo ""
+    fi
+  fi
+  unset _had_prereq_action _f _p _pass _before _before_routed
+fi
+
+# Prepend incomplete doing/ prereqs so they launch before their dependents.
+if [ ${#_PREREQ_RESUME[@]} -gt 0 ]; then
+  TASK_FILES=("${_PREREQ_RESUME[@]}" "${TASK_FILES[@]}")
+fi
+
+# Broken / folded prereq references — surfaced even when no dep is "unmet" (the
+# gate treats missing ids as complete so it can't wedge; this pass keeps that
+# from being a silent green). Scan every queued task, including any doing/ prereq
+# just prepended for resume.
+for _f in "${TASK_FILES[@]}"; do
+  _scan_broken_deps_from "$_f"
+done
+if [ ${#_PREREQ_FOLDED[@]} -gt 0 ]; then
+  echo "⚠ Prerequisite(s) folded into another id — update **Depends on**:"
+  for _b in "${_PREREQ_FOLDED[@]}"; do echo "    ${_b}"; done
+  echo "  The edge still points at a retired id; repoint it at the fold target."
+  echo ""
+fi
+if [ ${#_PREREQ_BROKEN[@]} -gt 0 ]; then
+  echo "⚠ Broken prerequisite reference(s) — no such task (not a silent green):"
+  for _b in "${_PREREQ_BROKEN[@]}"; do echo "    ${_b}"; done
+  echo "  Fix the **Depends on** id, or ./sprint.sh chat the referencing task."
+  echo ""
+fi
+unset _f _b _seen_broken
+
+# Dependency-waiting banner (informational — scheduler still holds them).
+_waiting=()
+for _f in "${TASK_FILES[@]}"; do
+  # Skip resume paths under doing/ for the "on hold" banner — those execute.
+  case "$_f" in
+    "$WORKING_DIR"/*) continue ;;
+  esac
+  _clause="$(_needs_clause "$_f")"
+  [ -n "$_clause" ] && _waiting+=("${_f##*/}  (needs: ${_clause})")
+done
+if [ ${#_waiting[@]} -gt 0 ]; then
+  echo "⏳ ${#_waiting[@]} dependent task(s) start on hold — released automatically"
+  echo "   as those prerequisites land in review/ during this run:"
+  for _w in "${_waiting[@]}"; do echo "    ${_w}"; done
+  echo ""
+fi
+if [ ${#_PREREQ_ADVICE[@]} -gt 0 ]; then
+  echo "⚠ Prerequisite(s) outside the sprint (not auto-lifted):"
+  for _a in "${_PREREQ_ADVICE[@]}"; do echo "    ${_a}"; done
+  echo "  Backlog tasks are assumed not fully vetted — chat them to define/promote."
+  echo ""
+fi
+unset _waiting _f _w _a _clause _seen_resume _seen_advice
+
 # COUNT is the launch cap for this pass (how many tasks may execute). It bounds
-# the scheduler below; a run may execute fewer if some tasks stay blocked on
-# dependencies that never land this pass. loop.sh passes MAX_TASKS=1 to run a
-# single task per iteration — that still holds here.
+# the scheduler below; a run may execute fewer if some dependents stay on hold
+# for prerequisites that never land this pass. loop.sh passes MAX_TASKS=1 to
+# run a single task per iteration — that still holds here.
 COUNT=${#TASK_FILES[@]}
 if [ "$COUNT" -gt "$MAX_TASKS" ]; then
   COUNT=$MAX_TASKS
 fi
 
-echo "▸ up to $COUNT task(s) queued from $NEXT_DIR"
+_resume_n=${#_PREREQ_RESUME[@]}
+if [ "$_resume_n" -gt 0 ]; then
+  echo "▸ up to $COUNT task(s) queued ($((COUNT > _resume_n ? COUNT - _resume_n : 0)) from $NEXT_DIR, $_resume_n resumed from $WORKING_DIR)"
+else
+  echo "▸ up to $COUNT task(s) queued from $NEXT_DIR"
+fi
+[ "$_PREREQ_ROUTED" -gt 0 ] && echo "  ($_PREREQ_ROUTED prerequisite(s) already complete — routed to $REVIEW_DIR/)"
 echo ""
+unset _resume_n
+
+# Nothing to execute (empty queue, or launch cap 0 after prereq routing only).
+if [ "$COUNT" -eq 0 ]; then
+  if [ "${_PREREQ_ROUTED:-0}" -gt 0 ]; then
+    echo "▸ No tasks launched this pass — prerequisites were resolved; run work again to continue."
+  else
+    echo "▸ No tasks to launch this pass."
+  fi
+  exit 0
+fi
 
 if [ "$VERBOSE" -eq 1 ]; then
   for ((i=0; i<COUNT; i++)); do
@@ -223,6 +680,47 @@ HARD_FAIL=0
 TOTAL_START=$SECONDS
 # Quality chain lives in polish.sh: --code = correctness, bare path = deep-judge.
 POLISH_SCRIPT="$(dirname "${BASH_SOURCE[0]}")/polish.sh"
+
+# Read **Tests** (legacy **Proven by**) from a task file — empty means none.
+_task_tests_value() {
+  local v
+  v=$( { grep -m1 -iE '^\*\*Tests\*\*:' "$1" 2>/dev/null || true; } \
+    | sed 's/^[^:]*://; s/^[[:space:]]*//; s/[[:space:]]*$//' )
+  if [ -z "$v" ]; then
+    v=$( { grep -m1 -iE '^\*\*Proven by\*\*:' "$1" 2>/dev/null || true; } \
+      | sed 's/^[^:]*://; s/^[[:space:]]*//; s/[[:space:]]*$//' )
+  fi
+  printf '%s' "$v"
+}
+
+# After the queue: tell the human what needs eyes (and when promote can help).
+_report_human_review() {
+  local name path tests id human=0 promo=0
+  [ ${#TO_REVIEW[@]} -eq 0 ] && return 0
+  echo ""
+  echo "▸ Requires human review (${#TO_REVIEW[@]} landed in $REVIEW_DIR/ this run):"
+  for name in "${TO_REVIEW[@]}"; do
+    path="$REVIEW_DIR/$name"
+    [ -f "$path" ] || continue
+    id=$(printf '%s' "$name" | grep -oE '^[0-9]+' || true)
+    tests="$(_task_tests_value "$path")"
+    if [ -z "$tests" ] || [ "$(printf '%s' "$tests" | tr '[:upper:]' '[:lower:]')" = "none" ]; then
+      human=$((human + 1))
+      echo "    $name"
+      echo "      Tests: none — human sign-off before done/"
+      echo "      → git mv $REVIEW_DIR/$name docs/tasks/done/$name || mv $REVIEW_DIR/$name docs/tasks/done/$name"
+    else
+      promo=$((promo + 1))
+      echo "    $name"
+      echo "      Tests: $tests"
+      echo "      → ./sprint.sh promote ${id:-}   # suite green → done/ (still your call to run)"
+    fi
+  done
+  if [ "$human" -gt 0 ] || [ "$promo" -gt 0 ]; then
+    echo "  Review is not blocked/ — implementation is done; close is human (or promote)."
+  fi
+  echo ""
+}
 
 _model_args=();  [ -n "$MODEL" ] && _model_args=(--model "$MODEL")
 _budget_args=(); [ -n "${SPRINTMD_BUDGET_WORK:-}" ] && _budget_args=(--budget "$SPRINTMD_BUDGET_WORK")
@@ -269,9 +767,20 @@ if [ "$AI_MODE" = "emit" ]; then
 
   _task_list=""
   for ((i=0; i<COUNT; i++)); do
-    _task_list="${_task_list}
-- ${TASK_FILES[$i]}"
+    _tf="${TASK_FILES[$i]}"
+    _tn="${_tf##*/}"
+    case "$_tf" in
+      "$WORKING_DIR"/*)
+        _task_list="${_task_list}
+- $_tf  (already in doing/ — RESUME unfinished work; do not re-gate)"
+        ;;
+      *)
+        _task_list="${_task_list}
+- $_tf"
+        ;;
+    esac
   done
+  unset _tf _tn
 
   _jobs_hint="in parallel, a few at a time"
   [ "$PARALLEL" -eq 1 ] && _jobs_hint="in parallel, up to $MAX_JOBS at a time"
@@ -287,52 +796,83 @@ if [ "$AI_MODE" = "emit" ]; then
    d. If it landed in review/, run: ./sprint.sh polish docs/tasks/review/<name>
       (leave it in review/ even if the verdict is BLOCKER)"
 
+  _dep_order_note="
+Dependency order: only start a task when every '**Depends on**' id is in
+review/ or done/ (or absent from disk). Prefer lowest-ID runnable first.
+If a listed path is already under doing/, it is a RESUME — work it in place
+(do not move from next/). Prerequisites still in backlog/ or blocked/ are
+NOT auto-lifted; leave their dependents in next/ and tell the user to run
+./sprint.sh chat <id>."
+
   if sprintmd_orchestration_capable; then
-    sprintmd_run -p "You are running the sprint.md task queue: $COUNT task(s) to execute.
+    sprintmd_run -p "You are running the SprintBias task queue: $COUNT task(s) to execute.
 CLAUDE.md / AGENTS.md is auto-loaded when present.${_profile_line}
 
-Execute each task in $(sprintmd_subagent_own_fresh) so tasks never share
+Execute each task in $(sprintmd_subagent_own_fresh work) so tasks never share
 context. Dispatch them $_jobs_hint. You are the orchestrator — the subagents
 do the work, you move the files.
 
 Always move with: git mv SRC DEST || mv SRC DEST (git mv first; plain mv finishes when untracked).
+$_dep_order_note
 
-For EACH task file listed below:
-1. Move it into doing/:   git mv <path> docs/tasks/doing/ || mv <path> docs/tasks/doing/
+For EACH task file listed below (honor dependency order):
+1. If it is not already in doing/: move it — git mv <path> docs/tasks/doing/ || mv <path> docs/tasks/doing/
+   If it is already in doing/, skip the move (resume in place).
 2. Launch a subagent whose entire instruction is:
      \"Execute ONE task. Read the task file at docs/tasks/doing/<name> and do the work.
+$(sprintmd_subagent_no_nest)
 $_TASK_RULES\"
 3. When the subagent returns, read docs/tasks/doing/<name> and route it:
    a. contains a '## Completed' section → git mv it to docs/tasks/review/ || mv it to docs/tasks/review/
-   b. otherwise → git mv it to docs/tasks/blocked/ || mv it to docs/tasks/blocked/ and note what remains${_audit_step}${_excellence_step}
+      Then tell the user: Requires human review (or ./sprint.sh promote when **Tests** is set).
+   b. otherwise → before moving, append a durable failure stamp to the file so
+      every dependent's hold line can name the reason:
+        ## Outcome
+        **Result**: incomplete
+        **Reason**: <one line — what stopped it / what remains>
+        **At**: <today, YYYY-MM-DD>
+      then git mv it to docs/tasks/blocked/ || mv it to docs/tasks/blocked/${_audit_step}${_excellence_step}
 
 Tasks (in order):$_task_list
 
-When every task has been routed, report a one-line summary:
-how many landed in review/ vs blocked/."
+When every task has been routed, report:
+- how many landed in review/ vs blocked/
+- list each review/ task as Requires human review (Tests: none → sign-off;
+  Tests: path → ./sprint.sh promote <id> may auto-close)."
   else
     # Honest sequential fallback — no subagent tool assumed.
-    sprintmd_run -p "You are running the sprint.md task queue: $COUNT task(s) to execute.
+    sprintmd_run -p "You are running the SprintBias task queue: $COUNT task(s) to execute.
 CLAUDE.md / AGENTS.md is auto-loaded when present.${_profile_line}
 
-Work the tasks ONE AT A TIME, in the listed order. You do not have a subagent
-tool, so you are the worker, not an orchestrator — after finishing each task,
-reset your focus and start the next one from a clean slate.
+Work the tasks ONE AT A TIME, in dependency order (then lowest ID). You do not
+have a subagent tool, so you are the worker, not an orchestrator — after
+finishing each task, reset your focus and start the next one from a clean slate.
 
 Always move with: git mv SRC DEST || mv SRC DEST (git mv first; plain mv finishes when untracked).
+$_dep_order_note
 
 For EACH task file listed below:
-1. Move it into doing/:   git mv <path> docs/tasks/doing/ || mv <path> docs/tasks/doing/
+1. If it is not already in doing/: move it — git mv <path> docs/tasks/doing/ || mv <path> docs/tasks/doing/
+   If it is already in doing/, skip the move (resume in place).
 2. Read docs/tasks/doing/<name> and do the work:
 $_TASK_RULES
 3. Route it:
    a. you wrote a '## Completed' section → git mv it to docs/tasks/review/ || mv it to docs/tasks/review/
-   b. otherwise → git mv it to docs/tasks/blocked/ || mv it to docs/tasks/blocked/ and note what remains${_audit_step}${_excellence_step}
+      Then tell the user: Requires human review (or ./sprint.sh promote when **Tests** is set).
+   b. otherwise → before moving, append a durable failure stamp to the file so
+      every dependent's hold line can name the reason:
+        ## Outcome
+        **Result**: incomplete
+        **Reason**: <one line — what stopped it / what remains>
+        **At**: <today, YYYY-MM-DD>
+      then git mv it to docs/tasks/blocked/ || mv it to docs/tasks/blocked/${_audit_step}${_excellence_step}
 
 Tasks (in order):$_task_list
 
-When every task has been routed, report a one-line summary:
-how many landed in review/ vs blocked/."
+When every task has been routed, report:
+- how many landed in review/ vs blocked/
+- list each review/ task as Requires human review (Tests: none → sign-off;
+  Tests: path → ./sprint.sh promote <id> may auto-close)."
   fi
   exit 0
 fi
@@ -433,20 +973,33 @@ _route_result() {
         echo "  ⚠ Excellence: BLOCKER recorded — routing to review/ for human attention"
       fi
     fi
+    # Completed cleanly — drop any stale failure stamp from a prior attempt so
+    # it doesn't ride into review/ contradicting the ## Completed section.
+    _strip_outcome "$WORKING_DIR/$name"
     move_file "$WORKING_DIR/$name" "$REVIEW_DIR/$name"
     COMPLETED=$((COMPLETED + 1))
+    _note_review "$name"
     echo "  ✓ Complete → $REVIEW_DIR/$name"
+    echo "    Requires human review (or ./sprint.sh promote when **Tests** is set)"
   elif [ "$rc" -eq 0 ]; then
     # Ran to completion but never wrote ## Completed — the run stopped short
-    # (or hit the budget cap). The prompt requires documenting what remains.
+    # (or hit the budget cap). Stamp a durable Outcome so dependents' hold lines
+    # can name the reason, then route to blocked/.
+    _stamp_outcome "$WORKING_DIR/$name" incomplete \
+      "run stopped short — no '## Completed' section (budget cap or early exit)"
     move_file "$WORKING_DIR/$name" "$BLOCKED_DIR/$name"
     INCOMPLETE=$((INCOMPLETE + 1))
     echo "  ⚠ Incomplete — no '## Completed' section."
-    echo "    → Moved to $BLOCKED_DIR/$name (task file should note what remains)"
+    echo "    → Moved to $BLOCKED_DIR/$name (## Outcome stamped: incomplete)"
   else
+    # Hard fail: the CLI exited non-zero. Leave the file in doing/ for
+    # inspection (loop's orphan sweep rescues it to blocked/), but stamp the
+    # Outcome first so the failure is diagnosable and dependents can name it.
+    _stamp_outcome "$WORKING_DIR/$name" failed \
+      "task run exited non-zero (rc=$rc) — see docs/tmp/log-work-${name%.md}-*.json"
     FAILED=$((FAILED + 1))
     HARD_FAIL=1
-    echo "  ✗ Failed (exit $rc) — left in $WORKING_DIR/$name"
+    echo "  ✗ Failed (exit $rc) — left in $WORKING_DIR/$name (## Outcome stamped: failed)"
     echo "    Log: docs/tmp/log-work-${name%.md}-*.json"
   fi
 }
@@ -472,25 +1025,73 @@ _kill_tree() {
 # so it is always current: re-calling it after a task routes to review/ is how a
 # dependent releases mid-run. A task in doing/ (actively running) still reads as
 # incomplete, so a dependent correctly waits until its prerequisite finishes.
+# Resume paths already under doing/ are runnable w.r.t. their own file location
+# (their Depends on still applies).
 _is_runnable() { [ -z "$(sprintmd_unmet_deps "$1")" ]; }
+
+# Ensure the task is in doing/ for execution. Resume paths already live there;
+# next/ (or other) paths are moved in. Always prints the working path basename.
+_ensure_in_doing() {
+  local src="$1" name="${1##*/}"
+  if [ "$src" != "$WORKING_DIR/$name" ]; then
+    move_file "$src" "$WORKING_DIR/$name"
+  fi
+  printf '%s' "$name"
+}
 
 # Print any never-launched tasks passed as arguments (their next/ paths),
 # splitting genuine dependency holds from tasks left only because the launch cap
 # was hit. Positional-arg based — no bash-4 namerefs (this repo targets 3.2).
+# Hold lines name each prereq's stage and the action (chat / wait / resume).
 _report_held() {
-  local f unmet _held_dep=() _held_cap=()
+  local f unmet _held_dep=() _held_cap=() _held_advice=() id stage clause
+  local _adv_seen=" "
   for f in "$@"; do
+    # Resume entries under doing/ that never launched are still open work, not
+    # "left in next/" — report them separately via unmet on dependents.
+    case "$f" in
+      "$WORKING_DIR"/*)
+        if [ -n "$(sprintmd_unmet_deps "$f")" ]; then
+          _held_dep+=("${f##*/}  (needs: $(_needs_clause "$f"))  [resume still held]")
+        else
+          _held_cap+=("${f##*/}  [resume in doing/ — not started]")
+        fi
+        continue
+        ;;
+    esac
     unmet="$(sprintmd_unmet_deps "$f")"
     if [ -n "$unmet" ]; then
-      _held_dep+=("${f##*/}  (needs: ${unmet})")
+      clause="$(_needs_clause "$f")"
+      _held_dep+=("${f##*/}  (needs: ${clause})")
+      for id in $unmet; do
+        stage="$(sprintmd_task_stage "$id" 2>/dev/null || true)"
+        case "$stage" in
+          backlog)
+            case "$_adv_seen" in *" b$id "*) continue ;; esac
+            _adv_seen="$_adv_seen b$id "
+            _held_advice+=("This task depends on $id, which is still in backlog/. Consider: ./sprint.sh chat $id")
+            ;;
+          blocked)
+            case "$_adv_seen" in *" x$id "*) continue ;; esac
+            _adv_seen="$_adv_seen x$id "
+            _held_advice+=("This task depends on $id, which still needs a decision in blocked/. Consider: ./sprint.sh chat $id")
+            ;;
+        esac
+      done
     else
       _held_cap+=("${f##*/}")
     fi
   done
   if [ ${#_held_dep[@]} -gt 0 ]; then
-    echo "⏳ ${#_held_dep[@]} task(s) still waiting on unfinished dependencies — left in $NEXT_DIR/:"
+    echo "⏳ ${#_held_dep[@]} dependent task(s) on hold (unfinished prerequisites) — left in $NEXT_DIR/:"
     for f in "${_held_dep[@]}"; do echo "    ${f}"; done
     echo "  They run automatically once those dependencies reach review/ or done/."
+    echo ""
+  fi
+  if [ ${#_held_advice[@]} -gt 0 ]; then
+    echo "⚠ Prerequisite(s) outside the sprint (not auto-lifted):"
+    for f in "${_held_advice[@]}"; do echo "    ${f}"; done
+    echo "  Backlog tasks are assumed not fully vetted — chat them to define/promote."
     echo ""
   fi
   if [ ${#_held_cap[@]} -gt 0 ]; then
@@ -536,8 +1137,8 @@ if [ "$PARALLEL" -eq 1 ]; then
         if _is_runnable "${TASK_FILES[$j]}"; then idx=$j; break; fi
       done
       [ "$idx" -lt 0 ] && break          # nothing runnable right now
-      name="${TASK_FILES[$idx]##*/}"
-      move_file "${TASK_FILES[$idx]}" "$WORKING_DIR/$name"
+      name="$(_ensure_in_doing "${TASK_FILES[$idx]}")"
+      TASK_FILES[$idx]="$WORKING_DIR/$name"
       _run_task "$name" &
       PIDS[$idx]=$!
       STATE[$idx]=1
@@ -555,7 +1156,7 @@ if [ "$PARALLEL" -eq 1 ]; then
   echo ""
 
   # Poll for completions; route each immediately, then try to launch more so
-  # freshly-unblocked dependents start without waiting for the whole batch.
+  # dependents released from hold start without waiting for the whole batch.
   while [ "$RUNNING" -gt 0 ]; do
     _progressed=0
     for ((i=0; i<NTASK; i++)); do
@@ -606,7 +1207,8 @@ while [ "$LAUNCHED" -lt "$COUNT" ]; do
 
   i=$_pick
   TASK_FILE="${TASK_FILES[$i]}"
-  TASK_NAME="${TASK_FILE##*/}"
+  TASK_NAME="$(_ensure_in_doing "$TASK_FILE")"
+  TASK_FILES[$i]="$WORKING_DIR/$TASK_NAME"
   DONE_FLAG[$i]=1
   LAUNCHED=$((LAUNCHED + 1))
   N=$LAUNCHED
@@ -616,14 +1218,13 @@ while [ "$LAUNCHED" -lt "$COUNT" ]; do
   echo "▸ Task $N/$COUNT: $TASK_NAME"
   echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
-  move_file "$TASK_FILE" "$WORKING_DIR/$TASK_NAME"
   TASK_CONTENT=$(<"$WORKING_DIR/$TASK_NAME")
 
   # ── Pre-work drift check (opt-in via --drift) ──────────────────────
   if [ "${SPRINTMD_SKIP_DRIFT_CHECK:-}" != "1" ]; then
     echo "  ▸ Drift check..."
 
-    _drift_model="$(sprintmd_resolve_model DRIFT)"
+    _drift_model="$(sprintmd_tier_model DRIFT)"
     _drift_model_args=()
     [ -n "$_drift_model" ] && _drift_model_args=(--model "$_drift_model")
 
@@ -673,6 +1274,8 @@ Rules:
         echo "    → Moving to review/"
         move_file "$WORKING_DIR/$TASK_NAME" "$REVIEW_DIR/$TASK_NAME"
         COMPLETED=$((COMPLETED + 1))
+        _note_review "$TASK_NAME"
+        echo "    Requires human review (or ./sprint.sh promote when **Tests** is set)"
         echo ""
         continue
         ;;
@@ -702,6 +1305,8 @@ Rules:
         case "$_drift_choice" in
           2)
             echo "    → Moving to $BLOCKED_DIR/$TASK_NAME"
+            _stamp_outcome "$WORKING_DIR/$TASK_NAME" blocked \
+              "drift check flagged codebase drift; sent to manual review"
             move_file "$WORKING_DIR/$TASK_NAME" "$BLOCKED_DIR/$TASK_NAME"
             echo ""
             continue
@@ -714,7 +1319,9 @@ Rules:
       OUTDATED)
         _drift_reason=$(echo "$DRIFT_VERDICT" | grep -i 'outdated' | head -1)
         echo "  ✗ Drift check: outdated — $_drift_reason"
-        echo "    → Moving to $BLOCKED_DIR/$TASK_NAME (needs human intervention)"
+        echo "    → Moving to $BLOCKED_DIR/$TASK_NAME (needs decision or clarification)"
+        _stamp_outcome "$WORKING_DIR/$TASK_NAME" blocked \
+          "drift check: outdated — ${_drift_reason:-references stale codebase}"
         move_file "$WORKING_DIR/$TASK_NAME" "$BLOCKED_DIR/$TASK_NAME"
         echo ""
         continue
@@ -753,7 +1360,11 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 # "skipped" = tasks left in next/ this pass (held on deps, or beyond the launch
 # cap) = defined tasks minus those that executed. Uses the full defined set, not
 # COUNT, so held dependents are counted even when the cap was not the limiter.
-echo "▸ Done: $COMPLETED completed, $FAILED failed, $INCOMPLETE incomplete, $(( ${#TASK_FILES[@]} - COMPLETED - FAILED - INCOMPLETE )) skipped — total $((TOTAL_ELAPSED / 60))m $((TOTAL_ELAPSED % 60))s"
+_done_extra=""
+[ "${_PREREQ_ROUTED:-0}" -gt 0 ] && _done_extra=" (${_PREREQ_ROUTED} prereq(s) auto-routed from doing/)"
+echo "▸ Done: $COMPLETED completed, $FAILED failed, $INCOMPLETE incomplete, $(( ${#TASK_FILES[@]} - COMPLETED - FAILED - INCOMPLETE )) skipped — total $((TOTAL_ELAPSED / 60))m $((TOTAL_ELAPSED % 60))s${_done_extra}"
+unset _done_extra
+_report_human_review
 # `if`, not `&&`: this is the script's last statement, and a false `[ ]` on a
 # blocker-free run would become the script's non-zero exit status.
 if [ "$BLOCKERS" -gt 0 ]; then

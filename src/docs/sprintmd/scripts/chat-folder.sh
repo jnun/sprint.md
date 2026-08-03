@@ -52,7 +52,8 @@ AI_MODE="$(sprintmd_ai_mode)"
 
 # Cheap model for the fast verdict pass (as the old triage did). The deep
 # "define it" path shells to chat.sh, which picks the strong TALK model itself.
-_triage_model="$(sprintmd_resolve_model TRIAGE)"
+# Coerce foreign pins; empty → provider strong default (grok-4.5 / opus).
+_triage_model="$(sprintmd_tier_model TRIAGE)"
 _model_args=()
 [ -n "$_triage_model" ] && _model_args=(--model "$_triage_model")
 
@@ -85,8 +86,8 @@ echo -e "${CYAN}=== Sweep $STAGE/: $total task(s), one at a time ===${NC}"
 NEXT_BLOCKED_RESOLUTION="$(sprintmd_next_blocked_resolution)"
 
 # blocked_deps FILE -> space-separated dependency ids that currently sit in
-# blocked/. These are why a dependent task can't actually be worked; the sweep
-# lifts/defines them via the shared resolution above.
+# blocked/ (need a decision or clarification). The dependent is on hold until
+# those resolve; the sweep lifts them via the shared resolution above.
 blocked_deps() {
   local file="$1" u out=""
   for u in $(sprintmd_unmet_deps "$file"); do
@@ -114,8 +115,8 @@ For EACH task in order:
 1. Read the task file and do a QUICK check of the current codebase — a fast size-up, not a deep review.
 2. Give a fast VERDICT: task name, stage ($STAGE/), a STATUS (COMPLETE/BLOCKED/UNDEFINED/READY/STALE), a one-sentence summary, and a one-sentence recommendation. Keep it tight — this is the cheap sort pass.
    COMPLETE = work already in the codebase (not "file is in done/").
-   READY = clear enough to work. Open **Depends on** alone is NOT a block — work holds ordered tasks until deps finish; that is normal.
-   BLOCKED / UNDEFINED = unworkable as written (needs define): missing/unclear problem or success criteria, or references dead files/APIs. Never mark BLOCKED only because another task is still open.
+   READY = clear enough to work. Open **Depends on** alone is NOT blocked — the task is dependent (on hold); work holds ordered tasks until deps finish.
+   BLOCKED = a decision or clarification is needed on THIS task. UNDEFINED = too thin to act on yet. Never mark BLOCKED only because another task is still open.
 3. Offer the developer the choice:
    [w] work it   — depends on stage:
                    next/ → start it (git mv next/ → doing/)
@@ -129,8 +130,8 @@ For EACH task in order:
    [q] quit      — stop the sweep
 4. Act on the choice within the task pipeline. Entry into next/ is ONLY via promote-to-sprint.sh (gate). Other moves: git mv SRC DEST || mv SRC DEST. Always delete with: git rm -f PATH || rm -f PATH. Then continue to the next task.
 
-DEPENDENCY RESOLUTION — only when a dep sits in blocked/ (undefined limbo), not for ordinary open deps:
-When a swept task's '**Depends on**:' names a task that currently sits in blocked/, that dependency is undefined and must be lifted before the dependent can run. Resolve it per the shared rule below. A dep that is merely still in backlog/next/doing is normal ordering — do not treat it as BLOCKED and do not force a define on the dependent.
+DEPENDENCY RESOLUTION — only when a dep sits in blocked/ (needs a decision or clarification), not for ordinary open deps:
+When a swept task's '**Depends on**:' names a task that currently sits in blocked/, that dependency still needs a decision and must be resolved before the dependent can run. Resolve it per the shared rule below. A dep that is merely still in backlog/next/doing is normal ordering — the dependent is on hold, not BLOCKED; do not force a define on the dependent.
 
 $NEXT_BLOCKED_RESOLUTION
 
@@ -180,9 +181,9 @@ RECOMMENDATION: <one sentence telling the user what to do with it>
 
 Status definitions:
 - COMPLETE: Work has already been completed on this task (already present in the codebase). Not the same as the done/ folder — the file may still sit in $STAGE/ until the developer moves it.
-- BLOCKED: Unworkable as written — needs define. Use when the task is unclear or its problem/success criteria are missing or hollow, OR it references files/APIs/patterns that no longer exist. Being undefined is blocked. An open **Depends on** line alone is NOT blocked.
-- UNDEFINED: Same family as BLOCKED — lacks a clear problem statement or actionable success criteria (prefer UNDEFINED when the issue is thin/ambiguous writing; BLOCKED when the task is structurally dead against the codebase).
-- READY: The task is well-defined, relevant, and ready to be worked. Unfinished prerequisites listed under **Depends on** are normal pipeline ordering — ./sprint.sh work holds the task until those deps finish. Still say READY.
+- BLOCKED: A decision or clarification is needed on THIS task before work can start (unresolved choice, open question, contradiction, or hollow criteria that force a human answer). An open **Depends on** line alone is NOT blocked — that is dependent/on hold.
+- UNDEFINED: Too thin to act on yet — lacks a clear problem statement or actionable success criteria (prefer UNDEFINED for thin writing; BLOCKED when a concrete decision/clarification is required).
+- READY: The task is well-defined, relevant, and ready to be worked. Unfinished prerequisites listed under **Depends on** mean the task is dependent (on hold) — normal pipeline ordering; ./sprint.sh work holds it until those deps finish. Still say READY (not BLOCKED).
 - STALE: The task is not wrong but feels low-priority or superseded by other work
 
 Rules:
@@ -222,9 +223,9 @@ Rules:
   elif [ "$status" = "COMPLETE" ]; then
     echo -e "  Status: ${CYAN}COMPLETE${NC} — work already completed on this task"
   elif [ "$status" = "BLOCKED" ]; then
-    echo -e "  Status: ${RED}BLOCKED${NC} — unworkable as written (needs define), not merely waiting on a dep"
+    echo -e "  Status: ${RED}BLOCKED${NC} — needs a decision or clarification (not merely waiting on a dep)"
   elif [ "$status" = "UNDEFINED" ]; then
-    echo -e "  Status: ${RED}UNDEFINED${NC} — needs define before it can be worked"
+    echo -e "  Status: ${RED}UNDEFINED${NC} — too thin; needs definition before it can be worked"
   elif [ "$status" = "STALE" ]; then
     echo -e "  Status: ${YELLOW}$status${NC}"
   elif [ "$status" = "READY" ]; then
@@ -235,8 +236,8 @@ Rules:
   echo "  $summary"
   echo -e "  ${DIM}$recommendation${NC}"
   if [ -n "$bdeps" ]; then
-    # Dep in the blocked/ *folder* (undefined limbo) — not ordinary open Depends on.
-    echo -e "  ${RED}⚠ depends on $bdeps (in blocked/ — undefined limbo); [d] lifts it${NC}"
+    # Dep in the blocked/ *folder* (needs decision/clarification) — not ordinary open Depends on.
+    echo -e "  ${RED}⚠ depends on $bdeps (in blocked/ — needs decision/clarification); [d] lifts it${NC}"
   fi
   echo ""
   case "$STAGE" in
@@ -271,10 +272,20 @@ Rules:
       task_id=$(echo "$taskname" | grep -oE '^[0-9]+' || true)
       if [ -n "$task_id" ]; then
         echo -e "  ${BLUE}-> Going deep: launching chat on $task_id...${NC}"
+        # Nested TUI owns the terminal until the user leaves it. The conversation
+        # can finish while the process is still running — without an exit cue the
+        # sweep looks stuck. /quit (or quit / /exit) ends the TUI; then we resume.
+        echo -e "  ${DIM}When finished, type /quit (or quit) to return to the sweep.${NC}"
         # chat.sh runs the full conversation on the strong TALK model AND, being
         # chat, resolves this task's blocked dependencies via its own fresh-
         # context chain — the intrinsic dep resolution, not reimplemented here.
-        bash "$(dirname "${BASH_SOURCE[0]}")/chat.sh" "$task_id" </dev/tty || true
+        # Open the REAL pty slave READ-WRITE (not the /dev/tty alias, not
+        # O_RDONLY): Claude and Grok TUIs need `0u /dev/ttysNN` — `<>/dev/tty`
+        # is rw but still wedges after turn 1 (device 2,0; task 335). sprintmd_tty
+        # resolves the slave path; `<>` re-opens it so a drained parent stdin
+        # cannot break the nested chat. Child `read -r … </dev/tty` prompts
+        # reopen the tty themselves and are unaffected.
+        bash "$(dirname "${BASH_SOURCE[0]}")/chat.sh" "$task_id" <>"$(sprintmd_tty)" || true
         echo ""
         echo -e "  ${DIM}Chat session complete. Continuing the sweep...${NC}"
         defined=$((defined + 1))

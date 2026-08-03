@@ -6,7 +6,7 @@ set -euo pipefail
 # ── Config ───────────────────────────────────────────────────────────
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/lib.sh"
 
-MODEL="$(sprintmd_resolve_model SPLIT)"
+MODEL="$(sprintmd_tier_model SPLIT)"
 TOOLS="Read,Bash,Grep,Glob,Edit,Write"
 PERMISSIONS="auto"
 MAX_TURNS=60
@@ -41,11 +41,22 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 
 if [ "$AI_MODE" = "emit" ]; then
   _DELETE_INSTR="
-Once all sub-tasks are created and filled in, delete the original task file:
-  git rm $TASK_FILE   (or: rm $TASK_FILE)"
+Once all sub-tasks are created and filled in, KEEP THE GRAPH RECIPROCAL, then
+delete the parent. Route every edge change through the lib helpers so both ends
+stay in sync — never hand-edit one side (run: source docs/sprintmd/lib.sh):
+  - for each new child, for each id N on its **Depends on** line:
+      sprintmd_ensure_reciprocal N <child-id>
+  - fold the parent into its first child so any task that depended on the whole
+    parent follows it instead of pointing at a deleted id:
+      sprintmd_rewrite_dep_id ${TASK_NAME%%-*} <first-child-id>
+    then, for each id that depended on ${TASK_NAME%%-*}:
+      sprintmd_ensure_reciprocal <first-child-id> <that-id>
+  - delete the parent task file:
+      git rm $TASK_FILE   (or: rm $TASK_FILE)"
 else
   _DELETE_INSTR="
-The original task file will be deleted after you finish. Do NOT edit it."
+The original task file will be deleted after you finish. Do NOT edit it. Its
+dependency edges are healed automatically once the sub-tasks exist."
 fi
 
 PROMPT="You are breaking a large task into small, atomic sub-tasks.
@@ -117,6 +128,39 @@ if sprintmd_run -p "$PROMPT" \
   NEW_TASKS=$(find docs/tasks/backlog -maxdepth 1 -name "*.md" -newer "$SPLIT_MARKER" 2>/dev/null | wc -l | tr -d ' ')
 
   if [ "$NEW_TASKS" -gt 0 ]; then
+    # ── Heal the graph before retiring the parent ────────────────────
+    # Every edge mutation routes through the lib helpers so both ends stay in
+    # sync — no hand-edit, nothing the agent has to "remember" (plan 15,
+    # antifragile rule 2). First make each new child's declared **Depends on**
+    # reciprocal on the other end; then fold the parent into its first (lowest-id)
+    # child, so any task that depended on the whole parent now depends on that
+    # child — and lists reciprocally — instead of pointing at the id we delete.
+    PARENT_ID="${TASK_NAME%%-*}"
+    PARENT_DEPS="$(sprintmd_dependents_of "$PARENT_ID")"
+    # Snapshot the new children ONCE, before any edge write — reciprocity writes
+    # bump a prereq's mtime, so a second -newer scan would wrongly readopt it.
+    NEW_CHILD_FILES="$(find docs/tasks/backlog -maxdepth 1 -name '*.md' -newer "$SPLIT_MARKER" 2>/dev/null)"
+    FIRST_CHILD="$(printf '%s\n' "$NEW_CHILD_FILES" \
+      | while IFS= read -r _f; do [ -n "$_f" ] && printf '%s\n' "$(task_id "$_f")"; done \
+      | grep -E '^[0-9]+$' | sort -n | head -1)"
+    while IFS= read -r _cf; do
+      [ -e "$_cf" ] || continue
+      _cid="$(task_id "$_cf")"; [[ "$_cid" =~ ^[0-9]+$ ]] || continue
+      while read -r _k _t; do
+        [ "$_k" = "id" ] && sprintmd_ensure_reciprocal "$_t" "$_cid" >/dev/null || true
+      done <<EOF
+$(sprintmd_iter_id_list "$(sprintmd_meta_value "$_cf" "Depends on")")
+EOF
+    done <<EOF
+$NEW_CHILD_FILES
+EOF
+    if [ -n "$FIRST_CHILD" ]; then
+      sprintmd_rewrite_dep_id "$PARENT_ID" "$FIRST_CHILD" >/dev/null || true
+      for _d in $PARENT_DEPS; do
+        sprintmd_ensure_reciprocal "$FIRST_CHILD" "$_d" >/dev/null || true
+      done
+    fi
+
     # Delete the original — it's been replaced by atomic sub-tasks
     git rm "$TASK_FILE" 2>/dev/null || rm "$TASK_FILE"
 

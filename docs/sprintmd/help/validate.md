@@ -13,15 +13,22 @@ template-stamped presence:
   - numeric filename ID
   - title ID matches filename (`# Task N:` == `N-*.md`)
   - no duplicate task IDs across any stage under docs/tasks/*/
-  - **Depends on** / **Blocks** tokens are well-formed (numeric IDs or
+  - **Depends on** / **Dependents** tokens are well-formed (numeric IDs or
     none/n/a/-; bare IDs with no file are treated as archived/gone)
+
+**Dependents** is the reverse of **Depends on**: if A depends on B, then B
+lists A under **Dependents**. It is graph metadata, not the `blocked/` folder.
+Legacy files may spell it **Blocks**; validate still reads that alias.
+
+**Tests** (suite paths for `promote`) is a close-path field, not a dependency
+edge — see `help promote` and `docs/guides/running-tests.md`.
 
 Template fields (**Feature**, ## Problem, ## Success criteria) are not
 re-checked — create-task.sh stamps them from .TEMPLATE-task.md. Dependency
 cycle detection is out of scope for v1.
 
 --fix only rewrites a mismatched or missing `# Task N:` title line to match
-the filename ID. It does not invent Depends on / Blocks values or sections.
+the filename ID. It does not invent Depends on / Dependents values or sections.
 
 --docs compares the flags each command's script parses against the flags
 its help/*.md documents, and reports either direction of drift. Run it after

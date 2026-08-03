@@ -36,4 +36,4 @@ git mv docs/tasks/review/ID-*.md docs/tasks/done/
 - [ ] Documentation updated if needed
 
 ---
-*Following the sprint.md workflow: backlog → next → doing → blocked → review → done*
+*Following the SprintBias workflow: backlog → next → doing → blocked → review → done*

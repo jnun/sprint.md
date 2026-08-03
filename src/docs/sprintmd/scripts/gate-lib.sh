@@ -20,7 +20,7 @@
 # same READY_DIR=next/ init + review plan start uses in bulk).
 #
 # Requires from lib.sh: sprintmd_run, sprintmd_ai_mode, sprintmd_ai_tier,
-# sprintmd_resolve_model, sprintmd_profile_line, sprintmd_review_verdict,
+# sprintmd_tier_model, sprintmd_profile_line, sprintmd_review_verdict,
 # move_file, sprintmd_log_path.
 #
 # Usage:
@@ -80,7 +80,8 @@ sprintmd_gate_init() {
   local stay_dir="${2:-}"
   SPRINTMD_GATE_READY_DIR="${3:-}"
 
-  SPRINTMD_GATE_MODEL="$(sprintmd_resolve_model GATE)"
+  # Tier-aware: empty MODEL_GATE → opus / grok-4.5; foreign pins coerced.
+  SPRINTMD_GATE_MODEL="$(sprintmd_tier_model GATE)"
   SPRINTMD_GATE_TOOLS="Read,Bash,Grep,Glob,Edit,Write"
   SPRINTMD_GATE_PERMISSIONS="auto"
   SPRINTMD_GATE_MAX_TURNS=40
@@ -117,7 +118,7 @@ $ready_instr"
     SPRINTMD_GATE_SPRINT_BLOCK="
 
 Other tasks already in this sprint (next/) and the backlog — a prerequisite this
-task builds on is very likely one of these, NOT an undefined blocker:
+task builds on is very likely one of these, NOT a missing decision on THIS task:
 $idx"
   fi
 }
@@ -158,24 +159,26 @@ A task is READY if:
 - All remaining action items are clear enough to execute without asking questions
 - No major design decisions are unresolved
 - It depends on other tasks being finished first. A dependency on other work is a
-  sequencing constraint, not a definition blocker — record it and stay READY
+  sequencing constraint, not a BLOCKED condition — record it and stay READY
   (see "Dependencies on other tasks" below).
 
-A task is BLOCKED only if:
+A task is BLOCKED only if a **decision or clarification** is needed on THIS task:
 - Remaining action items require decisions the developer hasn't made yet
 - Action items contradict each other, or contradict the current code in a way
   that no other queued task would resolve. Code the task builds on being absent
   because a sibling or backlog task hasn't run yet is NOT a contradiction — it is
-  a dependency. Only treat a conflict with current code as a blocker when nothing
-  in the next/backlog index would produce what the task assumes.
+  a dependency. Only treat a conflict with current code as needing clarification
+  when nothing in the next/backlog index would produce what the task assumes.
 - The task is entirely implemented already and there is nothing left to do (mark as COMPLETE instead of BLOCKED — stamp **Status: COMPLETE**, which routes to review/, not done/)
 
-Dependencies on other tasks:
-Do NOT block a task merely because another task must be completed first — that is
-exactly what the dependency field is for. Use the next/backlog index above to
-identify prerequisites: if the code, file, or API this task builds on will be
-produced by another task in next/ or backlog/, that is a dependency to record,
-not a reason to block. If executing this task requires other tasks to be finished
+Dependencies on other tasks (sequencing — not a blocked condition):
+Do NOT mark a task BLOCKED merely because another task must be completed first —
+that is exactly what the dependency field is for. A task waiting on a prerequisite
+is DEPENDENT (on hold), not blocked. BLOCKED means a decision or clarification
+is needed about THIS task. Use the next/backlog index above to identify
+prerequisites: if the code, file, or API this task builds on will be produced by
+another task in next/ or backlog/, that is a dependency to record, not a reason
+to stamp BLOCKED. If executing this task requires other tasks to be finished
 first, ensure the task file records them in a bold '**Depends on**:' field near
 the top (after the title), listing the task numbers, e.g.
 '**Depends on**: 900-920, 922'. Add the field if it is missing, or update it
@@ -183,14 +186,15 @@ if it is incomplete. An unmet dependency keeps the task READY (or COMPLETE if al
 implemented): the task runner holds it in next/ until those dependencies reach
 review/ or done/, then runs it automatically — no one has to babysit the order.
 A prerequisite task being *itself* rough, undefined, or not-yet-reviewed is STILL
-a dependency, not a reason to block THIS task: that upstream task will get defined
-on its own turn. Record it in '**Depends on**' and keep this task READY. Only its
-own undefined-ness — a decision this task's developer must personally make — blocks
-this task.
-Reserve BLOCKED strictly for work that cannot be *defined* yet: genuine unresolved
-decisions, contradictions, or missing clarifications a developer must supply. The
-test is "could a developer start this if the prerequisite tasks were already
-done?" — if yes, it is READY with a dependency, not BLOCKED.
+a dependency, not a reason to stamp THIS task BLOCKED: that upstream task will get
+its own decisions on its own turn. Record it in '**Depends on**' and keep this
+task READY. Only a decision or clarification THIS task's developer must supply
+makes this task BLOCKED.
+Reserve BLOCKED strictly for unresolved decisions, contradictions, or missing
+clarifications on this task. The test is "could a developer start this if the
+prerequisite tasks were already done and no open questions remained?" — if the
+only wait is for other tasks to finish, it is READY and dependent (on hold), not
+BLOCKED.
 
 Then update the task file by adding a ## Questions section at the end (before any HTML comments).
 If a ## Questions section from a previous review already exists, replace it instead of adding a second one.
@@ -224,11 +228,11 @@ If the verdict is BLOCKED, ALSO add a '## BLOCKED' section directly above ## Que
 ## BLOCKED
 
 One short plain-English paragraph: exactly why this task cannot proceed and what
-decision or input would unblock it. Another agent (or the developer) must be able
-to understand the blocker from this section alone, without reading anything else.
+decision or clarification is needed. Another agent (or the developer) must be able
+to understand the open question from this section alone, without reading anything else.
 End the paragraph by pointing the developer to chat it through interactively:
 "Run ./sprint.sh chat <task-number> to resolve these questions." A BLOCKED verdict
-means the work needs human definition — this is precisely what chat is for.
+means a decision or clarification is needed — this is precisely what chat is for.
 
 If the verdict is not BLOCKED, delete any ## BLOCKED section left from a previous review.
 
@@ -250,8 +254,9 @@ sprintmd_gate_parallel() {
 
   sprintmd_run -p "You are orchestrating a parallel task-definition review of $count tasks.
 
-$(sprintmd_subagent_parallel_dispatch) Each subagent reviews exactly one file and
-follows this contract verbatim, substituting its assigned file path:
+$(sprintmd_subagent_parallel_dispatch gate) Each subagent reviews exactly one file and
+follows this contract verbatim, substituting its assigned file path.
+$(sprintmd_subagent_no_nest)
 
 ────────────────────────────────────────────────────────────
 $(sprintmd_gate_contract "<the task file assigned to this subagent>")${SPRINTMD_GATE_MOVE_INSTR}
@@ -281,9 +286,9 @@ _sprintmd_gate_ensure_blocked_section() {
     echo ""
     echo "## BLOCKED"
     echo ""
-    echo "Blocked by gate review on $(date +%Y-%m-%d). The open questions"
-    echo "below must be answered before work can start. Talk them through"
-    echo "interactively with: ./sprint.sh chat ${name%%-*}"
+    echo "Needs decision or clarification (gate review $(date +%Y-%m-%d))."
+    echo "The open questions below must be answered before work can start."
+    echo "Talk them through interactively with: ./sprint.sh chat ${name%%-*}"
     echo "$_qs"
   } >> "$file" \
     || echo "  ⚠ Could not write ## BLOCKED section to $file"
@@ -343,8 +348,14 @@ sprintmd_gate_review() {
         # Default (gate): READY stays put. With READY_DIR set (plan start),
         # a vetted member is promoted — moved into next/ — only now that it
         # graded READY, so unready work never touches the sprint.
+        # Re-vet of a member already in next/: same path → no-op (do not
+        # call move_file on identical src/dest).
         if [ -n "${SPRINTMD_GATE_READY_DIR:-}" ]; then
-          move_file "$task_file" "$SPRINTMD_GATE_READY_DIR/$task_name"
+          _ready_dest="$SPRINTMD_GATE_READY_DIR/$task_name"
+          if [ ! "$task_file" -ef "$_ready_dest" ] 2>/dev/null; then
+            move_file "$task_file" "$_ready_dest"
+          fi
+          unset _ready_dest
         fi
         SPRINTMD_GATE_VERDICT="READY"
         ;;

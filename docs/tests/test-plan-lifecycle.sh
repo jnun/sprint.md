@@ -122,6 +122,61 @@ else
 fi
 assert_eq "Plan file deleted after dedup pass" "true" "$([ -f "$plan" ] && echo false || echo true)"
 
+# --- Test 5: STARTED re-run demotes unstamped next/ → backlog (self-heal) ---
+echo "Test 5: unstamped next/ member is demoted to backlog on plan start"
+setup
+make_plan 104 STARTED "- [ ] #506 — member" >/dev/null
+make_task 506 next
+out=$(cd "$TMPDIR" && bash docs/sprintmd/scripts/plan.sh start 104 --commit-only 2>&1) || {
+    echo "  FAIL: plan start on STARTED should exit 0 non-interactively"
+    echo "$out"
+    FAIL=$((FAIL + 1))
+    out=""
+}
+if [ -n "$out" ]; then
+    assert_contains "Mentions already STARTED" "$out" "already STARTED"
+    assert_contains "Demotes not-READY next/ to backlog" "$out" "not READY → backlog/"
+    assert_eq "File left next/" "false" \
+      "$([ -f "$TMPDIR/docs/tasks/next/506-member.md" ] && echo true || echo false)"
+    assert_eq "File now in backlog/" "true" \
+      "$([ -f "$TMPDIR/docs/tasks/backlog/506-member.md" ] && echo true || echo false)"
+    assert_eq "Still STARTED after re-run" "STARTED" \
+      "$(grep -m1 '^\*\*Status:\*\*' "$TMPDIR/docs/plans/104-throwaway.md" | sed 's/.*\*\*Status:\*\*[[:space:]]*//' | tr -d '[:space:]')"
+fi
+
+# --- Test 6: non-interactive DRAFT still refuses ---
+echo "Test 6: non-interactive plan start refuses DRAFT plans"
+setup
+make_plan 105 DRAFT "- [ ] #507 — member" >/dev/null
+make_task 507 backlog
+if (cd "$TMPDIR" && bash docs/sprintmd/scripts/plan.sh start 105 --commit-only >/dev/null 2>&1); then
+    echo "  FAIL: non-interactive DRAFT start should exit non-zero"; FAIL=$((FAIL + 1))
+else
+    echo "  PASS: non-interactive DRAFT start exits non-zero"; PASS=$((PASS + 1))
+fi
+assert_eq "DRAFT plan left unstarted" "DRAFT" \
+  "$(grep -m1 '^\*\*Status:\*\*' "$TMPDIR/docs/plans/105-throwaway.md" | sed 's/.*\*\*Status:\*\*[[:space:]]*//' | tr -d '[:space:]')"
+
+# --- Test 7: stamped READY next/ member stays put ---
+echo "Test 7: next/ member already stamped READY stays in next/"
+setup
+make_plan 106 STARTED "- [ ] #508 — ready member" >/dev/null
+printf '# Task 508: member\n\n## Questions\n\n**Status: READY**\n' \
+  > "$TMPDIR/docs/tasks/next/508-member.md"
+out=$(cd "$TMPDIR" && bash docs/sprintmd/scripts/plan.sh start 106 --commit-only 2>&1) || {
+    echo "  FAIL: plan start should exit 0 for stamped next/ member"
+    echo "$out"
+    FAIL=$((FAIL + 1))
+    out=""
+}
+if [ -n "$out" ]; then
+    assert_contains "Notices already READY in next/" "$out" "already in next/ (READY)"
+    assert_eq "Stamped READY stays in next/" "true" \
+      "$([ -f "$TMPDIR/docs/tasks/next/508-member.md" ] && echo true || echo false)"
+    assert_eq "Stamped READY not demoted to backlog/" "false" \
+      "$([ -f "$TMPDIR/docs/tasks/backlog/508-member.md" ] && echo true || echo false)"
+fi
+
 echo ""
 echo "Results: $PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ] && exit 0 || exit 1

@@ -36,7 +36,7 @@ SCRIPTS_DIR="$PROJECT_ROOT/docs/sprintmd/scripts"
 
 if [ ! -f "$DISPATCH" ] || [ ! -d "$HELP_DIR" ]; then
     echo -e "${RED}ERROR: Cannot find dispatcher (sprint.sh) or help/ dir.${NC}"
-    echo "Run this from a sprint.md project root."
+    echo "Run this from a SprintBias project root."
     exit 1
 fi
 
@@ -58,14 +58,15 @@ script_for_cmd() {
 }
 
 # Long flags a script actually recognizes (case branches + `= "--foo"` compares).
-# --help/-h are handled globally by the dispatcher, so ignore them.
+# --help/-h and --demo are handled globally by the dispatcher (never parsed by a
+# subcommand script), so ignore them.
 script_flags() {
     local script="$1"
     [ -f "$script" ] || return 0
     {
         grep -oE '^[[:space:]]*--[a-z][a-z-]*(\|--[a-z][a-z-]*)*\)' "$script" 2>/dev/null || true
         grep -oE '= "?--[a-z][a-z-]*"?' "$script" 2>/dev/null || true
-    } | grep -oE '\-\-[a-z][a-z-]*' | grep -vx -- '--help' | sort -u || true
+    } | grep -oE '\-\-[a-z][a-z-]*' | grep -vxE -- '--help|--demo' | sort -u || true
 }
 
 # Long flags a help file documents for THIS command.
@@ -96,7 +97,7 @@ help_flags() {
                 line = substr(line, RSTART + RLENGTH)
             }
         }
-    ' "$1" 2>/dev/null | grep -vx -- '--help' | sort -u || true
+    ' "$1" 2>/dev/null | grep -vxE -- '--help|--demo' | sort -u || true
 }
 
 # Union of every flag any script in the suite parses. A flag a help file

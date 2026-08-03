@@ -23,10 +23,10 @@ assignees: ''
 ## Environment
 - OS: [e.g., macOS, Linux, Windows]
 - Shell: [e.g., bash, zsh]
-- sprint.md Version/Commit:
+- SprintBias Version/Commit:
 
 ## Additional Context
 <!-- Add any other context, screenshots, or error messages -->
 
 ---
-*Note: This bug will be tracked in `docs/bugs/` following the sprint.md workflow. Once triaged, it will be converted to a task in `docs/tasks/backlog/`.*
+*Note: This bug will be tracked in `docs/bugs/` following the SprintBias workflow. Once triaged, it will be converted to a task in `docs/tasks/backlog/`.*
