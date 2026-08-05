@@ -25,7 +25,10 @@ a missing CLI or an auth/network outcome. It is OFF unless `LIVE_SMOKE=1` /
 documents how *we* verify releases; installed projects never receive it.
 
 For the full platform test ladder (unit → emit → this live ritual), start at
-**[running-tests.md](./running-tests.md)**.
+**[running-tests.md](./running-tests.md)**. Living KK/KU inventory for tools,
+subagents, models, and install edges:
+**[provider-reality.md](./provider-reality.md)** — append **Surfaced unknowns**
+when this ritual finds something new.
 
 ---
 
@@ -39,7 +42,7 @@ For the full platform test ladder (unit → emit → this live ritual), start at
 
   ```bash
   ./ship.sh --dry-run    # preview what mirrors
-  ./ship.sh              # mirror docs/sprintmd → src/ and bump VERSION
+  ./ship.sh              # mirror docs/sprintbias → src/ and bump VERSION
   ```
 
   Skipping this smokes the *old* `src/` and the run is meaningless. If you are
@@ -65,7 +68,7 @@ SPRINT_TARGET=/tmp/smoke-claude ./setup.sh    # at "Choose [Enter=Claude / g=Gro
 **Pass:** setup ends with `Setup Complete - All Checks Passed!` and
 
 ```bash
-grep -E '^(CLI|PROVIDER)=' /tmp/smoke-claude/docs/sprintmd/config
+grep -E '^(CLI|PROVIDER)=' /tmp/smoke-claude/docs/sprintbias/config
 # → CLI=claude
 # → PROVIDER=claude-code
 ```
@@ -107,7 +110,7 @@ SPRINT_TARGET=/tmp/smoke-grok ./setup.sh      # at the door, type: g  then Enter
 **Pass:**
 
 ```bash
-grep -E '^(CLI|PROVIDER)=' /tmp/smoke-grok/docs/sprintmd/config
+grep -E '^(CLI|PROVIDER)=' /tmp/smoke-grok/docs/sprintbias/config
 # → CLI=grok
 # → PROVIDER=grok-build
 ```
@@ -127,7 +130,7 @@ cd /tmp/smoke-grok
 
 ### 3. Switch / show the model
 
-The model surface has a real backing store (`docs/sprintmd/config` +
+The model surface has a real backing store (`docs/sprintbias/config` +
 `./sprint.sh model`). Prove show/switch in one of the fresh trees:
 
 ```bash
@@ -137,9 +140,9 @@ The model surface has a real backing store (`docs/sprintmd/config` +
 ./sprint.sh model show          # …and confirm the "Default" line and roles reflect it
 ```
 
-**Pass:** `model set` writes the key into `docs/sprintmd/config` and the next
+**Pass:** `model set` writes the key into `docs/sprintbias/config` and the next
 `model show` reflects it. If `./sprint.sh model` is unavailable in an older
-tree, edit `docs/sprintmd/config` directly (`MODEL_DEFAULT=…`) and re-run a
+tree, edit `docs/sprintbias/config` directly (`MODEL_DEFAULT=…`) and re-run a
 command — same effect, no reinstall.
 
 ### 4. Compare

@@ -13,16 +13,16 @@ This repo has two parallel trees. Always know which one you're touching.
 
 | Tree    | Role                                                        |
 |---------|------------------------------------------------------------|
-| `docs/` | Live dev environment. Edit and test here. `./sprint.sh` runs the scripts in `docs/sprintmd/`. We also dogfood SprintBias to manage our own work in `docs/tasks/`, `docs/features/`, etc. |
+| `docs/` | Live dev environment. Edit and test here. `./sprint.sh` runs the scripts in `docs/sprintbias/`. We also dogfood SprintBias to manage our own work in `docs/tasks/`, `docs/features/`, etc. |
 | `src/`  | The distributable package. `setup.sh` installs from here. Never edit or run anything in `src/` directly. |
 
 ## The flow
 
-**1. Edit `docs/`** — Change scripts (`docs/sprintmd/scripts/`), AI guidance (`docs/sprintmd/ai/`), or `DOCUMENTATION.md` at the repo root. Run and test in place.
+**1. Edit `docs/`** — Change scripts (`docs/sprintbias/scripts/`), AI guidance (`docs/sprintbias/ai/`), or `DOCUMENTATION.md` at the repo root. Run and test in place.
 
-**2. `./ship.sh`** — The one and only mirror step. It rsyncs `docs/sprintmd/` and the root files (`sprint.sh`, `DOCUMENTATION.md`, `GETSTARTED.md`) into `src/`, then bumps `src/VERSION` (patch by default; `./ship.sh minor` or `major`). New files under `docs/sprintmd/` ship automatically. Preview first with `./ship.sh --dry-run`. Never hand-copy files into `src/`.
+**2. `./ship.sh`** — The one and only mirror step. It rsyncs `docs/sprintbias/` and the root files (`sprint.sh`, `DOCUMENTATION.md`, `GETSTARTED.md`) into `src/`, then bumps `src/VERSION` (patch by default; `./ship.sh minor` or `major`). New files under `docs/sprintbias/` ship automatically. Preview first with `./ship.sh --dry-run`. Never hand-copy files into `src/`.
 
-**3. `./setup.sh`** — Installs `src/` into a target project: `DOCUMENTATION.md` and `sprint.sh` at the root, plus `docs/sprintmd/` and empty `docs/tasks/`, `docs/features/`, etc. Re-running it updates the framework while preserving the user's own content and their generated `DOC_STATE.md`.
+**3. `./setup.sh`** — Installs `src/` into a target project: `DOCUMENTATION.md` and `sprint.sh` at the root, plus `docs/sprintbias/` and empty `docs/tasks/`, `docs/features/`, etc. Re-running it updates the framework while preserving the user's own content and their generated `DOC_STATE.md`.
 
 ## What does not flow
 

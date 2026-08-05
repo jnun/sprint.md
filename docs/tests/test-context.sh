@@ -6,15 +6,15 @@ set -euo pipefail
 
 PASS=0
 FAIL=0
-SCRIPT_UNDER_TEST="$(cd "$(dirname "$0")/../sprintmd/scripts" && pwd)/context.sh"
-SPRINTMD_SRC="$(cd "$(dirname "$0")/../sprintmd" && pwd)"
+SCRIPT_UNDER_TEST="$(cd "$(dirname "$0")/../sprintbias/scripts" && pwd)/context.sh"
+SPRINTBIAS_SRC="$(cd "$(dirname "$0")/../sprintbias" && pwd)"
 
 setup() {
     TMPDIR=$(mktemp -d)
     trap 'rm -rf "$TMPDIR"' EXIT
 
     # context.sh uses PROJECT_ROOT = three dirs up from SCRIPT_DIR
-    mkdir -p "$TMPDIR/docs/sprintmd/scripts"
+    mkdir -p "$TMPDIR/docs/sprintbias/scripts"
     mkdir -p "$TMPDIR/docs/tasks/backlog"
     mkdir -p "$TMPDIR/docs/tasks/next"
     mkdir -p "$TMPDIR/docs/tasks/doing"
@@ -25,13 +25,13 @@ setup() {
     mkdir -p "$TMPDIR/docs/ideas"
     mkdir -p "$TMPDIR/docs/bugs"
 
-    cp "$SCRIPT_UNDER_TEST" "$TMPDIR/docs/sprintmd/scripts/context.sh"
+    cp "$SCRIPT_UNDER_TEST" "$TMPDIR/docs/sprintbias/scripts/context.sh"
     # The script sources lib.sh (which loads a cli/ provider profile), so the
     # temp tree must carry both or the `source` line aborts under set -e.
-    cp "$SPRINTMD_SRC/lib.sh" "$TMPDIR/docs/sprintmd/lib.sh"
-    cp -R "$SPRINTMD_SRC/cli" "$TMPDIR/docs/sprintmd/cli"
+    cp "$SPRINTBIAS_SRC/lib.sh" "$TMPDIR/docs/sprintbias/lib.sh"
+    cp -R "$SPRINTBIAS_SRC/cli" "$TMPDIR/docs/sprintbias/cli"
 
-    cat > "$TMPDIR/docs/sprintmd/DOC_STATE.md" << 'EOF'
+    cat > "$TMPDIR/docs/sprintbias/DOC_STATE.md" << 'EOF'
 # SprintBias Documentation State
 
 **Last Updated**: 2026-01-01
@@ -59,7 +59,7 @@ echo "=== test-context.sh ==="
 # Test 1: Shows context summary header
 echo "Test 1: Shows context summary header"
 setup
-output=$(bash "$TMPDIR/docs/sprintmd/scripts/context.sh" 2>&1)
+output=$(bash "$TMPDIR/docs/sprintbias/scripts/context.sh" 2>&1)
 assert_contains "Header present" "$output" "# Project Context Summary"
 
 # Test 2: Shows DOC_STATE.md content
@@ -82,21 +82,21 @@ assert_contains "Suggests backlog" "$output" "backlog"
 echo "Test 5: Working task focuses on active work"
 setup
 echo "# Task 1: Test" > "$TMPDIR/docs/tasks/doing/1-test.md"
-output=$(bash "$TMPDIR/docs/sprintmd/scripts/context.sh" 2>&1)
+output=$(bash "$TMPDIR/docs/sprintbias/scripts/context.sh" 2>&1)
 assert_contains "Suggests completing active" "$output" "completing the active task"
 
 # Test 6: Next task (no doing) suggests picking from next
 echo "Test 6: Next tasks suggest picking from next"
 setup
 echo "# Task 2: Next" > "$TMPDIR/docs/tasks/next/2-next.md"
-output=$(bash "$TMPDIR/docs/sprintmd/scripts/context.sh" 2>&1)
+output=$(bash "$TMPDIR/docs/sprintbias/scripts/context.sh" 2>&1)
 assert_contains "Suggests picking from next" "$output" "Pick a task from"
 
 # Test 7: Missing DOC_STATE.md handled gracefully
 echo "Test 7: Missing DOC_STATE.md shows fallback"
 setup
-rm "$TMPDIR/docs/sprintmd/DOC_STATE.md"
-output=$(bash "$TMPDIR/docs/sprintmd/scripts/context.sh" 2>&1)
+rm "$TMPDIR/docs/sprintbias/DOC_STATE.md"
+output=$(bash "$TMPDIR/docs/sprintbias/scripts/context.sh" 2>&1)
 assert_contains "Shows not found" "$output" "DOC_STATE.md not found"
 
 # --- Summary ---

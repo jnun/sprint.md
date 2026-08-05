@@ -30,7 +30,7 @@ git mv docs/tasks/review/ID-*.md docs/tasks/done/
 
 ## Checklist
 - [ ] Task ID referenced in commit message
-- [ ] docs/sprintmd/DOC_STATE.md updated if new tasks created
+- [ ] docs/sprintbias/DOC_STATE.md updated if new tasks created
 - [ ] Task moved to appropriate folder
 - [ ] Testing criteria from task completed
 - [ ] Documentation updated if needed

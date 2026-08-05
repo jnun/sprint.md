@@ -11,7 +11,7 @@ set -euo pipefail
 
 PASS=0
 FAIL=0
-SCRIPT_UNDER_TEST="$(cd "$(dirname "$0")/../sprintmd/scripts" && pwd)/work.sh"
+SCRIPT_UNDER_TEST="$(cd "$(dirname "$0")/../sprintbias/scripts" && pwd)/work.sh"
 
 # Stub CLI: two personalities selected by the prompt it receives.
 #   - Excellence audit prompt  → emit a JSON verdict (FILED or BLOCKER via
@@ -63,8 +63,8 @@ setup() {
     mkdir -p "$TMPDIR/docs/tasks/next" "$TMPDIR/docs/tasks/doing" \
              "$TMPDIR/docs/tasks/review" "$TMPDIR/docs/tasks/blocked" \
              "$TMPDIR/docs/tasks/backlog" "$TMPDIR/docs/tmp" \
-             "$TMPDIR/docs/sprintmd/ai"
-    printf 'Excellence protocol stub.\n' > "$TMPDIR/docs/sprintmd/ai/audit-excellence.md"
+             "$TMPDIR/docs/sprintbias/ai"
+    printf 'Excellence protocol stub.\n' > "$TMPDIR/docs/sprintbias/ai/audit-excellence.md"
     printf 'sample\n' > "$TMPDIR/sample.txt"
 
     local i
@@ -144,7 +144,7 @@ echo "=== test-work-excellence.sh ==="
 echo "Test 1: excellence runs after the task lands in review/, snapshot holds"
 setup 1
 rc=0
-output=$(cd "$TMPDIR" && SPRINTMD_MODE=exec SPRINTMD_CLI="$STUB" NO_COLOR=1 \
+output=$(cd "$TMPDIR" && SPRINTBIAS_MODE=exec SPRINTBIAS_CLI="$STUB" NO_COLOR=1 \
     bash "$SCRIPT_UNDER_TEST" --excellence 2>&1) || rc=$?
 assert_exit_code "Exits 0" "0" "$rc"
 assert_contains "Runs the excellence audit" "$output" "Running excellence audit"
@@ -169,7 +169,7 @@ assert_missing "A FILED verdict is not counted as a blocker" \
 echo "Test 2: BLOCKER verdict does not halt the queue, blockers are counted"
 setup 2
 rc=0
-output=$(cd "$TMPDIR" && SPRINTMD_MODE=exec SPRINTMD_CLI="$STUB" NO_COLOR=1 \
+output=$(cd "$TMPDIR" && SPRINTBIAS_MODE=exec SPRINTBIAS_CLI="$STUB" NO_COLOR=1 \
     STUB_VERDICT=BLOCKER bash "$SCRIPT_UNDER_TEST" --excellence 2>&1) || rc=$?
 assert_exit_code "Queue does not fail on a blocker (exits 0)" "0" "$rc"
 assert_contains "Both tasks completed" "$output" "2 completed"
@@ -185,7 +185,7 @@ assert_contains "Records the BLOCKER verdict" \
 echo "Test 3: excellence audit is opt-in"
 setup 1
 rc=0
-output=$(cd "$TMPDIR" && SPRINTMD_MODE=exec SPRINTMD_CLI="$STUB" NO_COLOR=1 \
+output=$(cd "$TMPDIR" && SPRINTBIAS_MODE=exec SPRINTBIAS_CLI="$STUB" NO_COLOR=1 \
     bash "$SCRIPT_UNDER_TEST" 2>&1) || rc=$?
 assert_exit_code "Exits 0" "0" "$rc"
 assert_missing "Excellence audit did not run" "$output" "Running excellence audit"

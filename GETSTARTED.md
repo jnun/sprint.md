@@ -79,7 +79,7 @@ problem, the success criteria, and the technical notes until any developer could
 pick it up. It edits the file as you answer, so progress shows up right in the
 task. And if the task turns out to be several jobs in a trench coat, it splits
 them into small, ordered sub-tasks for you. Leading `-g` / `-c` pick the AI
-provider for that run without changing `docs/sprintmd/config`.
+provider for that run without changing `docs/sprintbias/config`.
 
 ## Step 4 — Move tasks to done
 

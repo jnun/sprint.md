@@ -37,7 +37,7 @@ Task files live in `docs/tasks/*/` and describe outcomes in plain language:
 **Framework files (do not edit):**
 - `DOCUMENTATION.md`
 - `sprint.sh`
-- `docs/sprintmd/` (framework scripts, AI instructions) — except `DOC_STATE.md`, your own ID/state file
+- `docs/sprintbias/` (framework scripts, AI instructions) — except `DOC_STATE.md`, your own ID/state file
 
 **Your content (create and edit freely):**
 - `docs/ideas/` — rough ideas being refined
@@ -45,12 +45,12 @@ Task files live in `docs/tasks/*/` and describe outcomes in plain language:
 - `docs/tasks/` — your tasks
 - `docs/plans/` — your plans: named groupings that list task IDs (see below)
 - `docs/bugs/` — open bug reports (inbox only; convert or close deletes the file)
-- `docs/guides/` — your documentation. Style it per `docs/sprintmd/guides/doc-style.md`; run `docs/sprintmd/scripts/prettydoc.py <file>` to align tables
+- `docs/guides/` — your documentation. Style it per `docs/sprintbias/guides/doc-style.md`; run `docs/sprintbias/scripts/prettydoc.py <file>` to align tables
 - `docs/tests/` — your test plans
 - `docs/designs/` — design system, files, and references for the project
 - `docs/examples/` — code standards and worked examples to follow or mimic
 - `docs/data/` — data to manage, store, or build (e.g. scaffolding to preload a database)
-- `docs/sprintmd/DOC_STATE.md` — your ID and state tracking (the one file you own inside the framework folder)
+- `docs/sprintbias/DOC_STATE.md` — your ID and state tracking (the one file you own inside the framework folder)
 
 ## AI Agents
 
@@ -59,7 +59,7 @@ This file governs `docs/`. Read it before modifying any task, bug, or feature.
 **Rules:**
 1. `docs/` is the active project management system — not source code, not stale
 2. Tasks in `review/` and `done/` are completed work — old dates mean done, not abandoned
-3. Always read `docs/sprintmd/DOC_STATE.md` before creating tasks (get next ID)
+3. Always read `docs/sprintbias/DOC_STATE.md` before creating tasks (get next ID)
 4. Use `./sprint.sh` commands when available — don't create task files manually
 5. Move tasks by changing folders — folder location = status.
    Always: `git mv SRC DEST || mv SRC DEST` (see Moving Tasks)
@@ -102,7 +102,7 @@ Reserve **blocked** / **BLOCKED** for “a decision or clarification is needed.�
 **Plans vs. the folders above — don't conflate them either:**
 - The six folders above are **lifecycle status**: a task lives in exactly one, and moving it *is* how status changes.
 - A **plan** (`docs/plans/N-name.md`) is a **relational index, not a status.** It is one file that names a clump of related tasks and lists their IDs. The member tasks are **never moved into it** — each stays in its own lifecycle folder and flows through `backlog → next → …` on its own. A plan is never a lifecycle stage and is never counted or moved as a task; it carries a `**Status:** DRAFT | READY | STARTED` for its own life: `DRAFT` while authoring, `READY` once authored and safe for `plan start` / `loop --refill`, and `STARTED` — a one-way switch set by `plan start` — once its members have been committed to `next/`. Retirement is deletion: when every member sits in `docs/tasks/done/`, `./sprint.sh plan done <id>` removes the file. There is no stored `DONE` and no `NEXT` plan status. Two disambiguations: a plan `**Status:**` is **not** a task folder (`next/` is a lifecycle stage; `STARTED` is a plan field), and plan-level `READY` is **not** the task-level `**Status: READY**` the gate stamps on each member. `docs/plans/` is a sibling of `docs/tasks/`, not a stage inside it.
-- Member IDs are references only: moving or working a member task needs no edit to the plan file. Author with `./sprint.sh newplan` / `./sprint.sh chat plan <id>`; optionally critique with `./sprint.sh plan think <id>`; commit into the sprint with `./sprint.sh plan start <id>` (gates each member; READY → `next/`). Single-task promote uses the same gate: `bash docs/sprintmd/scripts/promote-to-sprint.sh <task-file>`. The plan file itself never moves. `./sprint.sh status` rolls up each plan by resolving its members' current folders.
+- Member IDs are references only: moving or working a member task needs no edit to the plan file. Author with `./sprint.sh newplan` / `./sprint.sh chat plan <id>`; optionally critique with `./sprint.sh plan think <id>`; commit into the sprint with `./sprint.sh plan start <id>` (gates each member; READY → `next/`). Single-task promote uses the same gate: `bash docs/sprintbias/scripts/promote-to-sprint.sh <task-file>`. The plan file itself never moves. `./sprint.sh status` rolls up each plan by resolving its members' current folders.
 
 **Do not assume** old file dates mean abandoned. A task from months ago in `done/` is completed history.
 
@@ -112,7 +112,7 @@ Reserve **blocked** / **BLOCKED** for “a decision or clarification is needed.�
 
 ```
 docs/
-├── sprintmd/             # FRAMEWORK (do not edit)
+├── sprintbias/             # FRAMEWORK (do not edit)
 │   ├── scripts/        # sprint.sh, create-task.sh, etc.
 │   ├── ai/             # AI instructions
 │   └── DOC_STATE.md    # Project state (ID tracking)
@@ -157,7 +157,7 @@ Help groups: **create · chat · plan · work · look · keep**.
 > Tired of typing `./sprint.sh`? Add `alias sprint='./sprint.sh'` to your shell
 > rc to use `sprint <command>` from a project root (`sprint -g work`,
 > `sprint -c chat 12`). `setup.sh` offers this on install; see
-> `docs/sprintmd/guides/sprint_command.md` for details and a subdirectory-aware
+> `docs/sprintbias/guides/sprint_command.md` for details and a subdirectory-aware
 > variant. Run `./sprint.sh` or `bash sprint.sh` — do not force `sh`/`zsh` on
 > the script (any interactive shell is fine as the launcher).
 
@@ -182,7 +182,7 @@ Help groups: **create · chat · plan · work · look · keep**.
 ./sprint.sh plan done [id]            # 5. Retire: when every member is in done/, delete the plan file
 
 # Chat & Work (AI-powered — emit inside Claude/Grok/Cursor sessions, or exec via CLI)
-# Per-run provider (leading flags; does not rewrite docs/sprintmd/config):
+# Per-run provider (leading flags; does not rewrite docs/sprintbias/config):
 ./sprint.sh -g work                   # This run: Grok Build  (-c / --claude for Claude Code)
 ./sprint.sh --claude chat 12          # This run: Claude Code (same as -c)
 ./sprint.sh profile [show]            # Create/update project profile (show: print only, no AI)
@@ -192,8 +192,8 @@ Help groups: **create · chat · plan · work · look · keep**.
 ./sprint.sh gate [folder] [limit]     # Off-spine quality gate: re-gate next/ (--force) or report on backlog/doing/blocked
 ./sprint.sh split <path>              # Split a large task into subtasks
 ./sprint.sh polish [limit] [--rounds N]  # Sweep review/: reopen tasks worth another pass
-./sprint.sh polish <file>             # Deep-judge one finished piece; file enhancements to backlog/
-./sprint.sh polish --code <file>      # Code-diff audit (fixer/verifier); may fix issues inline
+./sprint.sh polish <id|file>          # Deep-judge one finished task (by id or path); file enhancements to backlog/
+./sprint.sh polish --code <id|file>   # Code-diff audit (fixer/verifier); may fix issues inline
 ./sprint.sh promote [id] [--dry-run]  # Test-gated close: run each review/ task's **Tests**, all green → done/
 ./sprint.sh deps                      # File a backlog task auditing outdated/vulnerable deps
 
@@ -243,7 +243,7 @@ git mv docs/tasks/doing/ID-name.md docs/tasks/review/    || mv docs/tasks/doing/
 git mv docs/tasks/review/ID-name.md docs/tasks/done/     || mv docs/tasks/review/ID-name.md docs/tasks/done/      # Complete
 ```
 
-Scripts use the same rule via `move_file` in `docs/sprintmd/lib.sh`.
+Scripts use the same rule via `move_file` in `docs/sprintbias/lib.sh`.
 
 ## Naming
 
@@ -253,7 +253,7 @@ Scripts use the same rule via `move_file` in `docs/sprintmd/lib.sh`.
 | Bug | `ID-description.md` | `3-login-fails.md` |
 | Feature/Idea | `name.md` | `user-authentication.md` |
 
-IDs come from `docs/sprintmd/DOC_STATE.md` (sprint_TASK_ID for tasks, sprint_BUG_ID for bugs).
+IDs come from `docs/sprintbias/DOC_STATE.md` (sprint_TASK_ID for tasks, sprint_BUG_ID for bugs).
 
 ## Key Concepts
 
@@ -261,7 +261,7 @@ IDs come from `docs/sprintmd/DOC_STATE.md` (sprint_TASK_ID for tasks, sprint_BUG
 **Features** = Fully defined specs. What capabilities exist.
 **Tasks** = Work items. Move through folders as status changes.
 **Plans** = Named groupings that list task IDs. A relational index over tasks, not a status or container — the tasks stay in their own folders.
-**DOC_STATE.md** = Source of truth for IDs (`docs/sprintmd/DOC_STATE.md`: `sprint_TASK_ID`, `sprint_BUG_ID`, `sprint_PLAN_ID`).
+**DOC_STATE.md** = Source of truth for IDs (`docs/sprintbias/DOC_STATE.md`: `sprint_TASK_ID`, `sprint_BUG_ID`, `sprint_PLAN_ID`).
 
 ## Ideas Workflow
 

@@ -11,7 +11,7 @@ echo "================================================"
 echo ""
 
 # Check if we're in a project with SprintBias installed
-if [ ! -f "docs/sprintmd/DOC_STATE.md" ] && [ ! -f "docs/STATE.md" ]; then
+if [ ! -f "docs/sprintbias/DOC_STATE.md" ] && [ ! -f "docs/STATE.md" ]; then
     echo "❌ Error: No SprintBias installation found in current directory."
     echo "  Please run this script from your project root."
     exit 1
@@ -62,7 +62,7 @@ echo ""
 echo "Removing old standalone installation files..."
 REMOVED_FILES=0
 
-# Remove old scripts (but not docs/sprintmd/scripts)
+# Remove old scripts (but not docs/sprintbias/scripts)
 if [ -f "sprint.sh" ]; then
     rm -f sprint.sh
     ((REMOVED_FILES++))
@@ -132,9 +132,9 @@ if [ -d "$BACKUP_DIR/docs/bugs" ]; then
 fi
 
 # Restore DOC_STATE.md (preserving IDs) — handles both old and new layouts
-if [ -f "$BACKUP_DIR/docs/sprintmd/DOC_STATE.md" ]; then
-    mkdir -p docs/sprintmd
-    cp "$BACKUP_DIR/docs/sprintmd/DOC_STATE.md" "docs/sprintmd/DOC_STATE.md"
+if [ -f "$BACKUP_DIR/docs/sprintbias/DOC_STATE.md" ]; then
+    mkdir -p docs/sprintbias
+    cp "$BACKUP_DIR/docs/sprintbias/DOC_STATE.md" "docs/sprintbias/DOC_STATE.md"
     echo "  ✓ Restored DOC_STATE.md with existing IDs"
 elif [ -f "$BACKUP_DIR/docs/STATE.md" ]; then
     # Pre-2.2.0 backup — restore at old path so setup.sh can migrate it
@@ -167,7 +167,7 @@ echo ""
 echo "Next steps:"
 echo "1. Review the migration:"
 echo "   - Check docs/tasks/ for your tasks"
-echo "   - Verify docs/sprintmd/DOC_STATE.md has correct IDs"
+echo "   - Verify docs/sprintbias/DOC_STATE.md has correct IDs"
 echo "   - Ensure docs/ has your documentation"
 echo ""
 echo "2. Commit the changes:"

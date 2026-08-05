@@ -8,7 +8,7 @@
 **Dependents**: none
 **Parent**: none
 **Tests**: none
-**Refined**: 4
+**Refined**: 5
 **Reworked**: 0
 
 ## Problem
@@ -35,6 +35,9 @@ rather than hidden.
       (3) never pull `review/` or `done/` solely because of the parent stamp.
       Example: `parent:335` → open #335 (if any) + open children of 335.
       Token lives on `newplan` only — no `plan start` variant.
+- [ ] The parent match is **exact-id, not substring**: `parent:33` binds only
+      tasks stamped for parent 33 — never 335 or 133. (Verify by planting a
+      `**Parent**: 335` task and confirming `parent:33` does not pull it.)
 - [ ] If `parent:N` is the only member token and the guard yields **zero**
       matches, fail loud with a clear error (no empty silent plan). If parent N
       is absent but children matched, create the plan and note
@@ -70,6 +73,20 @@ rather than hidden.
 normal `split` the parent file is retired, so the common case is children only.
 Implement on `newplan` only — do not revive a `plan` gather verb (stale
 `plan N "parent:…"` prompts are leftovers from the retired `sprint` filter).
+
+**No children helper exists as of writing** — `lib.sh` has nothing for
+parent/children, so the child scan is part of this task: iterate
+`SPRINTMD_OPEN_STAGES` and match the stamp line **anchored** (e.g.
+`^\*\*Parent\*\*: N$`), not as a substring, so `parent:33` can't grab
+`**Parent**: 335`. Dedupe against any explicit ids passed alongside so a mixed
+`newplan "n" 335 parent:335` lists 335 once.
+
+**Alignment (command-matrix.md is the target-state spec).** The fast-lane
+next-step copy must teach the canonical spine `chat → plan start → work`: with
+members pre-bound the chat step is done, so point at `plan start → work`; with
+no members, keep pointing at `chat plan`. `newplan` mints, `plan` acts, `work`
+does — 312 adds no conversational surface and no new plan sub-verb. Broader
+help/registry surface-lag alignment is separate backlog work, not this task.
 
 **Guardrails:** explicit user intent only; named plan in history; surface
 `plan start` → `work` to teach the queue; skip only `chat plan` authoring —
@@ -157,6 +174,17 @@ note / possible follow-up, not this task’s work.
 and “parent retired — children only” into Success criteria; collapsed Notes to
 a ship/skip table; aligned headers with the task template; marked
 **Status: READY**. No open decisions remain.
+
+## Refine (round 5)
+
+**Sharpened:** Verified against `command-matrix.md` (target-state spec) — 312 is
+consistent, no conflict: `newplan` mints, `plan start` acts, and pre-bound
+members legitimately skip `chat plan` for the `plan start → work` spine. Added a
+success criterion pinning **exact-id parent matching** (`parent:33` ≠
+`**Parent**: 335`) to close a silent-collision class with zero live fixtures,
+and Notes flagging that no children helper exists (the child scan + cross-path
+dedupe are part of the work). Anchored the next-step copy to the matrix spine;
+left broader help/registry surface-lag alignment as separate backlog work.
 
 ## Questions
 

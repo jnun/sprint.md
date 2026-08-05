@@ -35,7 +35,7 @@ docs/tmp/*
 *.pid.lock
 nohup.out
 # SprintBias ID-allocation mutex (auto-created and removed; never commit a stale one)
-docs/sprintmd/.sprint-alloc.lock/
+docs/sprintbias/.sprint-alloc.lock/
 
 # Archive Files (if users zip up old work)
 *.zip

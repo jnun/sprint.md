@@ -3,6 +3,7 @@
 **Feature**: none
 **Created**: 2026-07-31
 **Docs**: docs/guides/command-matrix.md
+**Plan**: 13
 **Depends on**: 313, 314
 **Blocks**: none
 **Parent**: none

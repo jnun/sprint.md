@@ -6,14 +6,14 @@ set -euo pipefail
 
 PASS=0
 FAIL=0
-SCRIPT_UNDER_TEST="$(cd "$(dirname "$0")/../sprintmd/scripts" && pwd)/check-alignment.sh"
-SPRINTMD_SRC="$(cd "$(dirname "$0")/../sprintmd" && pwd)"
+SCRIPT_UNDER_TEST="$(cd "$(dirname "$0")/../sprintbias/scripts" && pwd)/check-alignment.sh"
+SPRINTBIAS_SRC="$(cd "$(dirname "$0")/../sprintbias" && pwd)"
 
 setup() {
     TMPDIR=$(mktemp -d)
     trap 'rm -rf "$TMPDIR"' EXIT
 
-    mkdir -p "$TMPDIR/docs/sprintmd/scripts"
+    mkdir -p "$TMPDIR/docs/sprintbias/scripts"
     mkdir -p "$TMPDIR/docs/features"
     mkdir -p "$TMPDIR/docs/tasks/backlog"
     mkdir -p "$TMPDIR/docs/tasks/next"
@@ -22,12 +22,12 @@ setup() {
     mkdir -p "$TMPDIR/docs/tasks/review"
     mkdir -p "$TMPDIR/docs/tasks/done"
 
-    # The script sources lib.sh (SPRINTMD_STAGES/task_id/task_title/task_feature
+    # The script sources lib.sh (SPRINTBIAS_STAGES/task_id/task_title/task_feature
     # live there, and lib.sh loads a cli/ provider profile). It also reads its
     # data (features, tasks) relative to CWD, so keep the copy under the tree.
-    cp "$SCRIPT_UNDER_TEST" "$TMPDIR/docs/sprintmd/scripts/check-alignment.sh"
-    cp "$SPRINTMD_SRC/lib.sh" "$TMPDIR/docs/sprintmd/lib.sh"
-    cp -R "$SPRINTMD_SRC/cli" "$TMPDIR/docs/sprintmd/cli"
+    cp "$SCRIPT_UNDER_TEST" "$TMPDIR/docs/sprintbias/scripts/check-alignment.sh"
+    cp "$SPRINTBIAS_SRC/lib.sh" "$TMPDIR/docs/sprintbias/lib.sh"
+    cp -R "$SPRINTBIAS_SRC/cli" "$TMPDIR/docs/sprintbias/cli"
 }
 
 assert_contains() {
@@ -60,7 +60,7 @@ echo "=== test-check-alignment.sh ==="
 echo "Test 1: Empty project exits 0"
 setup
 rc=0
-output=$(cd "$TMPDIR" && bash docs/sprintmd/scripts/check-alignment.sh 2>&1) || rc=$?
+output=$(cd "$TMPDIR" && bash docs/sprintbias/scripts/check-alignment.sh 2>&1) || rc=$?
 assert_exit_code "Exits 0" "0" "$rc"
 assert_contains "Shows summary" "$output" "Summary"
 
@@ -77,7 +77,7 @@ cat > "$TMPDIR/docs/tasks/doing/1-add-login.md" << 'EOF'
 **Feature**: /docs/features/auth.md
 EOF
 rc=0
-output=$(cd "$TMPDIR" && bash docs/sprintmd/scripts/check-alignment.sh 2>&1) || rc=$?
+output=$(cd "$TMPDIR" && bash docs/sprintbias/scripts/check-alignment.sh 2>&1) || rc=$?
 assert_exit_code "Aligned exits 0" "0" "$rc"
 
 # Test 3: A task with no feature reference is NOT an issue — the Feature field
@@ -89,7 +89,7 @@ cat > "$TMPDIR/docs/tasks/backlog/2-orphan.md" << 'EOF'
 **Feature**: none
 EOF
 rc=0
-output=$(cd "$TMPDIR" && bash docs/sprintmd/scripts/check-alignment.sh 2>&1) || rc=$?
+output=$(cd "$TMPDIR" && bash docs/sprintbias/scripts/check-alignment.sh 2>&1) || rc=$?
 assert_exit_code "Orphaned task exits 0" "0" "$rc"
 
 # Test 4: Task referencing non-existent feature — exits 1
@@ -100,7 +100,7 @@ cat > "$TMPDIR/docs/tasks/backlog/3-bad-ref.md" << 'EOF'
 **Feature**: /docs/features/nonexistent.md
 EOF
 rc=0
-output=$(cd "$TMPDIR" && bash docs/sprintmd/scripts/check-alignment.sh 2>&1) || rc=$?
+output=$(cd "$TMPDIR" && bash docs/sprintbias/scripts/check-alignment.sh 2>&1) || rc=$?
 assert_exit_code "Bad ref exits 1" "1" "$rc"
 assert_contains "Reports missing feature" "$output" "non-existent feature"
 
@@ -119,14 +119,14 @@ Some content.
 EOF
 rc=0
 # NO_COLOR=1 so the status text isn't split by ANSI escapes mid-substring.
-output=$(cd "$TMPDIR" && NO_COLOR=1 bash docs/sprintmd/scripts/check-alignment.sh 2>&1) || rc=$?
+output=$(cd "$TMPDIR" && NO_COLOR=1 bash docs/sprintbias/scripts/check-alignment.sh 2>&1) || rc=$?
 assert_exit_code "Valid status exits 0" "0" "$rc"
 assert_contains "Does not mis-report status" "$output" "Status: DONE"
 
 # Test 6: Shows best practices section
 echo "Test 6: Shows best practices"
 setup
-output=$(cd "$TMPDIR" && bash docs/sprintmd/scripts/check-alignment.sh 2>&1) || true
+output=$(cd "$TMPDIR" && bash docs/sprintbias/scripts/check-alignment.sh 2>&1) || true
 assert_contains "Best practices" "$output" "Best Practices"
 
 # --- Summary ---

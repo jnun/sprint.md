@@ -48,7 +48,7 @@ if [ -z "$LIVE" ] || [ "$LIVE" = 0 ]; then
 fi
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
-SPRINTMD="$ROOT/docs/sprintmd"
+SPRINTBIAS="$ROOT/docs/sprintbias"
 
 # ── Log (optional) ───────────────────────────────────────────────────
 LOG=""
@@ -77,10 +77,10 @@ command -v timeout >/dev/null 2>&1 && TMO=(timeout 120)
 run_exec() {
   local cli="$1" provider="$2" prompt="$3" out="$4" err="$5"
   "${TMO[@]}" env \
-    SPRINTMD_CLI="$cli" SPRINTMD_PROVIDER="$provider" SPRINTMD_MODE=exec \
+    SPRINTBIAS_CLI="$cli" SPRINTBIAS_PROVIDER="$provider" SPRINTBIAS_MODE=exec \
     GROK_AGENT= CLAUDECODE= CLAUDE_CODE_SESSION_ID= \
-    CURSOR_TRACE_ID= CURSOR_SESSION_ID= AI_AGENT= SPRINTMD_IN_AGENT= \
-    bash -c "source '$SPRINTMD/lib.sh' >/dev/null 2>&1; sprintmd_run -p '$prompt' --max-turns 1" \
+    CURSOR_TRACE_ID= CURSOR_SESSION_ID= AI_AGENT= SPRINTBIAS_IN_AGENT= \
+    bash -c "source '$SPRINTBIAS/lib.sh' >/dev/null 2>&1; sprintbias_run -p '$prompt' --max-turns 1" \
     >"$out" 2>"$err"
 }
 
@@ -100,9 +100,9 @@ provider_suite() {
 
   # 2. Emit detection (offline note) — inside its own agent, this CLI emits.
   local mode_agent
-  mode_agent="$(env SPRINTMD_CLI="$cli" SPRINTMD_PROVIDER="$provider" \
+  mode_agent="$(env SPRINTBIAS_CLI="$cli" SPRINTBIAS_PROVIDER="$provider" \
     "$agentvar=1" GROK_AGENT= CLAUDECODE= \
-    bash -c "export $agentvar=1; source '$SPRINTMD/lib.sh' >/dev/null 2>&1; sprintmd_ai_mode" 2>/dev/null)"
+    bash -c "export $agentvar=1; source '$SPRINTBIAS/lib.sh' >/dev/null 2>&1; sprintbias_ai_mode" 2>/dev/null)"
   if [ "$mode_agent" = "emit" ]; then
     pass "emit detection: $agentvar set → mode emit"
   else
@@ -116,7 +116,7 @@ provider_suite() {
   local rc=0
   run_exec "$cli" "$provider" "Reply with exactly this token and nothing else: SMOKELIVE_OK" "$out" "$err" || rc=$?
 
-  # 3a. Banner: sprintmd_announce_provider writes it to stderr before the call.
+  # 3a. Banner: sprintbias_announce_provider writes it to stderr before the call.
   if grep -qF "Provider: $cli" "$err" 2>/dev/null && grep -qF "mode: exec" "$err" 2>/dev/null; then
     pass "provider banner under exec (▸ Provider: $cli … mode: exec)"
   else
@@ -143,10 +143,10 @@ provider_suite() {
     local flag; [ "$cli" = grok ] && flag=-g || flag=-c
     skip "interactive chat: run \`./sprint.sh $flag chat\` by hand — this runner never opens a live TUI"
     local okint
-    okint="$(env SPRINTMD_CLI="$cli" SPRINTMD_PROVIDER="$provider" SPRINTMD_MODE=exec \
+    okint="$(env SPRINTBIAS_CLI="$cli" SPRINTBIAS_PROVIDER="$provider" SPRINTBIAS_MODE=exec \
       GROK_AGENT= CLAUDECODE= \
-      bash -c "source '$SPRINTMD/lib.sh' >/dev/null 2>&1; sprintmd_interactive_ok && echo yes || echo no" 2>/dev/null)"
-    # Both shipped profiles set SPRINTMD_PROVIDER_INTERACTIVE=1, so a real TTY
+      bash -c "source '$SPRINTBIAS/lib.sh' >/dev/null 2>&1; sprintbias_interactive_ok && echo yes || echo no" 2>/dev/null)"
+    # Both shipped profiles set SPRINTBIAS_PROVIDER_INTERACTIVE=1, so a real TTY
     # in exec mode means a live session is possible.
     [ "$okint" = "yes" ] && pass "interactive_ok true on a real TTY" \
                          || fail "interactive_ok should be true on a real TTY (got '$okint')"

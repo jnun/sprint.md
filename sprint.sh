@@ -12,7 +12,7 @@ set -euo pipefail
 
 # SprintBias CLI
 
-# Colors — blanked when NO_COLOR is set (matches docs/sprintmd/lib.sh).
+# Colors — blanked when NO_COLOR is set (matches docs/sprintbias/lib.sh).
 if [ -n "${NO_COLOR:-}" ]; then
     RED='' YELLOW='' BLUE='' CYAN='' NC=''
 else
@@ -25,7 +25,7 @@ fi
 
 # Resolve project root
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-if [ -d "$SCRIPT_DIR/docs/sprintmd/scripts" ]; then
+if [ -d "$SCRIPT_DIR/docs/sprintbias/scripts" ]; then
     PROJECT_ROOT="$SCRIPT_DIR"
 else
     PROJECT_ROOT="$(dirname "$(dirname "$(dirname "$SCRIPT_DIR")")")"
@@ -49,7 +49,7 @@ count_files() {
 
 # Utility: run helper script
 run_script() {
-    local script="$PROJECT_ROOT/docs/sprintmd/scripts/$1"
+    local script="$PROJECT_ROOT/docs/sprintbias/scripts/$1"
     shift
     if [ ! -f "$script" ]; then
         echo -e "${RED}ERROR: Script not found: $script${NC}"
@@ -67,7 +67,7 @@ run_script() {
 }
 
 # Path to the command registry — the single source of truth for the catalog.
-REGISTRY="$PROJECT_ROOT/docs/sprintmd/help/_registry"
+REGISTRY="$PROJECT_ROOT/docs/sprintbias/help/_registry"
 
 # Print the registry rows for one group as aligned "  cmd usage   summary"
 # lines. Rows are 4 pipe-delimited fields plus an optional 5th demo-name (no
@@ -115,8 +115,8 @@ show_help() {
     echo -e "${BLUE}Provider (this run only — does not rewrite config):${NC}"
     echo "  -c, --claude                     Claude Code  (CLI=claude, PROVIDER=claude-code)"
     echo "  -g, --grok                       Grok Build   (CLI=grok, PROVIDER=grok-build)"
-    echo "  Default comes from docs/sprintmd/config (or setup.sh). Env SPRINTMD_CLI /"
-    echo "  SPRINTMD_PROVIDER also override. Examples: ./sprint.sh -g work"
+    echo "  Default comes from docs/sprintbias/config (or setup.sh). Env SPRINTBIAS_CLI /"
+    echo "  SPRINTBIAS_PROVIDER also override. Examples: ./sprint.sh -g work"
     echo ""
     echo -e "${BLUE}Create:${NC}"
     print_command_group create
@@ -143,7 +143,7 @@ show_help() {
 
 show_command_help() {
     local cmd="$1"
-    local helpfile="$PROJECT_ROOT/docs/sprintmd/help/$cmd.md"
+    local helpfile="$PROJECT_ROOT/docs/sprintbias/help/$cmd.md"
     if [ ! -f "$helpfile" ]; then
         echo -e "${RED}Unknown command: $cmd${NC}"
         echo "Run ./sprint.sh help for a list of commands."
@@ -426,19 +426,19 @@ cmd_learn() {
 }
 
 # Global provider flags (leading only). This-run env override — does not rewrite
-# docs/sprintmd/config. lib.sh prefers SPRINTMD_CLI / SPRINTMD_PROVIDER over config.
+# docs/sprintbias/config. lib.sh prefers SPRINTBIAS_CLI / SPRINTBIAS_PROVIDER over config.
 #   ./sprint.sh -g work          # Grok Build for this run
 #   ./sprint.sh --claude chat 12 # Claude Code for this run
 while [ $# -gt 0 ]; do
     case "$1" in
         -c|--claude)
-            export SPRINTMD_CLI=claude
-            export SPRINTMD_PROVIDER=claude-code
+            export SPRINTBIAS_CLI=claude
+            export SPRINTBIAS_PROVIDER=claude-code
             shift
             ;;
         -g|--grok)
-            export SPRINTMD_CLI=grok
-            export SPRINTMD_PROVIDER=grok-build
+            export SPRINTBIAS_CLI=grok
+            export SPRINTBIAS_PROVIDER=grok-build
             shift
             ;;
         -h|--help)

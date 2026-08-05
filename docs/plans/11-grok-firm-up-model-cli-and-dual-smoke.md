@@ -28,6 +28,7 @@ Four outcomes, in product language:
    unknowns** (tools, subagents, models, spine, install), burned down human +
    AI, so later real-project work does not re-derive the same fog. Unknown
    unknowns stay a watchlist + append log, not a fake catalog.
+   **Living home:** `docs/guides/provider-reality.md` (first burn: task #298).
 2. **Firm the fuzzy** — tools and subagent handoff on Grok are verified on a
    live install (IDs, emit spawn behavior, worker types), not only unit-tested
    wording and a best-effort map.

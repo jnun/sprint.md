@@ -6,8 +6,8 @@ set -euo pipefail
 
 PASS=0
 FAIL=0
-SCRIPT_UNDER_TEST="$(cd "$(dirname "$0")/../sprintmd/scripts" && pwd)/create-task.sh"
-SPRINTMD_SRC="$(cd "$(dirname "$0")/../sprintmd" && pwd)"
+SCRIPT_UNDER_TEST="$(cd "$(dirname "$0")/../sprintbias/scripts" && pwd)/create-task.sh"
+SPRINTBIAS_SRC="$(cd "$(dirname "$0")/../sprintbias" && pwd)"
 DOCS_SRC="$(cd "$(dirname "$0")/.." && pwd)"
 
 setup() {
@@ -15,19 +15,19 @@ setup() {
     trap 'rm -rf "$TMPDIR"' EXIT
 
     # Create project structure
-    mkdir -p "$TMPDIR/docs/sprintmd/scripts"
+    mkdir -p "$TMPDIR/docs/sprintbias/scripts"
     mkdir -p "$TMPDIR/docs/tasks/backlog"
 
     # Copy script into correct location
-    cp "$SCRIPT_UNDER_TEST" "$TMPDIR/docs/sprintmd/scripts/create-task.sh"
+    cp "$SCRIPT_UNDER_TEST" "$TMPDIR/docs/sprintbias/scripts/create-task.sh"
     # The script sources lib.sh (which loads a cli/ provider profile) and reads
     # the task template at runtime — provide all three or it aborts.
-    cp "$SPRINTMD_SRC/lib.sh" "$TMPDIR/docs/sprintmd/lib.sh"
-    cp -R "$SPRINTMD_SRC/cli" "$TMPDIR/docs/sprintmd/cli"
+    cp "$SPRINTBIAS_SRC/lib.sh" "$TMPDIR/docs/sprintbias/lib.sh"
+    cp -R "$SPRINTBIAS_SRC/cli" "$TMPDIR/docs/sprintbias/cli"
     cp "$DOCS_SRC/tasks/.TEMPLATE-task.md" "$TMPDIR/docs/tasks/.TEMPLATE-task.md"
 
     # Create minimal DOC_STATE.md
-    cat > "$TMPDIR/docs/sprintmd/DOC_STATE.md" << 'EOF'
+    cat > "$TMPDIR/docs/sprintbias/DOC_STATE.md" << 'EOF'
 # SprintBias Documentation State
 
 **Last Updated**: 2026-01-01
@@ -80,7 +80,7 @@ echo "=== test-create-task.sh ==="
 # Test 1: Happy path — creates task file
 echo "Test 1: Happy path creates task file"
 setup
-(cd "$TMPDIR" && bash docs/sprintmd/scripts/create-task.sh "Fix login bug" > /dev/null 2>&1)
+(cd "$TMPDIR" && bash docs/sprintbias/scripts/create-task.sh "Fix login bug" > /dev/null 2>&1)
 assert_file_exists "Task file created" "$TMPDIR/docs/tasks/backlog/11-fix-login-bug.md"
 
 # Test 2: Task file contains correct title
@@ -90,7 +90,7 @@ assert_contains "Title has task ID" "$content" "# Task 11: Fix login bug"
 
 # Test 3: DOC_STATE.md updated with new ID
 echo "Test 3: DOC_STATE.md updated"
-state=$(cat "$TMPDIR/docs/sprintmd/DOC_STATE.md")
+state=$(cat "$TMPDIR/docs/sprintbias/DOC_STATE.md")
 assert_contains "Task ID incremented to 11" "$state" "**sprint_TASK_ID**: 11"
 
 # Test 4: Feature reference defaults to none
@@ -100,14 +100,14 @@ assert_contains "Feature is none" "$content" '**Feature**: none'
 # Test 5: Happy path with feature argument
 echo "Test 5: Task with feature argument"
 setup
-(cd "$TMPDIR" && bash docs/sprintmd/scripts/create-task.sh "Add auth flow" "user-auth" > /dev/null 2>&1)
+(cd "$TMPDIR" && bash docs/sprintbias/scripts/create-task.sh "Add auth flow" "user-auth" > /dev/null 2>&1)
 content=$(cat "$TMPDIR/docs/tasks/backlog/11-add-auth-flow.md")
 assert_contains "Feature reference set" "$content" '**Feature**: /docs/features/user-auth.md'
 
 # Test 6: Missing description — should fail
 echo "Test 6: Missing description exits 1"
 setup
-if (cd "$TMPDIR" && bash docs/sprintmd/scripts/create-task.sh "" > /dev/null 2>&1); then
+if (cd "$TMPDIR" && bash docs/sprintbias/scripts/create-task.sh "" > /dev/null 2>&1); then
     echo "  FAIL: Should have exited non-zero"
     FAIL=$((FAIL + 1))
 else
@@ -118,8 +118,8 @@ fi
 # Test 7: Missing DOC_STATE.md — should fail
 echo "Test 7: Missing DOC_STATE.md exits 1"
 setup
-rm "$TMPDIR/docs/sprintmd/DOC_STATE.md"
-if (cd "$TMPDIR" && bash docs/sprintmd/scripts/create-task.sh "Some task" > /dev/null 2>&1); then
+rm "$TMPDIR/docs/sprintbias/DOC_STATE.md"
+if (cd "$TMPDIR" && bash docs/sprintbias/scripts/create-task.sh "Some task" > /dev/null 2>&1); then
     echo "  FAIL: Should have exited non-zero"
     FAIL=$((FAIL + 1))
 else
@@ -131,7 +131,7 @@ fi
 echo "Test 8: Long description truncated to 50 chars"
 setup
 long_desc="This is a very long task description that exceeds the fifty character filename limit"
-(cd "$TMPDIR" && bash docs/sprintmd/scripts/create-task.sh "$long_desc" > /dev/null 2>&1)
+(cd "$TMPDIR" && bash docs/sprintbias/scripts/create-task.sh "$long_desc" > /dev/null 2>&1)
 # Find created file
 created=$(ls "$TMPDIR/docs/tasks/backlog/" 2>/dev/null | head -1)
 assert_eq "File was created" "true" "$([ -n "$created" ] && echo true || echo false)"
@@ -139,7 +139,7 @@ assert_eq "File was created" "true" "$([ -n "$created" ] && echo true || echo fa
 # Test 9: Created date is today
 echo "Test 9: Created date is today"
 setup
-(cd "$TMPDIR" && bash docs/sprintmd/scripts/create-task.sh "Date test" > /dev/null 2>&1)
+(cd "$TMPDIR" && bash docs/sprintbias/scripts/create-task.sh "Date test" > /dev/null 2>&1)
 content=$(cat "$TMPDIR/docs/tasks/backlog/11-date-test.md")
 today=$(date +%Y-%m-%d)
 assert_contains "Created date is today" "$content" "**Created**: $today"

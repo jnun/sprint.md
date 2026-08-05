@@ -28,4 +28,4 @@ assignees: ''
 - [ ] **done** - Approved and deployed
 
 ---
-*Task ID will be assigned based on `docs/sprintmd/DOC_STATE.md` counter*
+*Task ID will be assigned based on `docs/sprintbias/DOC_STATE.md` counter*

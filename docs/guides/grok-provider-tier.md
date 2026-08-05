@@ -2,8 +2,9 @@
 
 How SprintBias runs when the AI provider is **Grok Build** — a peer to the
 Claude tier, not a generic passthrough. Capability matrix:
-`docs/sprintmd/ai/provider-capabilities.md`. Claude peer:
-`docs/guides/claude-provider-tier.md`.
+`docs/sprintbias/ai/provider-capabilities.md`. Claude peer:
+`docs/guides/claude-provider-tier.md`. Living KK/KU inventory (tools, emit,
+models, install): `docs/guides/provider-reality.md`.
 
 Ship truth for flags and gates lives in code; this guide is the human/agent map.
 
@@ -15,11 +16,11 @@ Ship truth for flags and gates lives in code; this guide is the human/agent map.
 |-------|-------|
 | Tier name | `grok-build` |
 | CLI binary | `grok` |
-| Profile | `docs/sprintmd/cli/grok.sh` |
+| Profile | `docs/sprintbias/cli/grok.sh` |
 | Config | `CLI=grok` and `PROVIDER=grok-build` |
 | Setup pick | Grok Build (option 2 in `setup.sh`) |
 | Session detect | `GROK_AGENT=1` → emit mode |
-| Default model (tier) | `grok-4.5` when `MODEL_*` empty (`sprintmd_tier_model`) |
+| Default model (tier) | `grok-4.5` when `MODEL_*` empty (`sprintbias_tier_model`) |
 
 ## Goal
 
@@ -40,7 +41,7 @@ Ship truth for flags and gates lives in code; this guide is the human/agent map.
 
 ## Neutral interface (unchanged)
 
-Scripts keep calling `sprintmd_run` / `sprintmd_run_interactive`. Only the
+Scripts keep calling `sprintbias_run` / `sprintbias_run_interactive`. Only the
 profile and tier gates change. No script should hardcode `grok` flags.
 
 ## Flag map (neutral → Grok)
@@ -95,7 +96,7 @@ re-check on next Grok minor.
 | Nesting | depth one — children cannot spawn children |
 
 **Role → `subagent_type`.** The wording helpers source the Grok type from one
-seam, `sprintmd_subagent_type_for <role>`. Every role resolves to
+seam, `sprintbias_subagent_type_for <role>`. Every role resolves to
 `general-purpose` today, and the mapping records why:
 
 | Role | Caller | Type | Why |
@@ -103,34 +104,34 @@ seam, `sprintmd_subagent_type_for <role>`. Every role resolves to
 | `work` | `work.sh` | `general-purpose` | implements product code — full toolset |
 | `gate` | `gate-lib.sh` | `general-purpose` | must Edit/Write the task file **and** `git mv` it (shell); no restricted mode grants both (read-write = edits, no shell; execute = shell, no edits), so `explore` / `read-write` / `execute` all break the contract |
 | `polish` | `polish.sh` | `general-purpose` | reads and rewrites the task file only; the one role where `capability_mode: read-write` would be a safe future restriction — its entry in the seam is where to add it |
-| `chain` | `chat.sh`, `sprintmd_next_blocked_resolution` | `general-purpose` | hands a task toward READY in a fresh context — defines/edits task files |
+| `chain` | `chat.sh`, `sprintbias_next_blocked_resolution` | `general-purpose` | hands a task toward READY in a fresh context — defines/edits task files |
 
-A future specialization is a one-line change in `sprintmd_subagent_type_for`, not
+A future specialization is a one-line change in `sprintbias_subagent_type_for`, not
 edits across the four call sites.
 
-Emit prompts get wording from `sprintmd_subagent_*` helpers in `lib.sh` so Claude
+Emit prompts get wording from `sprintbias_subagent_*` helpers in `lib.sh` so Claude
 says "Task tool" and Grok says `spawn_subagent`. Because nesting is depth-one,
-every spawned worker's instruction carries `sprintmd_subagent_no_nest` — a
+every spawned worker's instruction carries `sprintbias_subagent_no_nest` — a
 tier-worded line telling the worker it is a worker, not an orchestrator, and must
 not re-spawn. It rides in the `work`, `gate`, and `polish` emit fan-outs.
 
 ## Orchestration
 
-Shared helper: `sprintmd_orchestration_capable` is true for `claude-code` and
+Shared helper: `sprintbias_orchestration_capable` is true for `claude-code` and
 `grok-build`. Used by:
 
 - `work.sh` emit multi-task
 - `gate.sh` / `gate-lib.sh` / `plan-start.sh` multi-member
 - `polish.sh` multi-task judge
 - `chat.sh` continue-the-chain
-- `lib.sh` `sprintmd_next_blocked_resolution` Path A
+- `lib.sh` `sprintbias_next_blocked_resolution` Path A
 
 ## Models
 
 | Source | Behavior |
 |--------|----------|
 | `MODEL_*` config | Honored via `--model` after coerce |
-| Empty + tier model | Every AI command uses `sprintmd_tier_model` → `grok-4.5` |
+| Empty + tier model | Every AI command uses `sprintbias_tier_model` → `grok-4.5` |
 | Claude-only pins (`opus`/`sonnet`/…) | Coerced to `grok-4.5` (lib + `cli/grok.sh`) |
 | Grok profile exec/interactive | Always passes `--model` (never omits; default `grok-4.5`) |
 | Per-script pins | `MODEL_CHAT` / `MODEL_WORK` / `MODEL_GATE` / … |
@@ -140,7 +141,7 @@ Shared helper: `sprintmd_orchestration_capable` is true for `claude-code` and
 
 1. Install Grok Build so `grok` is on PATH
 2. `./setup.sh` → choose **Grok Build** → writes `CLI=grok` `PROVIDER=grok-build`
-   (or edit `docs/sprintmd/config` the same way; no reinstall needed to switch)
+   (or edit `docs/sprintbias/config` the same way; no reinstall needed to switch)
 3. Optional: pin `MODEL_DEFAULT=grok-4.5` (or leave empty for tier default)
 4. Inside Grok: `./sprint.sh chat` / `work` / `polish` → emit
 5. Terminal: same commands → exec launches `grok`
@@ -153,7 +154,7 @@ shipping pointer file.
 
 ## Capability matrix row
 
-See `docs/sprintmd/ai/provider-capabilities.md` (single source of truth).
+See `docs/sprintbias/ai/provider-capabilities.md` (single source of truth).
 
 ## Out of scope (follow-ups)
 
@@ -169,5 +170,5 @@ profiles.
 | `docs/guides/claude-provider-tier.md` | As-built peer tier |
 | `docs/guides/command-matrix.md` | Live command names |
 | `docs/plans/5-grok-build-first-class-provider.md` | Plan + member tasks |
-| `docs/sprintmd/cli/grok.sh` | Profile |
-| `docs/sprintmd/guides/use_chat.md` | chat modes |
+| `docs/sprintbias/cli/grok.sh` | Profile |
+| `docs/sprintbias/guides/use_chat.md` | chat modes |

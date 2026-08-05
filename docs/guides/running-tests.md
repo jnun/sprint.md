@@ -177,7 +177,7 @@ bash docs/tests/smoke-grok-spine.sh            # only in --emit
 | `test-command-matrix-smoke.sh` | Every matrix command accepts `-g`/`-c`; AI paths show provider banner in **emit** mode; non-AI paths do not. **No network.** (Included in default unit run because it is `test-*.sh`.) |
 | `smoke-grok-spine.sh` | Claude-proven spine under Grok flags; fake `grok` for argv; optional live `grok models` if logged in (skipped otherwise) |
 
-Emit mode (`SPRINTMD_MODE=emit`) prints prompts for the surrounding agent instead
+Emit mode (`SPRINTBIAS_MODE=emit`) prints prompts for the surrounding agent instead
 of shelling out — that is why these smokes stay agent-safe.
 
 Cross-read: [command-matrix.md](./command-matrix.md).
@@ -294,7 +294,7 @@ Product test loops for end users remain `./sprint.sh newtest "…"`.
 | `docs/tests/.TEMPLATE-test.md` | **Yes** (product test-loop template) |
 | `docs/guides/running-tests.md` (this file) | **No** |
 | `docs/guides/dual-provider-smoke.md` | **No** |
-| `docs/sprintmd/**` | **Yes** (the product) |
+| `docs/sprintbias/**` | **Yes** (the product) |
 
 ---
 

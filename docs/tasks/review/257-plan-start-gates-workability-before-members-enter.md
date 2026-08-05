@@ -54,3 +54,31 @@ docs/sprintmd/scripts/loop.sh
 docs/tasks/backlog/258-extract-shared-workability-gate-from-define-for-pl.md
 docs/tasks/backlog/259-plan-start-gates-then-promotes-members-into-the-sp.md
 docs/tasks/backlog/260-retire-define-from-the-plan-commit-spine-and-docum.md
+
+## Excellence Audit (2026-08-05)
+
+### Summary
+The design spike is fully realized by its members (258/259/260, all in
+`done/`). `plan start` now gates each backlog member through the shared
+`gate-lib.sh` library **before** promoting only READY work into `next/`
+(`plan-start.sh:330-361`), with `--commit-only` for a pure filesystem move and
+self-healing demotion of unstamped `next/` files (`plan-start.sh:228-247`). The
+`define` command was retired entirely — off the spine and out of the CLI —
+folded into `gate` (off-spine re-gate) and `chat <id>` (interactive
+definition); the retired-name rename is documented (`command-matrix.md:270`,
+`DOCUMENTATION.md:153,181`). The gate/promote logic lives in one library so
+`gate`, `plan start`, `loop --refill`, folder promote, and `polish` REOPEN can
+never drift. Meets the bar; nothing to file.
+
+### Findings
+- No BLOCKER, DEFECT, or ENHANCEMENT worth filing.
+- [NIT] `plan-start.sh:233-235` — an unstamped `next/` member is left in
+  `next/` (not demoted) when a same-named file already exists in `backlog/`.
+  This is a duplicate-id state that cannot arise in normal use and is reported
+  to the operator; not worth engineering against.
+- Verified: src mirror parity clean for `plan-start.sh` and `gate-lib.sh`; the
+  257 Notes interim workaround ("run gate manually until 259 ships") is
+  resolved since 259 is in `done/`; `loop --refill` invokes `plan start` and
+  relies on its gating with no separate define step (`loop.sh:224,233`).
+
+VERDICT: EXCELLENT

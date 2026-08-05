@@ -9,7 +9,7 @@
 # grok-build tier.
 #
 # Safe to run on the dev repo:
-#   - Never rewrites docs/sprintmd/config (grok is selected per-run with -g).
+#   - Never rewrites docs/sprintbias/config (grok is selected per-run with -g).
 #   - Emit-wording checks force MODE=emit (print-only; no files move, no network).
 #   - Exec-argv checks use a fake `grok` on PATH (no network, no real model call).
 #   - The one live network touch is `model list` → `grok models` (read-only),
@@ -25,7 +25,7 @@ PASS=0
 FAIL=0
 SKIP=0
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
-SPRINTMD="$ROOT/docs/sprintmd"
+SPRINTBIAS="$ROOT/docs/sprintbias"
 
 pass() { echo "  PASS: $1"; PASS=$((PASS + 1)); }
 fail() { echo "  FAIL: $1"; FAIL=$((FAIL + 1)); }
@@ -57,9 +57,9 @@ trap 'rm -rf "$FAKE"' EXIT
 
 # Run lib.sh under the grok tier with a clean agent env. Returns the stub argv.
 grok_exec_argv() {
-  PATH="$FAKE:$PATH" SPRINTMD_CLI=grok SPRINTMD_PROVIDER=grok-build \
-  SPRINTMD_MODE=exec GROK_AGENT= CLAUDECODE= \
-    bash -c "source '$SPRINTMD/lib.sh' >/dev/null 2>&1; $1" 2>/dev/null
+  PATH="$FAKE:$PATH" SPRINTBIAS_CLI=grok SPRINTBIAS_PROVIDER=grok-build \
+  SPRINTBIAS_MODE=exec GROK_AGENT= CLAUDECODE= \
+    bash -c "source '$SPRINTBIAS/lib.sh' >/dev/null 2>&1; $1" 2>/dev/null
 }
 
 echo "=== smoke-grok-spine.sh ==="
@@ -68,19 +68,19 @@ echo ""
 
 # ── 1. Config / doctor: tier + mode ──────────────────────────────────
 echo "1. Config/doctor — tier grok-build; mode exec outside agent, emit with GROK_AGENT"
-show="$(cd "$ROOT" && SPRINTMD_MODE= ./sprint.sh -g model show 2>&1)"
+show="$(cd "$ROOT" && SPRINTBIAS_MODE= ./sprint.sh -g model show 2>&1)"
 assert_contains "model show reports Provider: grok-build" "$show" "grok-build"
 assert_contains "model show reports CLI: grok"            "$show" "grok"
-mode_agent="$(SPRINTMD_CLI=grok SPRINTMD_PROVIDER=grok-build GROK_AGENT=1 CLAUDECODE= \
-  bash -c "source '$SPRINTMD/lib.sh' >/dev/null 2>&1; sprintmd_ai_mode" 2>/dev/null)"
+mode_agent="$(SPRINTBIAS_CLI=grok SPRINTBIAS_PROVIDER=grok-build GROK_AGENT=1 CLAUDECODE= \
+  bash -c "source '$SPRINTBIAS/lib.sh' >/dev/null 2>&1; sprintbias_ai_mode" 2>/dev/null)"
 assert_eq "GROK_AGENT=1 → emit" "emit" "$mode_agent"
 if command -v grok >/dev/null 2>&1; then
   # Clear the FULL agent-detection env set (lib.sh checks all of these), so the
   # "outside an agent" claim is honest even when this smoke runs inside one.
-  mode_term="$(SPRINTMD_CLI=grok SPRINTMD_PROVIDER=grok-build \
+  mode_term="$(SPRINTBIAS_CLI=grok SPRINTBIAS_PROVIDER=grok-build \
     GROK_AGENT= CLAUDECODE= CLAUDE_CODE_SESSION_ID= \
-    CURSOR_TRACE_ID= CURSOR_SESSION_ID= AI_AGENT= SPRINTMD_IN_AGENT= \
-    bash -c "source '$SPRINTMD/lib.sh' >/dev/null 2>&1; sprintmd_ai_mode" 2>/dev/null)"
+    CURSOR_TRACE_ID= CURSOR_SESSION_ID= AI_AGENT= SPRINTBIAS_IN_AGENT= \
+    bash -c "source '$SPRINTBIAS/lib.sh' >/dev/null 2>&1; sprintbias_ai_mode" 2>/dev/null)"
   assert_eq "clean env + grok on PATH → exec" "exec" "$mode_term"
 else
   skip "clean-env exec check (grok not on PATH)"
@@ -96,12 +96,12 @@ fi
 # Assert the command SHAPE the interactive profile builds: positional prompt
 # (NOT -p, which would print one answer and exit), model pinned, headless-only
 # flags absent.
-tui="$(grok_exec_argv 'sprintmd_provider_interactive "welcome to chat"')"
+tui="$(grok_exec_argv 'sprintbias_provider_interactive "welcome to chat"')"
 assert_contains "TUI argv pins --model grok-4.5"   "$tui" "--model grok-4.5"
 assert_contains "TUI argv carries positional prompt" "$tui" "welcome to chat"
 assert_not_contains "TUI argv has no headless -p"   "$tui" "-p welcome"
-okint="$(SPRINTMD_CLI=grok SPRINTMD_PROVIDER=grok-build SPRINTMD_MODE=exec GROK_AGENT= CLAUDECODE= \
-  bash -c "source '$SPRINTMD/lib.sh' >/dev/null 2>&1; sprintmd_interactive_ok && echo yes || echo no" 2>/dev/null)"
+okint="$(SPRINTBIAS_CLI=grok SPRINTBIAS_PROVIDER=grok-build SPRINTBIAS_MODE=exec GROK_AGENT= CLAUDECODE= \
+  bash -c "source '$SPRINTBIAS/lib.sh' >/dev/null 2>&1; sprintbias_interactive_ok && echo yes || echo no" 2>/dev/null)"
 if [ -t 0 ] && [ -t 1 ]; then
   assert_eq "interactive_ok true on a real TTY" "yes" "$okint"
 else
@@ -110,22 +110,22 @@ fi
 
 # ── 3. Exec: one-shot headless work ──────────────────────────────────
 echo "3. Exec — headless work: mapped tools + always-approve + model pin"
-argv="$(grok_exec_argv 'sprintmd_run -p "do task" --tools "Read,Edit,Write,Bash,Grep,Glob" --skip-permissions')"
+argv="$(grok_exec_argv 'sprintbias_run -p "do task" --tools "Read,Edit,Write,Bash,Grep,Glob" --skip-permissions')"
 assert_contains "headless pins --model grok-4.5"        "$argv" "--model grok-4.5"
 assert_contains "Claude tool names mapped to Grok IDs"  "$argv" "--tools read_file,search_replace,write,run_terminal_command,grep,list_dir"
 assert_contains "--skip-permissions → --always-approve" "$argv" "--always-approve"
 assert_not_contains "no Claude --allowedTools leaks"    "$argv" "--allowedTools"
 # Claude-only model alias is coerced, never forwarded raw.
-argv_opus="$(grok_exec_argv 'sprintmd_run -p "x" --model opus')"
+argv_opus="$(grok_exec_argv 'sprintbias_run -p "x" --model opus')"
 assert_contains "opus coerced to grok-4.5" "$argv_opus" "--model grok-4.5"
 assert_not_contains "raw opus never forwarded" "$argv_opus" "--model opus"
 # Unknown tool fails open: allowlist omitted rather than sent wrong.
-argv_bad="$(grok_exec_argv 'sprintmd_run -p "x" --tools "Read,BogusTool"')"
+argv_bad="$(grok_exec_argv 'sprintbias_run -p "x" --tools "Read,BogusTool"')"
 assert_not_contains "unknown tool → --tools omitted (fail-open)" "$argv_bad" "--tools"
 
 # ── 4. Emit: multi-task orchestration wording (work) ─────────────────
 echo "4. Emit — work multi-task orchestration wording + spawn language"
-work_emit="$(cd "$ROOT" && SPRINTMD_MODE=emit ./sprint.sh -g work 2>&1)"
+work_emit="$(cd "$ROOT" && SPRINTBIAS_MODE=emit ./sprint.sh -g work 2>&1)"
 assert_contains "work emit says spawn_subagent"        "$work_emit" "spawn_subagent"
 assert_contains "work emit names general-purpose type" "$work_emit" "general-purpose"
 assert_contains "work emit carries no-nest guard"      "$work_emit" "nesting depth is one"
@@ -133,7 +133,7 @@ assert_not_contains "work emit never says Claude Task tool" "$work_emit" "Task t
 
 # ── 5. Multi-member gate path ────────────────────────────────────────
 echo "5. Emit — gate multi-member parallel review wording"
-gate_emit="$(cd "$ROOT" && SPRINTMD_MODE=emit ./sprint.sh -g gate --force 2>&1)"
+gate_emit="$(cd "$ROOT" && SPRINTBIAS_MODE=emit ./sprint.sh -g gate --force 2>&1)"
 if printf '%s' "$gate_emit" | grep -qiF "already reviewed"; then
   skip "gate found nothing to review; --force expected to orchestrate (state-dependent)"
 else
@@ -144,10 +144,10 @@ fi
 
 # ── 6. model show / list ─────────────────────────────────────────────
 echo "6. model show / list (task 294 landed) — else config pin"
-if [ -f "$SPRINTMD/scripts/model.sh" ]; then
+if [ -f "$SPRINTBIAS/scripts/model.sh" ]; then
   assert_contains "model show: every role resolves to grok-4.5 tier default" "$show" "grok-4.5"
   if command -v grok >/dev/null 2>&1; then
-    mlist="$(cd "$ROOT" && SPRINTMD_MODE= timeout 30 ./sprint.sh -g model list 2>&1 || true)"
+    mlist="$(cd "$ROOT" && SPRINTBIAS_MODE= timeout 30 ./sprint.sh -g model list 2>&1 || true)"
     assert_contains "model list names grok-build provider" "$mlist" "grok-build"
     if printf '%s' "$mlist" | grep -qF "grok-4.5"; then
       pass "model list surfaces grok-4.5 (live \`grok models\` or known aliases)"

@@ -104,7 +104,7 @@ This repository **runs on SprintBias**. Browse [`docs/tasks/`](docs/tasks/) for 
 
 ## For AI agents
 
-Read **[DOCUMENTATION.md](DOCUMENTATION.md)**. Create work with `./sprint.sh`, not by hand. Folder = status. Don’t edit `docs/sprintmd/`.
+Read **[DOCUMENTATION.md](DOCUMENTATION.md)**. Create work with `./sprint.sh`, not by hand. Folder = status. Don’t edit `docs/sprintbias/`.
 
 ---
 

@@ -6,7 +6,7 @@ desktop.ini
 
 # Temporary workspaces — scratch notes and AI logs, never committed.
 # The bare `tmp/` matches any dir named tmp at any depth (root tmp/,
-# docs/tmp/, docs/sprintmd/tmp/, …), so it already covers the scratch dirs.
+# docs/tmp/, docs/sprintbias/tmp/, …), so it already covers the scratch dirs.
 # (The distributed src/.gitignore.template keeps a docs/tmp/* + !.gitkeep
 # scheme instead, because it has no blanket tmp/ to shadow the negation.)
 tmp/
@@ -38,7 +38,7 @@ tmp/
 *.pid.lock
 nohup.out
 # SprintBias ID-allocation mutex (auto-created and removed; never commit a stale one)
-docs/sprintmd/.sprint-alloc.lock/
+docs/sprintbias/.sprint-alloc.lock/
 
 # Archive Files (if users zip up old work)
 *.zip

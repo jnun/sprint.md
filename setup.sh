@@ -46,7 +46,7 @@ fi
 
 # Get the SprintBias source directory (where this script lives)
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SPRINTMD_SOURCE_DIR="$SCRIPT_DIR"
+SPRINTBIAS_SOURCE_DIR="$SCRIPT_DIR"
 
 # ============================================================================
 # MESSAGE SYSTEM - Consistent, color-coded output
@@ -151,8 +151,8 @@ safe_mkdir() {
 }
 
 # Read current version from source
-if [ -f "$SPRINTMD_SOURCE_DIR/src/VERSION" ]; then
-    CURRENT_VERSION=$(cat "$SPRINTMD_SOURCE_DIR/src/VERSION")
+if [ -f "$SPRINTBIAS_SOURCE_DIR/src/VERSION" ]; then
+    CURRENT_VERSION=$(cat "$SPRINTBIAS_SOURCE_DIR/src/VERSION")
 else
     echo "Warning: VERSION file not found, defaulting to 1.0.0"
     CURRENT_VERSION="1.0.0"
@@ -203,7 +203,7 @@ echo ""
 cd "$TARGET_PATH" || exit 1
 
 # Self-targeting detection
-if [ "$TARGET_PATH" = "$SPRINTMD_SOURCE_DIR" ]; then
+if [ "$TARGET_PATH" = "$SPRINTBIAS_SOURCE_DIR" ]; then
     echo "Note: Target is the SprintBias source directory."
     echo "   This will sync src/ to docs/ for development/testing."
     echo ""
@@ -217,10 +217,10 @@ INSTALLED_VERSION=""
 UPDATE_MODE=false
 
 # Check if SprintBias is already installed. Product version lives only in
-# docs/sprintmd/DOC_STATE.md (written from src/VERSION). There is no separate
+# docs/sprintbias/DOC_STATE.md (written from src/VERSION). There is no separate
 # migration-epoch ladder — layout cleanups below are path-presence only.
-if [ -f "docs/sprintmd/DOC_STATE.md" ]; then
-    INSTALLED_VERSION=$(grep '^\*\*sprint_VERSION\*\*:' docs/sprintmd/DOC_STATE.md 2>/dev/null | sed 's/.*:[[:space:]]*//' | head -1)
+if [ -f "docs/sprintbias/DOC_STATE.md" ]; then
+    INSTALLED_VERSION=$(grep '^\*\*sprint_VERSION\*\*:' docs/sprintbias/DOC_STATE.md 2>/dev/null | sed 's/.*:[[:space:]]*//' | head -1)
     [ -n "$INSTALLED_VERSION" ] || INSTALLED_VERSION="unknown"
 
     UPDATE_MODE=true
@@ -308,7 +308,7 @@ fi
 # --- Two doors: the whole first impression --------------------------------
 # [Enter] Claude Code, [g] Grok Build. Both doors run the identical silent
 # scaffold batch below — the only difference is the agent CLI/provider written
-# into docs/sprintmd/config. No other rows, no other questions here.
+# into docs/sprintbias/config. No other rows, no other questions here.
 echo "Which coding agent will drive SprintBias?"
 echo "  [Enter]  Claude Code"
 echo "  [g]      Grok Build"
@@ -351,8 +351,8 @@ safe_mkdir "docs/bugs"
 safe_mkdir "docs/designs"
 safe_mkdir "docs/examples"
 safe_mkdir "docs/data"
-safe_mkdir "docs/sprintmd/scripts"
-safe_mkdir "docs/sprintmd/ai"
+safe_mkdir "docs/sprintbias/scripts"
+safe_mkdir "docs/sprintbias/ai"
 safe_mkdir "docs/features"
 safe_mkdir "docs/guides"
 safe_mkdir "docs/tests"
@@ -374,15 +374,15 @@ msg_step "Added .gitkeep files to empty directories"
 
 msg_header "Managing state tracking..."
 
-safe_mkdir "docs/sprintmd"
+safe_mkdir "docs/sprintbias"
 
-if [ ! -f "docs/sprintmd/DOC_STATE.md" ]; then
+if [ ! -f "docs/sprintbias/DOC_STATE.md" ]; then
     # Create new DOC_STATE.md
-    if cat > docs/sprintmd/DOC_STATE.md << STATE_EOF
+    if cat > docs/sprintbias/DOC_STATE.md << STATE_EOF
 # SprintBias Documentation State
 
 Part of the SprintBias documentation system, not source code for the host project.
-Managed by scripts in \`docs/sprintmd/scripts/\` and by \`setup.sh\`. Safe to edit by hand
+Managed by scripts in \`docs/sprintbias/scripts/\` and by \`setup.sh\`. Safe to edit by hand
 if you need to fix a counter — the field lines below are what scripts parse.
 
 Fields:
@@ -401,18 +401,18 @@ Fields:
 **sprint_PLAN_ID**: 0
 STATE_EOF
     then
-        msg_step "Created docs/sprintmd/DOC_STATE.md"
+        msg_step "Created docs/sprintbias/DOC_STATE.md"
     else
-        msg_error "Failed to create docs/sprintmd/DOC_STATE.md"
+        msg_error "Failed to create docs/sprintbias/DOC_STATE.md"
     fi
 else
     # Reconcile DOC_STATE.md - preserve user data, update product version
-    EXISTING_TASK_ID=$(grep '^\*\*sprint_TASK_ID\*\*:' docs/sprintmd/DOC_STATE.md 2>/dev/null | sed 's/.*:[[:space:]]*//' | grep -o '^[0-9]*' | head -1)
-    EXISTING_BUG_ID=$(grep '^\*\*sprint_BUG_ID\*\*:' docs/sprintmd/DOC_STATE.md 2>/dev/null | sed 's/.*:[[:space:]]*//' | grep -o '^[0-9]*' | head -1)
-    EXISTING_PLAN_ID=$(grep '^\*\*sprint_PLAN_ID\*\*:' docs/sprintmd/DOC_STATE.md 2>/dev/null | sed 's/.*:[[:space:]]*//' | grep -o '^[0-9]*' | head -1)
+    EXISTING_TASK_ID=$(grep '^\*\*sprint_TASK_ID\*\*:' docs/sprintbias/DOC_STATE.md 2>/dev/null | sed 's/.*:[[:space:]]*//' | grep -o '^[0-9]*' | head -1)
+    EXISTING_BUG_ID=$(grep '^\*\*sprint_BUG_ID\*\*:' docs/sprintbias/DOC_STATE.md 2>/dev/null | sed 's/.*:[[:space:]]*//' | grep -o '^[0-9]*' | head -1)
+    EXISTING_PLAN_ID=$(grep '^\*\*sprint_PLAN_ID\*\*:' docs/sprintbias/DOC_STATE.md 2>/dev/null | sed 's/.*:[[:space:]]*//' | grep -o '^[0-9]*' | head -1)
     # One-shot read of pre-rebrand counter if PLAN_ID never written.
     if [ -z "$EXISTING_PLAN_ID" ]; then
-        EXISTING_PLAN_ID=$(grep '^\*\*sprint_EPIC_ID\*\*:' docs/sprintmd/DOC_STATE.md 2>/dev/null | sed 's/.*:[[:space:]]*//' | grep -o '^[0-9]*' | head -1)
+        EXISTING_PLAN_ID=$(grep '^\*\*sprint_EPIC_ID\*\*:' docs/sprintbias/DOC_STATE.md 2>/dev/null | sed 's/.*:[[:space:]]*//' | grep -o '^[0-9]*' | head -1)
     fi
 
     # Validate and set defaults
@@ -420,11 +420,11 @@ else
     [[ "$EXISTING_BUG_ID" =~ ^[0-9]+$ ]] || EXISTING_BUG_ID=0
     [[ "$EXISTING_PLAN_ID" =~ ^[0-9]+$ ]] || EXISTING_PLAN_ID=0
 
-    if cat > docs/sprintmd/DOC_STATE.md << STATE_EOF
+    if cat > docs/sprintbias/DOC_STATE.md << STATE_EOF
 # SprintBias Documentation State
 
 Part of the SprintBias documentation system, not source code for the host project.
-Managed by scripts in \`docs/sprintmd/scripts/\` and by \`setup.sh\`. Safe to edit by hand
+Managed by scripts in \`docs/sprintbias/scripts/\` and by \`setup.sh\`. Safe to edit by hand
 if you need to fix a counter — the field lines below are what scripts parse.
 
 Fields:
@@ -443,9 +443,9 @@ Fields:
 **sprint_PLAN_ID**: $EXISTING_PLAN_ID
 STATE_EOF
     then
-        msg_step "Updated docs/sprintmd/DOC_STATE.md (preserved IDs: task=$EXISTING_TASK_ID, bug=$EXISTING_BUG_ID, plan=$EXISTING_PLAN_ID)"
+        msg_step "Updated docs/sprintbias/DOC_STATE.md (preserved IDs: task=$EXISTING_TASK_ID, bug=$EXISTING_BUG_ID, plan=$EXISTING_PLAN_ID)"
     else
-        msg_error "Failed to update docs/sprintmd/DOC_STATE.md"
+        msg_error "Failed to update docs/sprintbias/DOC_STATE.md"
     fi
 fi
 
@@ -704,7 +704,7 @@ PREPEND_FILES=(
 )
 
 USER_TERRITORY=(
-    "docs/sprintmd/config"
+    "docs/sprintbias/config"
 )
 
 # Helper: check if a value is in an array
@@ -807,7 +807,7 @@ _copy_stamped() {
     local src="$1" target="$2" tmp
     [ -f "$src" ] || { msg_error "Source missing: $src"; return 1; }
     tmp="$(mktemp "${target}.XXXXXX")" || return 1
-    if sed -E "s|(SprintBias|sprint\\.md) v[0-9][0-9A-Za-z.]*|SprintBias v${CURRENT_VERSION}|g" "$src" > "$tmp" 2>/dev/null \
+    if sed -E "s#(SprintBias|sprint\\.md) v[0-9][0-9A-Za-z.]*#SprintBias v${CURRENT_VERSION}#g" "$src" > "$tmp" 2>/dev/null \
        && mv -f "$tmp" "$target"; then
         return 0
     fi
@@ -997,7 +997,7 @@ fi
 # Uses a FIFO on fd 3 for find output so stdin stays available for interactive
 # prompts inside setup_ai_file. (A plain pipe would steal stdin.)
 PENDING_PREPEND=()
-SRC_DIR="$SPRINTMD_SOURCE_DIR/src"
+SRC_DIR="$SPRINTBIAS_SOURCE_DIR/src"
 _find_fifo="$(mktemp -d)/find_fifo"
 mkfifo "$_find_fifo"
 find "$SRC_DIR" -type f -print0 > "$_find_fifo" &
@@ -1025,11 +1025,11 @@ while IFS= read -r -d '' src_file <&3; do
     # User territory — preserve existing file on update, merge new config keys
     if _in_list "$rel_path" "${USER_TERRITORY[@]}"; then
         if [ -f "$rel_path" ]; then
-            if [ "$rel_path" = "docs/sprintmd/config" ]; then
-                if merge_config "$SPRINTMD_SOURCE_DIR/src/docs/sprintmd/config" "docs/sprintmd/config"; then
-                    msg_success "Updated docs/sprintmd/config (added new configuration options)"
+            if [ "$rel_path" = "docs/sprintbias/config" ]; then
+                if merge_config "$SPRINTBIAS_SOURCE_DIR/src/docs/sprintbias/config" "docs/sprintbias/config"; then
+                    msg_success "Updated docs/sprintbias/config (added new configuration options)"
                 else
-                    msg_step "Preserved docs/sprintmd/config (up to date)"
+                    msg_step "Preserved docs/sprintbias/config (up to date)"
                 fi
             else
                 msg_step "Preserved $rel_path (user-territory)"
@@ -1075,7 +1075,7 @@ done
 
 # Recommended .gitignore entries (template or inline fallback). Loaded here so
 # the scaffold batch below can merge them.
-GITIGNORE_TEMPLATE="$SPRINTMD_SOURCE_DIR/src/.gitignore.template"
+GITIGNORE_TEMPLATE="$SPRINTBIAS_SOURCE_DIR/src/.gitignore.template"
 if [ -f "$GITIGNORE_TEMPLATE" ]; then
     GITIGNORE_CONTENT=$(cat "$GITIGNORE_TEMPLATE")
 else
@@ -1147,30 +1147,30 @@ scaffold_pointer "AGENTS.md" "AGENTS.md"
 # check below is gated only on "does this path exist?" — not on product version.
 # User work (task bodies, plan files) is moved; framework-owned files are removed.
 
-# ── STATE.md → docs/sprintmd/DOC_STATE.md ────────────────────────────
-if [ -f "docs/STATE.md" ] && [ ! -f "docs/sprintmd/DOC_STATE.md" ]; then
-    safe_mkdir "docs/sprintmd"
-    if mv docs/STATE.md docs/sprintmd/DOC_STATE.md 2>/dev/null; then
-        msg_step "Moved docs/STATE.md → docs/sprintmd/DOC_STATE.md"
+# ── STATE.md → docs/sprintbias/DOC_STATE.md ────────────────────────────
+if [ -f "docs/STATE.md" ] && [ ! -f "docs/sprintbias/DOC_STATE.md" ]; then
+    safe_mkdir "docs/sprintbias"
+    if mv docs/STATE.md docs/sprintbias/DOC_STATE.md 2>/dev/null; then
+        msg_step "Moved docs/STATE.md → docs/sprintbias/DOC_STATE.md"
     fi
 fi
 
-# ── config.sh → flat docs/sprintmd/config (current keys only) ────────
+# ── config.sh → flat docs/sprintbias/config (current keys only) ────────
 # Hard cut: no dual-read of retired MODEL_TALK / MODEL_TASKS / etc. The
 # shipped template is the source of truth; merge_config fills missing keys.
-if [ -f "docs/sprintmd/config.sh" ] && [ ! -f "docs/sprintmd/config" ]; then
+if [ -f "docs/sprintbias/config.sh" ] && [ ! -f "docs/sprintbias/config" ]; then
     echo ""
-    echo "Replacing docs/sprintmd/config.sh with flat config (current keys)..."
-    if safe_copy "$SPRINTMD_SOURCE_DIR/src/docs/sprintmd/config" "docs/sprintmd/config" "docs/sprintmd/config"; then
-        mv "docs/sprintmd/config.sh" "docs/sprintmd/config.sh.bak" 2>/dev/null || true
+    echo "Replacing docs/sprintbias/config.sh with flat config (current keys)..."
+    if safe_copy "$SPRINTBIAS_SOURCE_DIR/src/docs/sprintbias/config" "docs/sprintbias/config" "docs/sprintbias/config"; then
+        mv "docs/sprintbias/config.sh" "docs/sprintbias/config.sh.bak" 2>/dev/null || true
         msg_success "Installed flat config (old config.sh backed up as config.sh.bak)"
-        msg_step "Re-set CLI/models in docs/sprintmd/config if you had custom pins"
+        msg_step "Re-set CLI/models in docs/sprintbias/config if you had custom pins"
     fi
 fi
 # Drop a stale config.sh when the flat file already exists.
-if [ -f "docs/sprintmd/config.sh" ] && [ -f "docs/sprintmd/config" ]; then
-    mv "docs/sprintmd/config.sh" "docs/sprintmd/config.sh.bak" 2>/dev/null \
-        && msg_step "Backed up obsolete docs/sprintmd/config.sh → config.sh.bak" || true
+if [ -f "docs/sprintbias/config.sh" ] && [ -f "docs/sprintbias/config" ]; then
+    mv "docs/sprintbias/config.sh" "docs/sprintbias/config.sh.bak" 2>/dev/null \
+        && msg_step "Backed up obsolete docs/sprintbias/config.sh → config.sh.bak" || true
 fi
 
 # ── docs/tasks/live/ → done/ ─────────────────────────────────────────
@@ -1263,42 +1263,42 @@ fi
 # ── Retired framework files (safe to delete) ─────────────────────────
 RETIRED_FRAMEWORK_FILES=(
     # talk → chat
-    "docs/sprintmd/scripts/talk.sh"
-    "docs/sprintmd/scripts/talk-bugs.sh"
-    "docs/sprintmd/scripts/talk-folder.sh"
-    "docs/sprintmd/scripts/talk-sprint.sh"
-    "docs/sprintmd/help/talk.md"
-    "docs/sprintmd/guides/use_talk.md"
+    "docs/sprintbias/scripts/talk.sh"
+    "docs/sprintbias/scripts/talk-bugs.sh"
+    "docs/sprintbias/scripts/talk-folder.sh"
+    "docs/sprintbias/scripts/talk-sprint.sh"
+    "docs/sprintbias/help/talk.md"
+    "docs/sprintbias/guides/use_talk.md"
     # define → gate
-    "docs/sprintmd/scripts/define.sh"
-    "docs/sprintmd/help/define.md"
+    "docs/sprintbias/scripts/define.sh"
+    "docs/sprintbias/help/define.md"
     # tasks (execute) → work
-    "docs/sprintmd/scripts/tasks.sh"
-    "docs/sprintmd/help/tasks.md"
+    "docs/sprintbias/scripts/tasks.sh"
+    "docs/sprintbias/help/tasks.md"
     # newepic → newplan
-    "docs/sprintmd/scripts/create-epic.sh"
-    "docs/sprintmd/help/newepic.md"
+    "docs/sprintbias/scripts/create-epic.sh"
+    "docs/sprintbias/help/newepic.md"
     "docs/epics/.TEMPLATE-epic.md"
     # look-family renames
-    "docs/sprintmd/scripts/ai-context.sh"
-    "docs/sprintmd/help/ai-context.md"
-    "docs/sprintmd/help/checkfeatures.md"
+    "docs/sprintbias/scripts/ai-context.sh"
+    "docs/sprintbias/help/ai-context.md"
+    "docs/sprintbias/help/checkfeatures.md"
     # keep-family / retired profession commands
-    "docs/sprintmd/scripts/audit-deps.sh"
-    "docs/sprintmd/help/audit-deps.md"
-    "docs/sprintmd/scripts/audit-code.sh"
-    "docs/sprintmd/scripts/audit-excellence.sh"
-    "docs/sprintmd/scripts/audit-tasks.sh"
-    "docs/sprintmd/help/audit.md"
-    "docs/sprintmd/help/excellence.md"
-    "docs/sprintmd/help/review-code.md"
-    "docs/sprintmd/scripts/review-sprint.sh"
-    "docs/sprintmd/help/review-sprint.md"
+    "docs/sprintbias/scripts/audit-deps.sh"
+    "docs/sprintbias/help/audit-deps.md"
+    "docs/sprintbias/scripts/audit-code.sh"
+    "docs/sprintbias/scripts/audit-excellence.sh"
+    "docs/sprintbias/scripts/audit-tasks.sh"
+    "docs/sprintbias/help/audit.md"
+    "docs/sprintbias/help/excellence.md"
+    "docs/sprintbias/help/review-code.md"
+    "docs/sprintbias/scripts/review-sprint.sh"
+    "docs/sprintbias/help/review-sprint.md"
     # consolidated / removed guidance
-    "docs/sprintmd/ai/task-writing-rules.md"
-    "docs/sprintmd/ai/sprint-review.md"
-    "docs/sprintmd/ai/.gitkeep"
-    "docs/sprintmd/theory/feynman-method.md"
+    "docs/sprintbias/ai/task-writing-rules.md"
+    "docs/sprintbias/ai/sprint-review.md"
+    "docs/sprintbias/ai/.gitkeep"
+    "docs/sprintbias/theory/feynman-method.md"
     # obsolete INDEX.md orientation pages
     "docs/INDEX.md"
     "docs/tasks/INDEX.md"
@@ -1308,7 +1308,7 @@ RETIRED_FRAMEWORK_FILES=(
     "docs/examples/INDEX.md"
     "docs/data/INDEX.md"
     "docs/guides/INDEX.md"
-    "docs/sprintmd/scripts/INDEX.md"
+    "docs/sprintbias/scripts/INDEX.md"
 )
 
 _retired_removed=0
@@ -1325,25 +1325,25 @@ done
 if [ "$_retired_removed" -gt 0 ]; then
     msg_success "Pruned $_retired_removed retired framework file(s)"
 fi
-rmdir "docs/sprintmd/theory" 2>/dev/null || true
+rmdir "docs/sprintbias/theory" 2>/dev/null || true
 
 # ── Strip dead config keys (hard cut — no value carry to new names) ──
 # Runtime only reads the current key set. Old pins (MODEL_TALK, BUDGET_TASKS,
 # MODEL_REVIEW_SPRINT, …) are removed so they cannot confuse editors; re-set
-# under the current names in docs/sprintmd/config if you still need them.
-if [ -f "docs/sprintmd/config" ]; then
+# under the current names in docs/sprintbias/config if you still need them.
+if [ -f "docs/sprintbias/config" ]; then
     _dead_keys=(
         MODEL_TALK MODEL_DEFINE MODEL_TASKS BUDGET_TASKS
         MODEL_REVIEW_SPRINT
         MODEL_PLAN
     )
-    _cfg_tmp="$(mktemp "docs/sprintmd/config.XXXXXX")" || _cfg_tmp=""
+    _cfg_tmp="$(mktemp "docs/sprintbias/config.XXXXXX")" || _cfg_tmp=""
     if [ -n "$_cfg_tmp" ]; then
         _dead_re='^(MODEL_TALK|MODEL_DEFINE|MODEL_TASKS|BUDGET_TASKS|MODEL_REVIEW_SPRINT|MODEL_PLAN)='
-        if grep -qE "$_dead_re" docs/sprintmd/config 2>/dev/null; then
-            if grep -vE "$_dead_re" docs/sprintmd/config > "$_cfg_tmp" 2>/dev/null \
-               && mv -f "$_cfg_tmp" docs/sprintmd/config; then
-                msg_step "Removed retired model/budget keys from docs/sprintmd/config"
+        if grep -qE "$_dead_re" docs/sprintbias/config 2>/dev/null; then
+            if grep -vE "$_dead_re" docs/sprintbias/config > "$_cfg_tmp" 2>/dev/null \
+               && mv -f "$_cfg_tmp" docs/sprintbias/config; then
+                msg_step "Removed retired model/budget keys from docs/sprintbias/config"
             else
                 rm -f "$_cfg_tmp" 2>/dev/null
             fi
@@ -1361,10 +1361,10 @@ fi
 
 msg_header "AI CLI configuration..."
 
-CONFIG_FILE="docs/sprintmd/config"
+CONFIG_FILE="docs/sprintbias/config"
 
-# Source lib.sh if available (provides sprintmd_cfg / sprintmd_cfg_set)
-_LIB_FILE="docs/sprintmd/lib.sh"
+# Source lib.sh if available (provides sprintbias_cfg / sprintbias_cfg_set)
+_LIB_FILE="docs/sprintbias/lib.sh"
 if [ -f "$_LIB_FILE" ]; then
     # shellcheck source=/dev/null
     source "$_LIB_FILE"
@@ -1372,9 +1372,9 @@ fi
 
 # Write CLI and provider tier into the config file
 if [ -f "$CONFIG_FILE" ]; then
-    if declare -F sprintmd_cfg_set >/dev/null 2>&1; then
-        sprintmd_cfg_set CLI "$SELECTED_CLI"
-        sprintmd_cfg_set PROVIDER "$SELECTED_PROVIDER"
+    if declare -F sprintbias_cfg_set >/dev/null 2>&1; then
+        sprintbias_cfg_set CLI "$SELECTED_CLI"
+        sprintbias_cfg_set PROVIDER "$SELECTED_PROVIDER"
     else
         for _kv in "CLI=${SELECTED_CLI}" "PROVIDER=${SELECTED_PROVIDER}"; do
             _k="${_kv%%=*}"
@@ -1387,14 +1387,14 @@ if [ -f "$CONFIG_FILE" ]; then
     fi
     # Drop model pins that belong to the other provider so a claude→grok
     # (or reverse) switch never leaves MODEL_GATE=opus against CLI=grok.
-    # Runtime also coerces foreign ids (sprintmd_coerce_model); this cleans
+    # Runtime also coerces foreign ids (sprintbias_coerce_model); this cleans
     # the file so config stays honest.
     _model_keys="MODEL_DEFAULT MODEL_FEATURE MODEL_IDEA MODEL_CHAT MODEL_GATE MODEL_SPLIT MODEL_SPRINT MODEL_WORK MODEL_PROFILE MODEL_CODE_AUDIT MODEL_EXCELLENCE MODEL_POLISH MODEL_AUDIT MODEL_DEPS MODEL_TRIAGE MODEL_PLAN_THINK MODEL_DRIFT"
     _cleared=0
     for _mk in $_model_keys; do
         _mv=""
-        if declare -F sprintmd_cfg >/dev/null 2>&1; then
-            _mv="$(sprintmd_cfg "$_mk")"
+        if declare -F sprintbias_cfg >/dev/null 2>&1; then
+            _mv="$(sprintbias_cfg "$_mk")"
         else
             _mv="$(grep -m1 "^${_mk}=" "$CONFIG_FILE" 2>/dev/null | sed "s/^${_mk}=//" || true)"
         fi
@@ -1413,8 +1413,8 @@ if [ -f "$CONFIG_FILE" ]; then
                 ;;
         esac
         if [ "$_foreign" -eq 1 ]; then
-            if declare -F sprintmd_cfg_set >/dev/null 2>&1; then
-                sprintmd_cfg_set "$_mk" ""
+            if declare -F sprintbias_cfg_set >/dev/null 2>&1; then
+                sprintbias_cfg_set "$_mk" ""
             else
                 sed -i '' "s|^${_mk}=.*|${_mk}=|" "$CONFIG_FILE"
             fi
@@ -1487,7 +1487,7 @@ msg_header "Running validation checks..."
 VALIDATION_PASSED=true
 
 # Check required directories
-for dir in docs/tasks/backlog docs/tasks/next docs/tasks/doing docs/tasks/blocked docs/tasks/review docs/tasks/done docs/bugs docs/plans docs/sprintmd/scripts docs/features docs/guides; do
+for dir in docs/tasks/backlog docs/tasks/next docs/tasks/doing docs/tasks/blocked docs/tasks/review docs/tasks/done docs/bugs docs/plans docs/sprintbias/scripts docs/features docs/guides; do
     if [ ! -d "$dir" ]; then
         VALIDATION_PASSED=false
         msg_error "Missing directory: $dir"
@@ -1495,7 +1495,7 @@ for dir in docs/tasks/backlog docs/tasks/next docs/tasks/doing docs/tasks/blocke
 done
 
 # Check required files
-for file in docs/sprintmd/DOC_STATE.md DOCUMENTATION.md; do
+for file in docs/sprintbias/DOC_STATE.md DOCUMENTATION.md; do
     if [ ! -f "$file" ]; then
         VALIDATION_PASSED=false
         msg_error "Missing file: $file"
@@ -1503,7 +1503,7 @@ for file in docs/sprintmd/DOC_STATE.md DOCUMENTATION.md; do
 done
 
 # Check script executability
-for script in docs/sprintmd/scripts/*.sh; do
+for script in docs/sprintbias/scripts/*.sh; do
     if [ -f "$script" ] && [ ! -x "$script" ]; then
         chmod +x "$script" 2>/dev/null || msg_warning "Could not make $script executable"
     fi
@@ -1523,7 +1523,7 @@ fi
 # fresh installs only, and writes only to the user's own shell rc — nothing
 # global, nothing outside the project unless the user says yes. Full details
 # (including a subdirectory-aware variant) live in
-# docs/sprintmd/guides/sprint_command.md.
+# docs/sprintbias/guides/sprint_command.md.
 
 if ! $UPDATE_MODE; then
     case "$(basename "${SHELL:-}")" in
@@ -1535,21 +1535,21 @@ if ! $UPDATE_MODE; then
     SPRINT_ALIAS_LINE="alias sprint='./sprint.sh'"
 
     if [ -z "$SPRINT_SHELL_RC" ]; then
-        msg_step "To type 'sprint' instead of './sprint.sh', see docs/sprintmd/guides/sprint_command.md"
+        msg_step "To type 'sprint' instead of './sprint.sh', see docs/sprintbias/guides/sprint_command.md"
     elif [ -f "$SPRINT_SHELL_RC" ] && grep -qF "$SPRINT_ALIAS_LINE" "$SPRINT_SHELL_RC" 2>/dev/null; then
         msg_step "'sprint' shortcut already present in $SPRINT_SHELL_RC"
     else
         echo ""
         prompt_yes_no SPRINT_ALIAS_CHOICE "Add a 'sprint' shortcut so you can type 'sprint <cmd>' instead of './sprint.sh <cmd>'? (adds an alias to $SPRINT_SHELL_RC)"
         if [ "$SPRINT_ALIAS_CHOICE" = "yes" ]; then
-            if printf '\n# SprintBias shortcut — runs ./sprint.sh from a project root (see docs/sprintmd/guides/sprint_command.md)\n%s\n' "$SPRINT_ALIAS_LINE" >> "$SPRINT_SHELL_RC" 2>/dev/null; then
+            if printf '\n# SprintBias shortcut — runs ./sprint.sh from a project root (see docs/sprintbias/guides/sprint_command.md)\n%s\n' "$SPRINT_ALIAS_LINE" >> "$SPRINT_SHELL_RC" 2>/dev/null; then
                 msg_success "Added 'sprint' shortcut to $SPRINT_SHELL_RC"
                 msg_step "Run 'source $SPRINT_SHELL_RC' (or open a new terminal), then use 'sprint help'"
             else
-                msg_warning "Could not write to $SPRINT_SHELL_RC — see docs/sprintmd/guides/sprint_command.md to add it manually"
+                msg_warning "Could not write to $SPRINT_SHELL_RC — see docs/sprintbias/guides/sprint_command.md to add it manually"
             fi
         else
-            msg_step "Skipped 'sprint' shortcut — see docs/sprintmd/guides/sprint_command.md to add it later"
+            msg_step "Skipped 'sprint' shortcut — see docs/sprintbias/guides/sprint_command.md to add it later"
         fi
     fi
 fi
@@ -1605,9 +1605,9 @@ else
     echo "Files installed: $FILES_COPIED"
     echo ""
     echo "Directory structure created in docs/"
-    echo "Scripts available at docs/sprintmd/scripts/"
+    echo "Scripts available at docs/sprintbias/scripts/"
     echo "Documentation at DOCUMENTATION.md"
-    echo "AI CLI/model config at docs/sprintmd/config (edit to change CLI or models)"
+    echo "AI CLI/model config at docs/sprintbias/config (edit to change CLI or models)"
     echo ""
     echo "Get started:"
     echo "  ./sprint.sh profile                          # Prepare this system for your stack and design choices"
@@ -1617,7 +1617,7 @@ else
     echo ""
     echo "  ./sprint.sh help                             # Show all commands"
     echo ""
-    echo "  Tip: type 'sprint' instead of './sprint.sh' — see docs/sprintmd/guides/sprint_command.md"
+    echo "  Tip: type 'sprint' instead of './sprint.sh' — see docs/sprintbias/guides/sprint_command.md"
 fi
 
 echo ""

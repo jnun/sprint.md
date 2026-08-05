@@ -3,7 +3,8 @@
 **Feature**: none
 **Created**: 2026-07-31
 **Docs**: none
-**Depends on**: 313 (hard), 315 (soft — house atoms)
+**Plan**: 13
+**Depends on**: 313, 315
 **Blocks**: none
 **Parent**: none
 **Refined**: 0

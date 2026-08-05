@@ -2,15 +2,15 @@
 # Test: no stale legacy references after the SprintBias rename.
 #
 # Guards the class of bug that slipped through the docs/5day -> docs/sprint ->
-# docs/sprintmd rename: a reference in a form the search didn't anticipate
-# (e.g. a relative "../sprint/scripts" that a "docs/sprint"-anchored sweep
-# skipped). Any future rename that misses a spot fails here instead of at
-# runtime in a user's install.
+# docs/sprintmd -> docs/sprintbias renames: a reference in a form the search
+# didn't anticipate (e.g. a relative "../sprint/scripts" that a "docs/sprint"-
+# anchored sweep skipped). Any future rename that misses a spot fails here
+# instead of at runtime in a user's install.
 #
 # Scope: functional + distributable surfaces only. The file list comes from git
 # (tracked + untracked-but-not-ignored), which excludes .git, the SprintBias
 # submodule's internals, and gitignored paths (docs/tmp) for free. We further
-# drop the src/ mirror (ship.sh regenerates it from docs/sprintmd and verifies
+# drop the src/ mirror (ship.sh regenerates it from docs/sprintbias and verifies
 # it) and dev-internal work-item narratives (tasks/ideas/features/bugs/plans)
 # that legitimately discuss project history.
 #
@@ -78,10 +78,17 @@ check 'docs/5day' "no docs/5day path references"
 # Legacy launcher name.
 check '5day\.sh' "no 5day.sh launcher references"
 
-# Interim framework dir docs/sprint/ that is NOT the final docs/sprintmd/.
-# 'docs/sprintmd' has 'm' after 'sprint'; 'docs/sprint/' has '/'. The [^m]
-# excludes sprintmd while catching docs/sprint/, docs/sprint at EOL, etc.
-check 'docs/sprint([^m]|$)' "no non-sprintmd docs/sprint path references"
+# Retired framework dirs docs/sprint/ (interim) and docs/sprintmd/ (pre-rebrand),
+# both renamed to the current docs/sprintbias/. 'docs/sprintbias' has 'b' after
+# 'sprint', so [^b] catches docs/sprint/, docs/sprintmd, docs/sprint at EOL, etc.
+# while sparing the live docs/sprintbias path.
+check 'docs/sprint([^b]|$)' "no retired docs/sprint or docs/sprintmd path references"
+
+# Pre-rebrand framework dir + lowercase symbol namespace (sprintmd -> sprintbias).
+# Live surface must say sprintbias for paths and sprintbias_ for functions. The
+# check is LOWERCASE on purpose: the two env vars SPRINTMD_CLI / SPRINTMD_PROVIDER
+# survive as documented back-compat fallbacks (lib.sh), so they must NOT trip it.
+check 'sprintmd' "no retired sprintmd path or symbol references"
 
 # Relative / bare framework-subdir refs like ../sprint/scripts that a
 # 'docs/sprint'-anchored replace would miss. [^m] before 'sprint' skips sprintmd.

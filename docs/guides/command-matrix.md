@@ -7,6 +7,17 @@ not the matrix. This file is the **target-state spec**. When live behavior and
 this document disagree, this document wins: file a backlog task, don't edit
 the target back down.
 
+**Maintain with the code.** Every time you **create or change a command**
+(dispatch, registry, help, script, or family placement), update this matrix in
+the same change. New command → new catalog row (and family if needed). Behavior
+or flag change that affects what the command *does* → update the row. Retirement
+→ move the old name into **Retired names**. Skip only pure internals that never
+surface as a user-facing command.
+
+**This guide lives in `docs/guides/` (repo-only, not mirrored into `src/`).**
+Provider edges (tools, models, emit) live in
+[provider-reality.md](./provider-reality.md).
+
 ---
 
 ## The loop this surface exists to run
@@ -76,10 +87,10 @@ newtest		Test loop for a deployed thing
 
 Command		Does
 chat \<id\>		Define / refine / split one task in conversation
-chat \<folder\>	Sweep backlog / next / blocked — verdict-first sort
-chat plan [id]	Author or refine a plan (plan id; bare = pick one)
+chat \<folder\>		Sweep backlog / next / blocked — verdict-first sort
+chat plan [id]		Author or refine a plan (plan id; bare = pick one)
 chat bugs		Sweep bug inbox → convert or kill
-chat			Walk sprint structural health (next/ + blocked/)
+chat			Menu that includes newtask, newplan, chat folder, chat plan (plan id; bare = pick one), chat bugs (bare = work through oldest to newest or until stopped)
 
 One conversational engine. Target chooses depth; the method is always
 Probe → Ground → Recommend → Open the floor. Decisions land in the durable
@@ -107,7 +118,7 @@ work count N	Execute at most N READY tasks (replaces the old bare-number cap)
 loop			Autopilot: plan start refill + work drain
 gate [folder]	READY-gate next/ (default), or quality report on another folder
 split \<path\>	One-shot: one large task → atomic children (no conversation)
-polish …		Post-work quality: sweep review/, deep-judge a file, or --code
+polish …		Post-work quality: sweep review/, deep-judge a task (id/file), or --code
 promote [id]	Test-gated close: run each review/ task's **Tests**, all green → done/
 
 Happy path: `plan start` → `work`. `plan start` already gates on commit, so
@@ -116,7 +127,10 @@ Happy path: `plan start` → `work`. `plan start` already gates on commit, so
 gate step on that spine.
 
 `polish` is the one post-work quality surface (sweep / deep-judge / code fix).
-Argument shape selects the mode; do not re-split it into sibling commands.
+Argument shape selects the mode; do not re-split it into sibling commands. A
+bare number is read id-first (a number that names an existing task targets that
+task, uniform with `work`/`chat`); only a number matching no task is a sweep
+limit.
 
 **Completion path — two gates, one lifecycle.** The same dependency edge gates
 both ends of a task's life:
@@ -163,12 +177,16 @@ sync			Push task changes to GitHub
 validate		Integrity: IDs, edges, help/docs/commands surface
 cleanup			Clear stale scratch files
 deps			Scan package ecosystems; file one backlog task on upgrades/advisories
+model			Show / list / set effective AI model per role (no AI; config only)
+model show		Print CLI, tier, and effective model per role with source
+model list		Models the current provider offers (Grok: `grok models`; Claude: known aliases)
+model set KEY VALUE	Write `MODEL_DEFAULT` or `MODEL_<ROLE>` into config
 
 ### Global launcher flags — not commands
 
 Leading flags on `./sprint.sh` (before the command). They apply for **this run
-only** and do **not** rewrite `docs/sprintmd/config`. Durable default stays
-setup / config; env `SPRINTMD_CLI` / `SPRINTMD_PROVIDER` is the same override
+only** and do **not** rewrite `docs/sprintbias/config`. Durable default stays
+setup / config; env `SPRINTBIAS_CLI` / `SPRINTBIAS_PROVIDER` is the same override
 without the short flag.
 
 Flag			Does
@@ -197,7 +215,7 @@ Flag		Does
 --demo		Play the walkthrough mapped to this command (theater shows)
 
 `--help` explains; `--demo` shows. The pair is symmetric and data-driven: an
-optional 5th field on `docs/sprintmd/help/_registry` maps a command to a demo
+optional 5th field on `docs/sprintbias/help/_registry` maps a command to a demo
 name. When that field is set, the command's `--help` output ends with a one-line
 pointer (`Demo:  ./sprint.sh <cmd> --demo`) and `<cmd> --demo` plays that demo
 through the same engine as `learn`. Unmapped commands carry **no** pointer (no

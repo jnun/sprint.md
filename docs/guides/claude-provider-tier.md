@@ -3,18 +3,19 @@
 How SprintBias runs at full strength today when the AI provider is **Claude Code**.
 This is one of two first-class orchestration tiers (peer: **Grok Build** —
 `docs/guides/grok-provider-tier.md`). Other providers degrade from these designs,
-not the other way around.
+not the other way around. Living KK/KU inventory:
+`docs/guides/provider-reality.md`.
 
 Ship truth for flags and gates lives in code; this guide is the human/agent map
-of that design. Capability matrix: `docs/sprintmd/ai/provider-capabilities.md`.
+of that design. Capability matrix: `docs/sprintbias/ai/provider-capabilities.md`.
 
 ## Identity
 
 Field				Value
 Tier name			claude-code
 CLI binary			claude
-Profile				docs/sprintmd/cli/claude.sh
-Config				CLI=claude and PROVIDER=claude-code in docs/sprintmd/config
+Profile				docs/sprintbias/cli/claude.sh
+Config				CLI=claude and PROVIDER=claude-code in docs/sprintbias/config
 Setup pick			Claude Code (default in setup.sh)
 Instruction file	CLAUDE.md (optional create/prepend at install)
 
@@ -33,18 +34,18 @@ Scripts never call claude flags directly. They call one of these and the profile
 maps them.
 
 Call						Use
-sprintmd_run				One-shot job (work, gate, polish, plan think, …)
-sprintmd_run_interactive	Live dialogue (chat, profile, conversational creates)
-sprintmd_ai_tier			Returns claude-code so scripts can branch
-sprintmd_tier_model SFX		Model for a script; on this tier empty config → opus for heavy flows
-sprintmd_interactive_ok		True when exec + profile interactive + real TTY
+sprintbias_run				One-shot job (work, gate, polish, plan think, …)
+sprintbias_run_interactive	Live dialogue (chat, profile, conversational creates)
+sprintbias_ai_tier			Returns claude-code so scripts can branch
+sprintbias_tier_model SFX		Model for a script; on this tier empty config → opus for heavy flows
+sprintbias_interactive_ok		True when exec + profile interactive + real TTY
 
 ## Flag map (neutral → Claude)
 
 Neutral flag			Claude flag						Notes
 -p PROMPT				-p PROMPT						Headless print mode; single response then exit
 positional prompt		positional						Interactive only — starts the REPL on that message
---model					--model							From MODEL_* / SPRINTMD_MODEL_* / tier default
+--model					--model							From MODEL_* / SPRINTBIAS_MODEL_* / tier default
 --max-turns				--max-turns						Caps agent turns on long jobs
 --tools					--allowedTools					Claude tool names: Read, Edit, Write, Bash, Grep, Glob, …
 --permissions			--permission-mode				e.g. auto
@@ -60,9 +61,9 @@ These live in cli/claude.sh. Other tiers do not get them for free.
 
 Extra				What it does
 Stream filter		When JSON + stderr is a TTY, upgrade to stream-json and narrate tool steps on stderr
-Transient retry		Resume the same session after connection drops (SPRINTMD_RETRIES, SPRINTMD_RETRY_WAIT)
-Wall-clock cap		Kill a wedged attempt after SPRINTMD_ATTEMPT_TIMEOUT (needs gtimeout/timeout)
-Interactive gate	SPRINTMD_PROVIDER_INTERACTIVE=1 so chat can host a live REPL
+Transient retry		Resume the same session after connection drops (SPRINTBIAS_RETRIES, SPRINTBIAS_RETRY_WAIT)
+Wall-clock cap		Kill a wedged attempt after SPRINTBIAS_ATTEMPT_TIMEOUT (needs gtimeout/timeout)
+Interactive gate	SPRINTBIAS_PROVIDER_INTERACTIVE=1 so chat can host a live REPL
 
 ## Orchestration (why Claude is fast)
 
@@ -71,12 +72,12 @@ from a thin driver session. Unrelated tasks do not share a prompt window.
 
 Command					Emit on claude-code																									Exec on claude-code
 work					Driver prompt: one Task-tool subagent per task file; parallel when --fast/--parallel; route doing → review/blocked	One claude process per task (parallel jobs = parallel processes)
-gate (many files)		One subagent per task, all in parallel, shared review contract														Per-file / sequential via sprintmd_run as coded
-plan start (many)		Same gate parallel path (`sprintmd_gate_parallel`) for multi-member promote											Per-file gate via sprintmd_run
-polish (many)			One judge subagent per task; route by verdict																		Per-file sprintmd_run
+gate (many files)		One subagent per task, all in parallel, shared review contract														Per-file / sequential via sprintbias_run as coded
+plan start (many)		Same gate parallel path (`sprintbias_gate_parallel`) for multi-member promote											Per-file gate via sprintbias_run
+polish (many)			One judge subagent per task; route by verdict																		Per-file sprintbias_run
 chat chain				After READY, spawn a NEW subagent for ./sprint.sh chat next-id														Print or run the next chat command; human continues
 next→blocked handoff	Same: fresh Task subagent for the upstream blocked dep																Command to run in a fresh window
-plan think				Dual-persona critique via sprintmd_run (full flag surface)															Same through the profile
+plan think				Dual-persona critique via sprintbias_run (full flag surface)															Same through the profile
 
 Token-saving rule the prompts encode: the orchestrator moves files and
 dispatches; subagents do the work; contexts never pile into one mega-session.
@@ -84,8 +85,8 @@ dispatches; subagents do the work; contexts never pile into one mega-session.
 ## Models
 
 Source							Behavior
-MODEL_DEFAULT / MODEL_CHAT / …	Config or SPRINTMD_MODEL_* env
-Empty + sprintmd_tier_model		On claude-code only: fall back to opus for reasoning-heavy scripts (feature, idea, chat, …)
+MODEL_DEFAULT / MODEL_CHAT / …	Config or SPRINTBIAS_MODEL_* env
+Empty + sprintbias_tier_model		On claude-code only: fall back to opus for reasoning-heavy scripts (feature, idea, chat, …)
 Empty + other resolve paths		CLI picks its own default
 
 ## What scripts gate on claude-code today
@@ -96,10 +97,10 @@ Script		Gate
 work.sh	Emit orchestration vs sequential fallback
 gate.sh	Parallel multi-file emit review
 gate-lib.sh	Shared parallel prompt ("Task tool") used by gate + plan start
-plan-start.sh	Multi-member emit gate via sprintmd_gate_parallel
+plan-start.sh	Multi-member emit gate via sprintbias_gate_parallel
 polish.sh	Parallel multi-file emit judge
 chat.sh		Continue-the-chain subagent wording
-lib.sh		next→blocked Path A subagent wording; sprintmd_tier_model opus default
+lib.sh		next→blocked Path A subagent wording; sprintbias_tier_model opus default
 
 ## User path (Claude)
 
@@ -115,9 +116,9 @@ Step	Action
 
 Path											Role
 docs/guides/dual-provider-smoke.md				Pre-release smoke ritual for both hosts
-docs/sprintmd/cli/claude.sh						Profile implementation
-docs/sprintmd/lib.sh							Mode, tier, run helpers
-docs/sprintmd/ai/provider-capabilities.md		Matrix source of truth
-docs/sprintmd/guides/use_chat.md				chat emit vs exec vs degraded
+docs/sprintbias/cli/claude.sh						Profile implementation
+docs/sprintbias/lib.sh							Mode, tier, run helpers
+docs/sprintbias/ai/provider-capabilities.md		Matrix source of truth
+docs/sprintbias/guides/use_chat.md				chat emit vs exec vs degraded
 docs/guides/grok-provider-tier.md				Target design for a peer Grok tier
 docs/plans/5-grok-build-first-class-provider.md	Work plan to ship Grok as a peer

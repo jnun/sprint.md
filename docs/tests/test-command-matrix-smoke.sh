@@ -2,13 +2,13 @@
 # Test: command-matrix emit smoke
 #
 # Walks every command in docs/guides/command-matrix.md in a sandbox under
-# SPRINTMD_MODE=emit — no network, no live CLI. For each command it proves
+# SPRINTBIAS_MODE=emit — no network, no live CLI. For each command it proves
 # three cross-cutting invariants the session dogfood proved once by hand:
 #
 #   1. A leading -g / -c launcher flag is always accepted — never "Unknown
 #      option" (the launcher rejection that would exit 1).
 #   2. AI paths announce the provider banner exactly as
-#      `▸ Provider: <cli> (<tier>) · mode: emit` (lib.sh:sprintmd_announce_provider).
+#      `▸ Provider: <cli> (<tier>) · mode: emit` (lib.sh:sprintbias_announce_provider).
 #   3. Non-AI paths (create / status / search / …) never announce it.
 #
 # emit mode is the key that makes this network-free: an AI path prints its
@@ -20,7 +20,7 @@
 # from rotting between live runs.
 #
 # See: docs/guides/command-matrix.md, docs/tests/test-sprint.sh,
-#      docs/tests/test-grok-provider.sh, docs/sprintmd/lib.sh.
+#      docs/tests/test-grok-provider.sh, docs/sprintbias/lib.sh.
 
 set -euo pipefail
 
@@ -29,7 +29,7 @@ FAIL=0
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 
 # ── Sandbox: one framework copy, cheap per-case fixture reseeds ───────
-# The expensive part (copying the whole docs/sprintmd/ tree + sprint.sh, exactly
+# The expensive part (copying the whole docs/sprintbias/ tree + sprint.sh, exactly
 # what a real install ships) happens once. seed_fixtures() then resets only the
 # small work-item files before each case, so a command that mutates in bash
 # (plan start --commit-only moves a member; deps files a task) can't leak state
@@ -38,8 +38,8 @@ TMPDIR=$(mktemp -d)
 trap 'rm -rf "$TMPDIR"' EXIT
 
 build_framework() {
-    mkdir -p "$TMPDIR/docs/sprintmd"
-    cp -R "$ROOT/docs/sprintmd/." "$TMPDIR/docs/sprintmd/"
+    mkdir -p "$TMPDIR/docs/sprintbias"
+    cp -R "$ROOT/docs/sprintbias/." "$TMPDIR/docs/sprintbias/"
     cp "$ROOT/sprint.sh" "$TMPDIR/sprint.sh"
 
     mkdir -p "$TMPDIR/docs/tasks/backlog" "$TMPDIR/docs/tasks/next" \
@@ -55,7 +55,7 @@ build_framework() {
     cp "$ROOT/docs/features/.TEMPLATE-feature.md" "$TMPDIR/docs/features/.TEMPLATE-feature.md"
     cp "$ROOT/docs/plans/.TEMPLATE-plan.md"       "$TMPDIR/docs/plans/.TEMPLATE-plan.md"
 
-    cat > "$TMPDIR/docs/sprintmd/DOC_STATE.md" << 'EOF'
+    cat > "$TMPDIR/docs/sprintbias/DOC_STATE.md" << 'EOF'
 # SprintBias Documentation State
 
 **Last Updated**: 2026-01-01
@@ -214,7 +214,7 @@ EOF
 # when stderr is not a TTY), so 2>&1 always captures it.
 run_cmd() {
     local flag="$1"; shift
-    ( cd "$TMPDIR" && SPRINTMD_MODE=emit PATH="$TMPDIR/stubbin:$PATH" \
+    ( cd "$TMPDIR" && SPRINTBIAS_MODE=emit PATH="$TMPDIR/stubbin:$PATH" \
         bash sprint.sh "$flag" "$@" </dev/null 2>&1 ) || true
 }
 
@@ -232,13 +232,15 @@ assert_flag_ok() {
 }
 
 # Assert the provider banner is present and names the right tier for the flag.
+# Match the real announce line from lib.sh (▸ Provider: cli (tier) · mode: …),
+# not bare "Provider:" prose — `model show` prints config lines with that word.
 assert_banner() {
     local desc="$1" flag="$2" out="$3" tier
     case "$flag" in
         -g) tier="grok (grok-build)" ;;
         -c) tier="claude (claude-code)" ;;
     esac
-    if printf '%s' "$out" | grep -qF -- "Provider: $tier" \
+    if printf '%s' "$out" | grep -qF -- "▸ Provider: $tier" \
        && printf '%s' "$out" | grep -qF -- "mode: emit"; then
         pass "$desc — announces '$tier · mode: emit'"
     else
@@ -249,7 +251,7 @@ assert_banner() {
 # Assert the provider banner is absent (non-AI path).
 assert_no_banner() {
     local desc="$1" out="$2"
-    if printf '%s' "$out" | grep -qF -- "Provider:"; then
+    if printf '%s' "$out" | grep -qF -- "▸ Provider:"; then
         fail "$desc — non-AI path announced a provider banner"
     else
         pass "$desc — no provider banner (non-AI)"
@@ -314,9 +316,9 @@ expect_noai "plan done <id> (unfinished)" plan done 70
 echo "Work family — AI execution, announces provider:"
 expect_ai "work (drain next/)" work
 expect_ai "work <id>"          work 60
-# Live cap form is a bare number (`work 1`); the matrix's target name `work
-# count N` is documented as live-surface lag in command-matrix.md.
-expect_ai "work <N> (cap)"     work 1
+# Cap form is `work count N` (matrix line: "Execute at most N READY tasks").
+# A bare number now means a task id, so the cap must use the `count` sub-word.
+expect_ai "work count <N> (cap)" work count 1
 expect_ai "gate (default next/)" gate
 expect_ai "gate <folder>"        gate backlog
 expect_ai "split <path>"         split docs/tasks/next/60-ready-alpha.md
@@ -345,6 +347,9 @@ expect_noai "cleanup"          cleanup
 # deps reaches its AI half only when a manifest is present (empty tree is an
 # intentional short-circuit); the npm stub keeps it network-free.
 expect_ai   "deps"             deps
+# model is pure config (show/list/set) — no AI, no provider banner.
+expect_noai "model show"       model show
+expect_noai "model list"       model list
 
 # ── Summary ───────────────────────────────────────────────────────────
 echo ""

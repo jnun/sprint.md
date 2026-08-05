@@ -6,22 +6,22 @@ set -euo pipefail
 
 PASS=0
 FAIL=0
-SCRIPT_UNDER_TEST="$(cd "$(dirname "$0")/../sprintmd/scripts" && pwd)/create-feature.sh"
-SPRINTMD_SRC="$(cd "$(dirname "$0")/../sprintmd" && pwd)"
+SCRIPT_UNDER_TEST="$(cd "$(dirname "$0")/../sprintbias/scripts" && pwd)/create-feature.sh"
+SPRINTBIAS_SRC="$(cd "$(dirname "$0")/../sprintbias" && pwd)"
 DOCS_SRC="$(cd "$(dirname "$0")/.." && pwd)"
 
 setup() {
     TMPDIR=$(mktemp -d)
     trap 'rm -rf "$TMPDIR"' EXIT
 
-    mkdir -p "$TMPDIR/docs/sprintmd/scripts"
+    mkdir -p "$TMPDIR/docs/sprintbias/scripts"
     mkdir -p "$TMPDIR/docs/features"
 
-    cp "$SCRIPT_UNDER_TEST" "$TMPDIR/docs/sprintmd/scripts/create-feature.sh"
+    cp "$SCRIPT_UNDER_TEST" "$TMPDIR/docs/sprintbias/scripts/create-feature.sh"
     # The script sources lib.sh (which loads a cli/ provider profile) and reads
     # the feature template at runtime — provide all three or it aborts.
-    cp "$SPRINTMD_SRC/lib.sh" "$TMPDIR/docs/sprintmd/lib.sh"
-    cp -R "$SPRINTMD_SRC/cli" "$TMPDIR/docs/sprintmd/cli"
+    cp "$SPRINTBIAS_SRC/lib.sh" "$TMPDIR/docs/sprintbias/lib.sh"
+    cp -R "$SPRINTBIAS_SRC/cli" "$TMPDIR/docs/sprintbias/cli"
     cp "$DOCS_SRC/features/.TEMPLATE-feature.md" "$TMPDIR/docs/features/.TEMPLATE-feature.md"
 
     git -C "$TMPDIR" init -q
@@ -56,7 +56,7 @@ echo "=== test-create-feature.sh ==="
 # Test 1: Happy path — creates feature file
 echo "Test 1: Happy path creates feature file"
 setup
-(cd "$TMPDIR" && bash docs/sprintmd/scripts/create-feature.sh "User Authentication" > /dev/null 2>&1)
+(cd "$TMPDIR" && bash docs/sprintbias/scripts/create-feature.sh "User Authentication" > /dev/null 2>&1)
 assert_file_exists "Feature file created" "$TMPDIR/docs/features/user-authentication.md"
 
 # Test 2: Feature file contains correct title
@@ -83,7 +83,7 @@ assert_contains "Created date" "$content" "**Created:** $today"
 echo "Test 5: Empty name launches Q&A"
 setup
 rc=0
-output=$(cd "$TMPDIR" && SPRINTMD_MODE=emit bash docs/sprintmd/scripts/create-feature.sh "" 2>&1) || rc=$?
+output=$(cd "$TMPDIR" && SPRINTBIAS_MODE=emit bash docs/sprintbias/scripts/create-feature.sh "" 2>&1) || rc=$?
 if [ "$rc" -eq 0 ]; then
     echo "  PASS: Q&A path exits 0"; PASS=$((PASS + 1))
 else
@@ -94,8 +94,8 @@ assert_contains "Starts feature Q&A" "$output" "feature definition Q&A"
 # Test 6: Duplicate feature — should fail
 echo "Test 6: Duplicate feature exits 1"
 setup
-(cd "$TMPDIR" && bash docs/sprintmd/scripts/create-feature.sh "Payments" > /dev/null 2>&1)
-if (cd "$TMPDIR" && bash docs/sprintmd/scripts/create-feature.sh "Payments" > /dev/null 2>&1); then
+(cd "$TMPDIR" && bash docs/sprintbias/scripts/create-feature.sh "Payments" > /dev/null 2>&1)
+if (cd "$TMPDIR" && bash docs/sprintbias/scripts/create-feature.sh "Payments" > /dev/null 2>&1); then
     echo "  FAIL: Should have exited non-zero for duplicate"
     FAIL=$((FAIL + 1))
 else
@@ -106,7 +106,7 @@ fi
 # Test 7: Kebab-case conversion
 echo "Test 7: Name converted to kebab-case"
 setup
-(cd "$TMPDIR" && bash docs/sprintmd/scripts/create-feature.sh "My Cool Feature" > /dev/null 2>&1)
+(cd "$TMPDIR" && bash docs/sprintbias/scripts/create-feature.sh "My Cool Feature" > /dev/null 2>&1)
 assert_file_exists "Kebab-case filename" "$TMPDIR/docs/features/my-cool-feature.md"
 
 # --- Summary ---

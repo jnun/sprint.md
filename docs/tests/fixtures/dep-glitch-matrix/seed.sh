@@ -21,7 +21,7 @@ rm -rf "$TARGET/docs/tasks" "$TARGET/docs/plans"
 mkdir -p \
   "$TARGET/docs/tasks/"{backlog,next,doing,blocked,review,done} \
   "$TARGET/docs/plans" \
-  "$TARGET/docs/sprintmd" \
+  "$TARGET/docs/sprintbias" \
   "$TARGET/docs/tmp"
 
 # ── writers ──────────────────────────────────────────────────────────
@@ -518,7 +518,7 @@ EOF
 } > "$TARGET/$PLAN_FILE"
 
 # ── DOC_STATE (optional for tools that read it) ──────────────────────
-cat > "$TARGET/docs/sprintmd/DOC_STATE.md" <<EOF
+cat > "$TARGET/docs/sprintbias/DOC_STATE.md" <<EOF
 # DOC_STATE (synthetic fixture)
 
 **sprint_TASK_ID**: 9099

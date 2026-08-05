@@ -26,25 +26,25 @@ if [ ! -d "$BOARD/docs/tasks/next" ]; then
 fi
 
 # shellcheck source=/dev/null
-source "$REPO/docs/sprintmd/lib.sh"
+source "$REPO/docs/sprintbias/lib.sh"
 
 cd "$BOARD"
 
 echo "=== dep-glitch-matrix inventory ==="
 echo "board: $BOARD"
-echo "lib:   $REPO/docs/sprintmd/lib.sh"
+echo "lib:   $REPO/docs/sprintbias/lib.sh"
 echo ""
 
 stage_of() {
   local id="$1"
-  sprintmd_task_stage "$id" 2>/dev/null || true
+  sprintbias_task_stage "$id" 2>/dev/null || true
 }
 
 # Print classification line for one dependency id.
 classify_dep() {
   local id="$1" stage path
   stage="$(stage_of "$id")"
-  path="$(sprintmd_task_path "$id" 2>/dev/null || true)"
+  path="$(sprintbias_task_path "$id" 2>/dev/null || true)"
   if [ -z "$stage" ]; then
     # Fold tombstones / ledger hints
     case "$id" in
@@ -70,16 +70,16 @@ classify_dep() {
       res=$(grep -m1 '^\*\*Result\*\*:' "$path" 2>/dev/null | sed 's/.*: *//' || true)
       [ -n "$res" ] && extra="${extra} +Outcome:${res}"
     fi
-    if [ "$(sprintmd_review_verdict "$path")" = "READY" ]; then
+    if [ "$(sprintbias_review_verdict "$path")" = "READY" ]; then
       extra="${extra} +READY"
-    elif [ "$(sprintmd_review_verdict "$path")" = "BLOCKED" ]; then
+    elif [ "$(sprintbias_review_verdict "$path")" = "BLOCKED" ]; then
       extra="${extra} +BLOCKED"
     fi
   fi
   printf '%-6s %s%s\n' "$stage" "present" "$extra"
 }
 
-echo "── Canary unmet deps (current sprintmd_unmet_deps + stage class) ──"
+echo "── Canary unmet deps (current sprintbias_unmet_deps + stage class) ──"
 echo ""
 
 canaries=$(find docs/tasks/next -name '90[5-8][0-9]-*.md' | sort -t/ -k4)
@@ -87,7 +87,7 @@ for f in $canaries; do
   [ -f "$f" ] || continue
   id=$(basename "$f" | sed 's/-.*//')
   title=$(grep -m1 '^# ' "$f" | sed 's/^# Task [0-9]*: //')
-  unmet="$(sprintmd_unmet_deps "$f" || true)"
+  unmet="$(sprintbias_unmet_deps "$f" || true)"
   echo "▸ #${id}  ${title}"
   if [ -z "$unmet" ]; then
     echo "    unmet: (none) — current gating would treat as runnable"
@@ -113,11 +113,11 @@ for id in 9016 9018 9019 9020 9036 9037 9038 9081 9082 9083 9086 9087 9089; do
     continue
   fi
   stage=$(stage_of "$id")
-  deps=$(sprintmd_meta_value "$f" "Depends on")
-  blocks=$(sprintmd_meta_value "$f" "Blocks")
-  plan=$(sprintmd_meta_value "$f" "Plan")
-  parent=$(sprintmd_meta_value "$f" "Parent")
-  unmet=$(sprintmd_unmet_deps "$f" || true)
+  deps=$(sprintbias_meta_value "$f" "Depends on")
+  blocks=$(sprintbias_meta_value "$f" "Blocks")
+  plan=$(sprintbias_meta_value "$f" "Plan")
+  parent=$(sprintbias_meta_value "$f" "Parent")
+  unmet=$(sprintbias_unmet_deps "$f" || true)
   echo "▸ #${id}  [${stage}]  Depends=[${deps}]  Blocks=[${blocks}]  Plan=[${plan}]  Parent=[${parent}]"
   echo "    unmet_deps → [${unmet}]"
   echo ""
@@ -133,7 +133,7 @@ done
 echo ""
 
 echo "── FALSE GREEN detector (Plan 15 gaps) ──"
-echo "    Current sprintmd_unmet_deps treats 'no file anywhere' as complete."
+echo "    Current sprintbias_unmet_deps treats 'no file anywhere' as complete."
 echo "    These canaries Declares a missing/fold id but show unmet empty:"
 echo ""
 false_green=0
@@ -149,8 +149,8 @@ do
   cid=${row%%:*}; expect=${row#*:}
   f=$(find docs/tasks/next -name "${cid}-*.md" | head -1)
   [ -n "$f" ] || continue
-  unmet="$(sprintmd_unmet_deps "$f" || true)"
-  raw=$(sprintmd_meta_value "$f" "Depends on")
+  unmet="$(sprintbias_unmet_deps "$f" || true)"
+  raw=$(sprintbias_meta_value "$f" "Depends on")
   for mid in $expect; do
     # if raw depends includes mid and mid has no stage and mid not in unmet → false green
     case " $raw " in *" $mid "*|*"#$mid "*|*,$mid,*|*" $mid,"*|",$mid "*) ;;
@@ -185,8 +185,8 @@ echo ""
 echo "── Umbrella #9080 raw Depends on ──"
 u=$(find docs/tasks/next -name '9080-*.md' | head -1)
 if [ -n "$u" ]; then
-  echo "  $(sprintmd_meta_value "$u" "Depends on")"
-  echo "  unmet → [$(sprintmd_unmet_deps "$u" || true)]"
+  echo "  $(sprintbias_meta_value "$u" "Depends on")"
+  echo "  unmet → [$(sprintbias_unmet_deps "$u" || true)]"
 fi
 echo ""
 

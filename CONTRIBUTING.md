@@ -20,23 +20,32 @@ you can run `bash`, you can develop it.
 The one rule that governs everything: **edit `docs/` → test in place → `./ship.sh`.**
 
 1. **Edit in `docs/`** — the live environment. Scripts in
-   `docs/sprintmd/scripts/` run the moment you invoke `./sprint.sh`. Changes
+   `docs/sprintbias/scripts/` run the moment you invoke `./sprint.sh`. Changes
    take effect immediately, no mirror step needed to test.
 2. **Test your change** — run the real `./sprint.sh` command it affects, then
    the platform suite. Full ladder (unit → emit smoke → live dual-provider):
    **[docs/guides/running-tests.md](docs/guides/running-tests.md)**. Quick unit
    pass: `bash docs/tests/run-all.sh`.
-3. **Run `./sprint.sh validate`** — integrity-checks task IDs and dependency
+3. **Update maintainer guides when the surface moves** (repo-only; not shipped):
+   - **New or changed command** → edit
+     **[docs/guides/command-matrix.md](docs/guides/command-matrix.md)** (catalog
+     row, family, or retired-names table) in the same change as dispatch /
+     registry / help / script.
+   - **Provider / dual-host behavior** (tool map, emit, subagents, models,
+     install tier) or a proven known-unknown → edit
+     **[docs/guides/provider-reality.md](docs/guides/provider-reality.md)**
+     (KK/KU stamps and Surfaced unknowns).
+4. **Run `./sprint.sh validate`** — integrity-checks task IDs and dependency
    links. Add `--commands` if you touched a command's help, dispatch, or the
    manual (it enforces that all four surfaces agree), and `--docs` if you
    changed a script's flags.
-4. **Mirror to `src/`** — run `./ship.sh` (preview first with
+5. **Mirror to `src/`** — run `./ship.sh` (preview first with
    `./ship.sh --dry-run`). It rsyncs the live tree into `src/`, bumps the
    version, and byte-verifies the mirror. Patch bump by default;
    `./ship.sh minor` / `major` for larger changes. **Never hand-copy files
    into `src/`.**
-5. **Verify a fresh install** (see below).
-6. **Commit** — the maintainer handles commits and releases unless you're asked
+6. **Verify a fresh install** (see below).
+7. **Commit** — the maintainer handles commits and releases unless you're asked
    to. `ship.sh` prints the suggested `git commit -m "ship: vX.Y.Z"` line.
 
 ### The two trees
@@ -69,11 +78,12 @@ touch it while developing.)
 
 | I want to change... | Edit here | Reaches `src/` via |
 |---|---|---|
-| A command / script | `docs/sprintmd/scripts/` | `./ship.sh` |
-| AI guidance (`chat`, `plan`, task authoring) | `docs/sprintmd/ai/` | `./ship.sh` |
-| CLI help pages, provider CLIs, guides | `docs/sprintmd/{help,cli,guides}/` | `./ship.sh` |
-| Shared helpers / config | `docs/sprintmd/{lib.sh,config}` | `./ship.sh` |
-| The command catalog | `docs/sprintmd/help/_registry` | `./ship.sh` (the help index is generated from it) |
+| A command / script | `docs/sprintbias/scripts/` **and** `docs/guides/command-matrix.md` | scripts via `./ship.sh`; matrix is repo-only |
+| AI guidance (`chat`, `plan`, task authoring) | `docs/sprintbias/ai/` | `./ship.sh` |
+| CLI help pages, provider CLIs, shipped guides | `docs/sprintbias/{help,cli,guides}/` | `./ship.sh` |
+| Dual-provider reality (KK/KU inventory) | `docs/guides/provider-reality.md` | — (repo-only, never ships) |
+| Shared helpers / config | `docs/sprintbias/{lib.sh,config}` | `./ship.sh` |
+| The command catalog | `docs/sprintbias/help/_registry` | `./ship.sh` (the help index is generated from it) |
 | The user manual | `DOCUMENTATION.md` (root) | `./ship.sh` |
 | Getting-started guide | `GETSTARTED.md` (root) | `./ship.sh` |
 | A work-item template | `docs/{tasks,bugs,features,ideas,tests,plans}/.TEMPLATE-*` | `./ship.sh` (its `TEMPLATE_FILES` list mirrors each to `src/docs/…`) |
@@ -83,7 +93,7 @@ touch it while developing.)
 | GitHub issue/PR templates, workflows | `src/.github/` | — (edit `src/` directly; no `docs/` copy) |
 | AI pointer files (`CLAUDE.md`, `AGENTS.md`, `.cursorrules`, …) | `src/CLAUDE.md`, `src/AGENTS.md`, … | — (edit `src/` directly; no `docs/` copy) |
 
-Everything under `docs/sprintmd/` is mirrored **wholesale**, so a brand-new
+Everything under `docs/sprintbias/` is mirrored **wholesale**, so a brand-new
 script, help page, or guide ships automatically — no `ship.sh` edit needed. You
 touch `ship.sh`'s manifest only when a new distributable path appears *outside*
 the trees it already covers (a new root file, or a whole new `docs/` subtree).

@@ -13,9 +13,9 @@ setup() {
     TMPDIR=$(mktemp -d)
     trap 'rm -rf "$TMPDIR"' EXIT
 
-    # sprint.sh checks if $SCRIPT_DIR/docs/sprintmd/scripts exists to decide PROJECT_ROOT.
-    # We place it at the project root level so it finds docs/sprintmd/scripts relative to itself.
-    mkdir -p "$TMPDIR/docs/sprintmd/scripts"
+    # sprint.sh checks if $SCRIPT_DIR/docs/sprintbias/scripts exists to decide PROJECT_ROOT.
+    # We place it at the project root level so it finds docs/sprintbias/scripts relative to itself.
+    mkdir -p "$TMPDIR/docs/sprintbias/scripts"
     mkdir -p "$TMPDIR/docs/tasks/backlog"
     mkdir -p "$TMPDIR/docs/tasks/next"
     mkdir -p "$TMPDIR/docs/tasks/doing"
@@ -25,14 +25,14 @@ setup() {
     # Mirror a real install: copy the whole framework tree (scripts, lib.sh,
     # cli/ profiles, ai/, help/, config) so the launcher and every helper resolve
     # their dependencies exactly as they would in a deployed project.
-    cp -R "$(cd "$(dirname "$0")/../sprintmd" && pwd)/." "$TMPDIR/docs/sprintmd/"
+    cp -R "$(cd "$(dirname "$0")/../sprintbias" && pwd)/." "$TMPDIR/docs/sprintbias/"
 
     # sprint.sh is the root launcher; place it at the sandbox project root so its
-    # own resolution (SCRIPT_DIR/docs/sprintmd/scripts exists -> PROJECT_ROOT=here)
+    # own resolution (SCRIPT_DIR/docs/sprintbias/scripts exists -> PROJECT_ROOT=here)
     # matches a real install.
     cp "$SCRIPT_UNDER_TEST" "$TMPDIR/sprint.sh"
 
-    cat > "$TMPDIR/docs/sprintmd/DOC_STATE.md" << 'EOF'
+    cat > "$TMPDIR/docs/sprintbias/DOC_STATE.md" << 'EOF'
 # SprintBias Documentation State
 
 **Last Updated**: 2026-01-01
@@ -172,14 +172,14 @@ assert_contains "Help lists --claude" "$output" "--claude"
 assert_contains "Help lists --grok" "$output" "--grok"
 
 # Test 13: -g exports Grok provider for child scripts
-echo "Test 13: -g sets SPRINTMD_CLI/PROVIDER for this run"
+echo "Test 13: -g sets SPRINTBIAS_CLI/PROVIDER for this run"
 setup
-cat > "$TMPDIR/docs/sprintmd/scripts/work.sh" << 'EOF'
+cat > "$TMPDIR/docs/sprintbias/scripts/work.sh" << 'EOF'
 #!/usr/bin/env bash
-printf 'CLI=%s\n' "${SPRINTMD_CLI:-}"
-printf 'PROVIDER=%s\n' "${SPRINTMD_PROVIDER:-}"
+printf 'CLI=%s\n' "${SPRINTBIAS_CLI:-}"
+printf 'PROVIDER=%s\n' "${SPRINTBIAS_PROVIDER:-}"
 EOF
-chmod +x "$TMPDIR/docs/sprintmd/scripts/work.sh"
+chmod +x "$TMPDIR/docs/sprintbias/scripts/work.sh"
 output=$(bash "$TMPDIR/sprint.sh" -g work 2>&1)
 assert_contains "-g sets CLI=grok" "$output" "CLI=grok"
 assert_contains "-g sets PROVIDER=grok-build" "$output" "PROVIDER=grok-build"
@@ -187,12 +187,12 @@ assert_contains "-g sets PROVIDER=grok-build" "$output" "PROVIDER=grok-build"
 # Test 14: -c / --claude export Claude provider
 echo "Test 14: -c and --claude set Claude provider"
 setup
-cat > "$TMPDIR/docs/sprintmd/scripts/work.sh" << 'EOF'
+cat > "$TMPDIR/docs/sprintbias/scripts/work.sh" << 'EOF'
 #!/usr/bin/env bash
-printf 'CLI=%s\n' "${SPRINTMD_CLI:-}"
-printf 'PROVIDER=%s\n' "${SPRINTMD_PROVIDER:-}"
+printf 'CLI=%s\n' "${SPRINTBIAS_CLI:-}"
+printf 'PROVIDER=%s\n' "${SPRINTBIAS_PROVIDER:-}"
 EOF
-chmod +x "$TMPDIR/docs/sprintmd/scripts/work.sh"
+chmod +x "$TMPDIR/docs/sprintbias/scripts/work.sh"
 output=$(bash "$TMPDIR/sprint.sh" -c work 2>&1)
 assert_contains "-c sets CLI=claude" "$output" "CLI=claude"
 assert_contains "-c sets PROVIDER=claude-code" "$output" "PROVIDER=claude-code"
@@ -202,11 +202,11 @@ assert_contains "--claude sets CLI=claude" "$output" "CLI=claude"
 # Test 15: last leading provider flag wins
 echo "Test 15: last provider flag wins"
 setup
-cat > "$TMPDIR/docs/sprintmd/scripts/work.sh" << 'EOF'
+cat > "$TMPDIR/docs/sprintbias/scripts/work.sh" << 'EOF'
 #!/usr/bin/env bash
-printf 'CLI=%s\n' "${SPRINTMD_CLI:-}"
+printf 'CLI=%s\n' "${SPRINTBIAS_CLI:-}"
 EOF
-chmod +x "$TMPDIR/docs/sprintmd/scripts/work.sh"
+chmod +x "$TMPDIR/docs/sprintbias/scripts/work.sh"
 output=$(bash "$TMPDIR/sprint.sh" -g -c work 2>&1)
 assert_contains "last flag (-c) wins" "$output" "CLI=claude"
 

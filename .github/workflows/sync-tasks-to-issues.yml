@@ -31,7 +31,7 @@ jobs:
       force_sync_all: ${{ github.event.inputs.force_sync_all == 'true' }}
       # Optional: customize paths (defaults shown)
       # tasks_path: 'docs/tasks'
-      # state_file: 'docs/sprintmd/DOC_STATE.md'
+      # state_file: 'docs/sprintbias/DOC_STATE.md'
       # Optional: GitHub Projects integration
       # project_number: '1'
       # project_owner: 'your-username-or-org'

@@ -3,11 +3,19 @@
 **Feature**: none
 **Created**: 2026-07-30
 **Docs**: none
+**Plan**: 11
 **Depends on**: none
 **Blocks**: 291, 292, 293, 296, 297
 **Parent**: none
 
 **Status: READY**
+
+## Living home (post-burn)
+
+**The living inventory is `docs/guides/provider-reality.md`.** Keep KK/KU stamps
+and the Surfaced unknowns log there whenever provider behavior or commands
+change. This task file remains the **first burn log** (pass 1, 2026-07-30) and
+historical detail; do not treat it as the single source of truth after promotion.
 
 ## Problem
 
@@ -324,13 +332,15 @@ and real-project work, append under **Surfaced unknowns** below.
 
 ## References
 
+docs/guides/provider-reality.md
+docs/guides/command-matrix.md
 docs/plans/11-grok-firm-up-model-cli-and-dual-smoke.md
 docs/guides/grok-provider-tier.md
 docs/guides/claude-provider-tier.md
-docs/sprintmd/cli/grok.sh
-docs/sprintmd/cli/claude.sh
-docs/sprintmd/lib.sh
-docs/sprintmd/ai/provider-capabilities.md
+docs/sprintbias/cli/grok.sh
+docs/sprintbias/cli/claude.sh
+docs/sprintbias/lib.sh
+docs/sprintbias/ai/provider-capabilities.md
 docs/tests/test-grok-provider.sh
 ~/.grok/docs/user-guide/14-headless-mode.md
 ~/.grok/docs/user-guide/16-subagents.md

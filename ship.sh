@@ -10,7 +10,7 @@
 #
 # THIS SCRIPT IS NOT DISTRIBUTED. It lives at the repo root (never under src/),
 # so setup.sh — which only walks src/ — can never copy it into a user's project.
-# Do not move it into src/ or docs/sprintmd/.
+# Do not move it into src/ or docs/sprintbias/.
 #
 # ── Why this exists ──────────────────────────────────────────────────
 # This repo has two trees: docs/ (the live dev environment we edit and test)
@@ -18,7 +18,7 @@
 # be mirrored docs/ -> src/ or it never reaches users. Doing that by hand, file
 # by file, is the single most error-prone step in this repo. ship.sh makes it
 # one command, and — because it mirrors whole trees, not enumerated files — a
-# NEW script/help/ai/cli/guide file under docs/sprintmd/ is picked up automatically.
+# NEW script/help/ai/cli/guide file under docs/sprintbias/ is picked up automatically.
 # You only edit ship.sh when a NEW distributable path appears OUTSIDE the trees
 # already listed below (a new root file, a brand-new docs/ subtree to ship, or a
 # new work-item template — see TEMPLATE_FILES, which lists templates by name
@@ -50,7 +50,7 @@ ROOT_FILES=(
 )
 
 # Work-item templates: an EXPLICIT file-level copy list, docs/ -> src/docs/.
-# These live OUTSIDE docs/sprintmd/ (under docs/tasks/, docs/bugs/, …), so no
+# These live OUTSIDE docs/sprintbias/ (under docs/tasks/, docs/bugs/, …), so no
 # TREE_MIRROR picks them up — yet the docs/ copy is what create-*.sh reads at
 # runtime, so docs/ is the edit source and src/ must mirror it. We list each
 # .TEMPLATE-* file by name and do NOT add its parent dir to TREE_MIRRORS: those
@@ -69,7 +69,7 @@ TEMPLATE_FILES=(
 # rsync --delete keeps src/ an exact copy: a file deleted from the live tree is
 # removed from src/ too. New files under a live tree ship with no edit here.
 TREE_MIRRORS=(
-    "docs/sprintmd:src/docs/sprintmd"
+    "docs/sprintbias:src/docs/sprintbias"
 )
 
 # Paths (relative to a mirrored tree's root) that are DEV-ONLY and must never
@@ -87,12 +87,17 @@ TREE_EXCLUDES=(
 # the tripwire; scan_legacy applies it to the WHOLE distribution before ship
 # declares success. Extend it whenever a rename retires a name.
 #
-# It matches: the old brand in any spelling; the legacy launcher/dir names; and
-# 'sprint/<framework-subdir>' or a bare 'sprint/' dir (tree diagrams) that is NOT
-# the current 'sprintmd/'. The [^m] before 'sprint' excludes 'sprintmd'; the
-# subdir/space/EOL requirement after 'sprint/' avoids the workflow noun
-# ("plan a sprint", "sprint/backlog index").
-LEGACY_RE='5DayDocs|Five Day Docs|5 Day Docs|docs/5day|5day\.sh|(^|[^m])sprint/(scripts|ai|help|cli|guides|lib|config|DOC_STATE|theory|[[:space:]]|$)'
+# It matches: the old brand in any spelling; the legacy launcher/dir names; the
+# retired framework dir 'sprintmd' in any path form and the lowercase 'sprintmd_'
+# symbol namespace (the rebrand renamed both to 'sprintbias'); and
+# 'sprint/<framework-subdir>' or a bare 'sprint/' dir (tree diagrams), which is
+# NOT the current 'sprintbias/'. 'sprintbias/' has 'b' after 'sprint', so the
+# 'sprint/' alternation (slash right after 'sprint') never matches it; the
+# subdir/space/EOL requirement after 'sprint/' avoids the workflow noun ("plan a
+# sprint", "sprint/backlog index"). The 'sprintmd' alternation is LOWERCASE on
+# purpose: the two pre-rebrand env vars SPRINTMD_CLI / SPRINTMD_PROVIDER survive
+# as documented back-compat fallbacks in lib.sh and must NOT trip this gate.
+LEGACY_RE='5DayDocs|Five Day Docs|5 Day Docs|docs/5day|5day\.sh|sprintmd|(^|[^m])sprint/(scripts|ai|help|cli|guides|lib|config|DOC_STATE|theory|[[:space:]]|$)'
 
 # scan_legacy PATH... — print "file:line:match" for every legacy reference under
 # the given files/dirs. Uses find+xargs, NOT grep -r, so gitignored-but-shipped
@@ -120,7 +125,7 @@ scan_legacy() {
 # find_orphan_frameworks — print any src/ subtree sitting under a mirror target's
 # parent that has NO live docs/ counterpart by name. This is the class rsync
 # --delete cannot catch: it prunes INSIDE a target, never a renamed sibling like
-# src/docs/5day (left by a docs/5day -> docs/sprintmd move) or src/docs/epics
+# src/docs/sprintmd (left by a docs/sprintmd -> docs/sprintbias move) or src/docs/epics
 # (left by a docs/epics -> docs/plans rename). The check is purely STRUCTURAL —
 # "src/docs/<name>/ with no docs/<name>/" — so it is brand-agnostic and catches
 # the whole class of "renamed live dir, stale src/ sibling," including
@@ -198,7 +203,7 @@ bump_version() {
 }
 
 # ── Preflight: must be the SprintBias dev root ─────────────────────────
-for required in "setup.sh" "src" "docs/sprintmd" "src/VERSION"; do
+for required in "setup.sh" "src" "docs/sprintbias" "src/VERSION"; do
     if [ ! -e "$required" ]; then
         echo -e "${RED}✗ Not in the SprintBias dev root (missing: $required)${NC}" >&2
         echo "  Run ./ship.sh from the repository root." >&2
@@ -278,7 +283,7 @@ if [ "$DRY_RUN" -eq 1 ]; then
     # the live mirror sources (which will become src/) plus the current src/
     # (its hand-maintained files ship unchanged) — that is the distribution the
     # real run would gate.
-    gate_preview="$(scan_legacy docs/sprintmd "${ROOT_FILES[@]}" src | sort -u)"
+    gate_preview="$(scan_legacy docs/sprintbias "${ROOT_FILES[@]}" src | sort -u)"
     orphan_preview="$(find_orphan_frameworks)"
     if [ -n "$gate_preview" ] || [ -n "$orphan_preview" ]; then
         echo -e "${YELLOW}▸ Release gates would BLOCK this ship:${NC}"

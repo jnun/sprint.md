@@ -19,9 +19,9 @@ on:
         type: string
         default: 'docs/tasks'
       state_file:
-        description: 'Path to DOC_STATE.md file (default: docs/sprintmd/DOC_STATE.md)'
+        description: 'Path to DOC_STATE.md file (default: docs/sprintbias/DOC_STATE.md)'
         type: string
-        default: 'docs/sprintmd/DOC_STATE.md'
+        default: 'docs/sprintbias/DOC_STATE.md'
       project_number:
         description: 'GitHub Project number (optional)'
         type: string
