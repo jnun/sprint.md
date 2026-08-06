@@ -100,6 +100,7 @@ EXPLICIT_FILES=()
 _has_path=0
 _numeric_limit=""
 _resolved=""
+RESOLVED_ID=""   # the id typed for the target task, for copy-pasteable guidance
 
 for p in "${POSITIONAL[@]+"${POSITIONAL[@]}"}"; do
   if [ -f "$p" ]; then
@@ -121,6 +122,7 @@ for p in "${POSITIONAL[@]+"${POSITIONAL[@]}"}"; do
       _has_path=1
       if [[ "$_resolved" == *.md ]] && [ -z "$TASK_FILE" ] && [ ${#EXPLICIT_FILES[@]} -eq 0 ]; then
         TASK_FILE="$_resolved"
+        [ -z "$RESOLVED_ID" ] && RESOLVED_ID="$p"
       else
         EXPLICIT_FILES+=("$_resolved")
       fi
@@ -147,6 +149,27 @@ else
   MODE="sweep"
   [ -n "$_numeric_limit" ] && MAX_TASKS="$_numeric_limit"
 fi
+
+# Honest bail when no changed-file manifest can be built for a finished task.
+# By design polish never audits an unscoped tree — when it cannot tell which
+# files a task touched, it says so and shows the two ways to give it a list,
+# rather than silently judging every uncommitted change. Reads TASK_FILE /
+# RESOLVED_ID / CONTEXT_SOURCE from the caller; $1 is the flag to echo in the
+# example ("--code " for code mode, "" for judge). Exits 0 (nothing to do).
+_no_manifest_bail() {
+  local flag="$1"
+  local target="${RESOLVED_ID:-${TASK_FILE:-<task>}}"
+  echo "✗ Can't scope this task's changes — nothing to audit."
+  echo "  Context source: $CONTEXT_SOURCE"
+  [ -n "$TASK_FILE" ] && echo "  Task: $TASK_FILE"
+  echo ""
+  echo "  Give the audit a file list one of two ways:"
+  echo "    • Add a '### Files changed' block under '## Completed' in the task"
+  echo "      (one repo-relative path per line), then re-run."
+  echo "    • Pass the files directly:"
+  echo "        ./sprint.sh polish ${flag}${target} <file>..."
+  exit 0
+}
 
 # ═════════════════════════════════════════════════════════════════════
 # MODE: code — fixer/verifier code-diff audit (formerly review-code)
@@ -180,12 +203,7 @@ if [ "$MODE" = "code" ]; then
   CONTEXT_SOURCE="$SPRINTBIAS_CONTEXT_SOURCE"
 
   if [ -z "$CHANGED_FILES" ]; then
-    echo "▸ No changed files found — nothing to audit"
-    echo "  Context source: $CONTEXT_SOURCE"
-    echo ""
-    echo "  Provide files explicitly:  ./sprint.sh polish --code file1.py file2.ts"
-    echo "  Or ensure the task has a ## Completed section listing changed files."
-    exit 0
+    _no_manifest_bail "--code "
   fi
 
   FILE_COUNT=$(echo "$CHANGED_FILES" | wc -l | tr -d ' ')
@@ -618,12 +636,7 @@ if [ "$MODE" = "judge" ]; then
   CONTEXT_SOURCE="$SPRINTBIAS_CONTEXT_SOURCE"
 
   if [ -z "$CHANGED_FILES" ]; then
-    echo "▸ No changed files found — nothing to audit"
-    echo "  Context source: $CONTEXT_SOURCE"
-    echo ""
-    echo "  Provide files explicitly:  ./sprint.sh polish file1.py file2.ts"
-    echo "  Or ensure the task has a ## Completed section listing changed files."
-    exit 0
+    _no_manifest_bail ""
   fi
 
   FILE_COUNT=$(echo "$CHANGED_FILES" | wc -l | tr -d ' ')

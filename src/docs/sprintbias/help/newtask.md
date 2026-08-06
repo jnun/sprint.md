@@ -8,9 +8,11 @@ Pass an optional feature name as the second argument to set the task's
 **Feature** field to /docs/features/<name>.md.
 
 Tasks get an auto-assigned ID and are built from a battle-tested
-template. The file is created ready to edit — fill in the problem and
-success criteria yourself, or run `./sprint.sh chat <id>` to develop the
-scope, criteria, and dependencies conversationally.
+template. The file is created ready to edit — fill in **Problem** (high-level
+what is wrong) and **Success criteria** (what done looks like) yourself, or
+run `./sprint.sh chat <id>` to develop them conversationally. Notes and
+References are optional hints and paths; how to implement is the developer's
+call.
 
 The header stamps **Plan** (which `docs/plans/N-…` this belongs to),
 **Depends on** (prerequisite task IDs), **Dependents** (the reverse edge —

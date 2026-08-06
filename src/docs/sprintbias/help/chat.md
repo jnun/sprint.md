@@ -3,8 +3,9 @@ Discuss a task with an AI to turn it into a well-defined, workable task.
 `plan` and `find` stress-test flows used to do. It sizes the task up first,
 then routes to the right depth:
 
-  - Blank stub → fills in ## Problem, ## Success criteria, and ## Notes
-    from scratch, one question at a time.
+  - Blank stub → fills the durable brief (## Problem + ## Success criteria)
+    from scratch, one question at a time; optional ## Notes / ## References
+    as helpful hints and paths (how to implement stays the developer's call)
   - Several jobs bundled together → proposes a breakdown, and on your OK
     creates the sub-tasks with `./sprint.sh newtask` (real IDs, standard
     template, **Parent** linked back so `plan <n> parent:N` still gathers
@@ -19,8 +20,8 @@ then routes to the right depth:
     what it finds in a ## Think Notes block.
 
 It can move between these modes mid-session as facts emerge. Either way the
-result is an executive-summary-level brief — clear about what "done" looks
-like, with suggested technology choices and references, but no code.
+result is a user-story brief: clear problem, what done looks like, optional
+hints and file paths — how to implement stays the developer's call; no code.
 
 Use this whenever a task you wrote feels off — blank, half-baked, too big,
 or deceptively finished — and you want to think it through out loud. To
@@ -161,9 +162,9 @@ What it does:
     rationale, flagging security and performance trade-offs
   - Polishes each answer, then edits immediately (atomic edits, not one
     rewrite at the end)
-  - Fills ## Problem, ## Success criteria, and ## Notes at a summary
-    altitude — technologies and reasons, plus references to repo files and
-    external docs; never code snippets
+  - Fills ## Problem and ## Success criteria as a user-story brief (problem
+    + what done looks like); optional ## Notes (hints) and ## References
+    (paths) — never a build script or code snippets
   - Closes the loop on a blocked task: when the conversation settles the
     decision or clarification that `gate` parked in blocked/, it re-enters
     the sprint only through the shared workability gate (same review as

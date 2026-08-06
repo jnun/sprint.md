@@ -4,8 +4,9 @@
 rather than a one-shot job. It reads a rough task, sizes it up, then works
 through it with you one detail at a time — asking a question, polishing your
 answer, editing the task file right then, and moving to the next gap. The
-result is an executive-summary-level brief: what "done" looks like, sensible
-technology suggestions with reasons, and references — but no code.
+result is a user-story brief: clear problem, what "done" looks like, optional
+hints (Notes) and paths (References) — how to implement is the developer's
+decision; no code and no mandatory build plan.
 
 Because it is a back-and-forth, `chat` needs somewhere to *have* the
 conversation. This guide explains the three ways it can run and how to get the

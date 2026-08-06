@@ -2,16 +2,55 @@
 
 ## Core Principle
 
-**Write tasks in plain English, describing what users see and do.** Tasks define WHAT needs to happen. The implementer chooses HOW.
+**A task is a super-helpful user story, not a build script.** Write in plain
+English what is wrong and what "done" looks like. The developer — human or AI —
+chooses how to implement. Micromanaging steps slows work and closes options.
 
-**Plain text, no decoration.** Skip emoji, color, badges, and drawn ASCII art — they add no data and cost the next reader context. A tool's own output line is data; keep it in backticks. Full rule: `docs/sprintbias/guides/doc-style.md`.
+**Plain text, no decoration.** Skip emoji, color, badges, and drawn ASCII art —
+they add no data and cost the next reader context. A tool's own output line is
+data; keep it in backticks. Full rule: `docs/sprintbias/guides/doc-style.md`.
 
-Work flows **Feature → Task → Audit**: a task usually builds toward a feature, and it will later be audited against the problem and success criteria you write here. Write both so a future auditor can judge "done" without asking you.
+Work flows **Feature → Task → Audit**: a task usually builds toward a feature,
+and it will later be audited against the problem and success criteria you write
+here. Write both so a future auditor can judge "done" without asking you.
+
+## The ultimate task file
+
+Every workable task answers two questions in the body. Everything else is
+optional fuel or post-work audit.
+
+| Section | Required? | Job |
+|---|---|---|
+| **## Problem** | Yes | Clear, simple language. Concisely define the problem at a high level. |
+| **## Success criteria** | Yes | What done looks like. When these are met, the task is done. |
+| **## Notes** | No | Helpful hints that assist the developer in figuring out how to work the task. |
+| **## References** | No | Direct paths to docs or files known to be related. |
+| **### Files changed** (under **## Completed**) | After work only | What was touched — for committers, later audits, and "what broke?" |
+
+**How to implement is the developer's decision.** Do not turn the task into a
+detailed outline of exact steps unless the work itself is a library or detailed
+technical fix — then put the new technical *needs* as outcomes under Success
+criteria, not as a prescribed implementation path.
+
+**Where content belongs**
+
+| Content | Location |
+|---|---|
+| Problem and outcomes | This task file (`## Problem`, `## Success criteria`) |
+| Hints for the implementer | `## Notes` (optional) |
+| Related paths | `## References` (optional) |
+| How to implement (guides, patterns, specs) | `docs/guides/`, `docs/examples/`, `docs/features/` — link, don't inline a build plan |
+| After-work audit trail | `## Completed` → `### Files changed` |
+
+The durable brief is **Problem + Success criteria**. Notes and References assist
+the developer; they never replace the brief. Gate's `## Questions` is an audit
+overlay (status, code already present, open decisions) — never the only place
+the work is defined.
 
 ## Instruct positively
 
-**State the desired path as the rule.** Success criteria and notes say what
-should be true when the work is done — not a checklist of things to avoid.
+**State the desired path as the rule.** Success criteria say what should be true
+when the work is done — not a checklist of things to avoid.
 
 - Prefer: "User can log in with email and password"
 - Prefer: "Always edit `docs/`, then commit"
@@ -25,17 +64,6 @@ should be true when the work is done — not a checklist of things to avoid.
 
 Check before saving: success criteria state the desired path. If a criterion
 is phrased only as "don't do X", rewrite it as the positive outcome.
-
-## Where Content Belongs
-
-| Content Type | Location |
-|---|---|
-| Problems and outcomes | `docs/tasks/` |
-| How to implement | `docs/guides/` |
-| Code samples and patterns | `docs/examples/` |
-| System specifications | `docs/features/` |
-
-The task links out to these — it does not inline them. The task says WHAT; guides, examples, and features say HOW.
 
 ## Moving tasks (lifecycle)
 
@@ -96,7 +124,7 @@ Ask:
 - "What should happen instead?"
 - "When does this occur? (Always? Sometimes? Under specific conditions?)"
 
-Wait for answers. Build understanding together.
+Wait for answers. Build understanding together. The answers become **## Problem**.
 
 ### 2. Clarify the Scope
 
@@ -116,7 +144,7 @@ Ask:
 - "Does anything need to be done first?" (→ **Depends on** — prerequisites)
 - "What other work waits on this one?" (→ **Dependents** — the reverse edge)
 - "Which plan does this belong to?" (→ **Plan** — plan membership)
-- "What existing files or code does this touch?" (→ **References** — reuse, don't reinvent)
+- "What existing files or docs help?" (→ **References** — optional pointers)
 - "Is there a guide or feature spec this follows?" (→ **Docs** / **Feature**)
 - "What suite script proves the success criteria?" (→ **Tests** — or leave `none`)
 
@@ -139,14 +167,17 @@ Ask:
 - "How would you test that it works?"
 - "What would you check to verify it's complete?"
 
-The answers become the success criteria.
+The answers become **## Success criteria**. For a library or detailed technical
+fix, the criteria may name new technical *needs* as checkable outcomes — still
+not a line-by-line build plan.
 
 ### 5. Confirm Understanding
 
 Before writing anything, summarize back:
 - "So the problem is [X], and we'll know it's fixed when [Y]. Is that right?"
 
-Proceed after confirmation.
+Proceed after confirmation. Optional Notes and References come after that core
+is solid — only if they help the developer without prescribing the build.
 
 ## Task Structure
 
@@ -165,16 +196,24 @@ The header carries the task's place in the larger body of work. Set what applies
 
 ### Problem Section
 
-Write the problem as a short user story — who is affected, what they can't do today, and why it matters. Loose Gherkin (Given/When/Then) is welcome but not required. 2-5 sentences, plain English, as you'd explain it to a colleague unfamiliar with this area.
+Clear, simple language. Concisely define the problem at a high level — who is
+affected, what they can't do today, and why it matters. Loose Gherkin
+(Given/When/Then) is welcome but not required. Prefer 2–5 short sentences, as
+you'd explain it to a colleague unfamiliar with this area. Do not put the
+implementation plan here.
 
 ### Success Criteria Section
 
-Write observable behaviors that anyone can verify. This is the yardstick the audit measures against, so make "done" unambiguous. Phrase each criterion as the desired path (see **Instruct positively** above) — what a user can do or what the system does — not a list of things to avoid.
+What done looks like. When these requirements are met, the task is done. Write
+observable behaviors that anyone can verify. This is the yardstick audits and
+`promote` measure against. Phrase each criterion as the desired path (see
+**Instruct positively** above).
 
 Patterns that work:
 - "User can [do what]"
 - "App shows [result]"
 - "[Action] completes within [time]"
+- For technical/library tasks: "[API/module] exposes [capability] and [test] covers it"
 
 Example:
 ```markdown
@@ -186,11 +225,18 @@ Example:
 
 ### Notes Section
 
-Every relevant detail that helps build the solution fast and knowingly: decisions already made, constraints, edge cases, gotchas. Leave empty if there is nothing to add.
+Optional helpful hints that assist the developer in figuring out how to work the
+task: decisions already made, constraints, edge cases, gotchas, pointers to
+patterns. Leave empty if there is nothing useful to add. Notes are fuel for the
+developer's choice — not a required step list, not a substitute for Problem or
+Success criteria.
 
 ### References Section
 
-Direct files that help build this — existing code to **reuse rather than reinvent**, plus specs and examples. One path per line. This is also what an audit checks for design fit, so name the files you already know are involved.
+Direct paths to documentation or files known to be related — existing code to
+reuse rather than reinvent, specs, examples. One path per line. Leave empty if
+none. This is also what an audit checks for design fit, so name files you already
+know are involved.
 
 Example:
 ```markdown
@@ -200,10 +246,32 @@ docs/sprintbias/scripts/create-task.sh — existing pattern to follow
 docs/features/task-automation.md — spec this serves
 ```
 
+### Completed / Files changed (after work only)
+
+When the task is finished, leave an audit trail of what it touched. Reviews and
+the change manifest read this. Copy the headings to column 0 (unindented), then
+list one repo-relative path per line under `### Files changed`. Do **not** fill
+this before work — it is an after-work record for committers, later audits, and
+quick recovery when something breaks.
+
+```markdown
+## Completed
+
+### Files changed
+docs/sprintbias/scripts/example.sh
+docs/tasks/.TEMPLATE-task.md
+```
+
+Keep the wording exact — `## Completed` and `### Files changed` — the tasks
+runner and lib.sh key off them verbatim.
+
 ## Verify Before Saving
 
-1. Someone unfamiliar with the codebase can understand the problem
-2. Success criteria describe observable behaviors an auditor could check
-3. Success criteria and notes state the desired path — no prohibition-shaped rule list
-4. Header fields set what applies (Feature, Docs, Plan, Depends on, Dependents, Tests)
-5. References name existing files to reuse; technical HOW lives in `docs/guides/`, `docs/examples/`, or `docs/features/`, not inlined here
+1. **Problem** is clear, simple, and high-level — someone unfamiliar can understand it
+2. **Success criteria** state what done looks like; an auditor could check each one
+3. Success criteria state the desired path — no prohibition-shaped rule list
+4. **Notes** (if any) are optional hints, not a mandatory build plan
+5. **References** (if any) are real paths that help; deep HOW lives in guides/examples/features
+6. Header fields set what applies (Feature, Docs, Plan, Depends on, Dependents, Tests)
+7. **Files changed** is absent until after work
+8. The brief stands alone: a later reader does not need gate Remaining work or chat history to know the problem and done

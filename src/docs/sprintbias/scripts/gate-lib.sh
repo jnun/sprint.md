@@ -135,18 +135,43 @@ For task workflow details, see DOCUMENTATION.md.${SPRINTBIAS_GATE_PROFILE_LINE}$
 
 The task file is at: $1 — read it first.
 
+The durable brief is a user story, not a build script:
+- ## Problem — clear, simple, high-level: what is wrong and why it matters
+- ## Success criteria — what done looks like; when these are met, the task is done
+- ## Notes — optional hints that help the developer decide how to work it
+- ## References — optional direct paths to related docs or code
+How to implement is the developer's decision (human or AI). Do not prescribe a
+step-by-step build plan. For a library or detailed technical fix, put new
+technical needs as checkable outcomes under Success criteria.
+
 Your job:
 1. Read the task file at $1.
-2. Read the actual source files referenced by this task. Thoroughly check the current state of the code for every action item.
-3. Classify each action item into one of three categories:
+2. Ensure the durable brief is present (see "Fill the brief first" below).
+3. Read the actual source files this task references. Thoroughly check the
+   current code against the success criteria (and any concrete notes/references).
+4. Classify each criterion / remaining outcome into one of three categories:
    - COMPLETE: Already implemented in the current code.
-   - REMAINING: Not yet done, and the action item is clear enough to execute.
-   - UNCLEAR: Not yet done, but requires a decision or clarification before work can start.
+   - REMAINING: Not yet done, and clear enough for a developer to start.
+   - UNCLEAR: Not yet done, but needs a decision or clarification before work can start.
    Before you mark anything UNCLEAR because the code it builds on is missing,
    check the next/backlog index above: if a sibling task will create that
    prerequisite, this is a DEPENDENCY, not an unclear item — keep it REMAINING
    and record the dependency (see "Dependencies on other tasks" below).
-4. Produce an overall verdict: READY or BLOCKED.
+5. Produce an overall verdict: READY, BLOCKED, or COMPLETE.
+
+Fill the brief first (before stamping READY):
+- ## Problem and ## Success criteria are the durable brief. ## Questions is only
+  an audit overlay — never the only place the work is defined.
+- If Problem or Success criteria are empty placeholders (template blanks, only
+  empty checkboxes, or "This task is not defined yet") but the title, Notes,
+  References, and/or current code make the work unambiguous: WRITE a concise
+  high-level Problem and verifiable Success criteria into those sections first,
+  then write ## Questions. A later reader must understand problem and done from
+  the body alone.
+- If you cannot write those sections without a human decision, the task is
+  BLOCKED (or still needs chat) — do not stamp READY and narrate emptiness.
+- Do not invent a mandatory implementation plan in Notes. Optional short hints
+  only. Do not fill ## Completed / ### Files changed — that is after work only.
 
 How to handle COMPLETE items (already implemented in code):
 - Do NOT suggest removing them. They are context for the developer.
@@ -155,20 +180,23 @@ How to handle COMPLETE items (already implemented in code):
 - COMPLETE is a workability verdict, not the docs/tasks/done/ folder.
 
 A task is READY if:
+- ## Problem and ## Success criteria are filled (not template blanks)
 - There is remaining work to do
-- All remaining action items are clear enough to execute without asking questions
-- No major design decisions are unresolved
-- It depends on other tasks being finished first. A dependency on other work is a
-  sequencing constraint, not a BLOCKED condition — record it and stay READY
+- Remaining outcomes are clear enough to execute without asking questions —
+  "clear enough" means a developer can choose how to implement, not that every
+  step is pre-written
+- No major design decisions on THIS task are unresolved
+- It may depend on other tasks finishing first — that is sequencing, not BLOCKED
   (see "Dependencies on other tasks" below).
 
 A task is BLOCKED only if a **decision or clarification** is needed on THIS task:
-- Remaining action items require decisions the developer hasn't made yet
-- Action items contradict each other, or contradict the current code in a way
+- Remaining outcomes require decisions the developer hasn't made yet
+- Criteria contradict each other, or contradict the current code in a way
   that no other queued task would resolve. Code the task builds on being absent
   because a sibling or backlog task hasn't run yet is NOT a contradiction — it is
   a dependency. Only treat a conflict with current code as needing clarification
   when nothing in the next/backlog index would produce what the task assumes.
+- Problem / Success criteria cannot be written without a human answer
 - The task is entirely implemented already and there is nothing left to do (mark as COMPLETE instead of BLOCKED — stamp **Status: COMPLETE**, which routes to review/, not done/)
 
 Dependencies on other tasks (sequencing — not a blocked condition):
@@ -207,14 +235,22 @@ Structure the ## Questions section exactly like this:
 
 (or **Status: BLOCKED** / **Status: COMPLETE** — write the stamp exactly in
 that bold form, on its own line, directly under the ## Questions heading.
+Nothing else on that line; no free prose between the stamp and the first ### heading.
 COMPLETE = work already in the codebase → review/. Never use DONE for this stamp;
 done/ is only a lifecycle folder after human approval.)
 
 ### Already complete
-Items that are implemented and verified in the current code. Note any quality concerns.
+Code findings only: what is already implemented and verified (paths/lines when useful).
+Note quality concerns. If nothing is implemented yet: "None — no matching
+implementation found." then brief bullets of what you checked. Do not write
+process or emptiness commentary ("bare template", "body is empty but title is
+clear", "always true before define").
 
 ### Remaining work
-Summarize what's left to do. This is the actual scope for the sprint.
+Audit of what is still left against the success criteria — for the implementer
+who runs work. Short concrete outcomes, not a full re-statement of Problem, and
+not a rationale for the READY verdict. This section must not be the only place
+the task is defined; the body brief already holds that.
 
 ### Questions for the developer
 Numbered list. Only include genuine questions where a decision is needed.

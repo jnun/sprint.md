@@ -86,15 +86,17 @@ Run this command for each sub-task:
 
 This creates a new task file in docs/tasks/backlog/ with the next available ID.
 
-After creating all sub-tasks, read each newly created file and fill in:
-- The ## Problem section (2-3 sentences, reference the parent task)
-- The ## Success criteria (1-3 checkboxes, specific and verifiable)
-- The ## Notes section (mention the parent task number, list which file(s) to change)
+After creating all sub-tasks, read each newly created file and fill the durable brief:
+- ## Problem — clear, simple, high-level (2-3 sentences); reference the parent task
+- ## Success criteria — 1-3 checkboxes; what done looks like (verifiable outcomes, not a build plan)
+- ## Notes — optional hints only (e.g. parent task number, constraints); leave empty if none
+- ## References — optional paths to related files; leave empty if none
 - Set **Depends on**: to the previous sub-task number if ordering matters, or 'none' if independent
 - Set the **Parent**: field to the numeric ID of THIS parent task (${TASK_NAME%%-*}).
   Write just the number, e.g. '**Parent**: ${TASK_NAME%%-*}'. This is what
   './sprint.sh plan N \"parent:${TASK_NAME%%-*}\"' matches to gather the children,
   so it must be exact — do not omit it.
+How to implement is the developer's decision — do not write a step-by-step build plan into the child.
 ${_DELETE_INSTR}
 After creating all sub-tasks, print a summary of what was created:
   'Created N sub-tasks from [original task title]'
