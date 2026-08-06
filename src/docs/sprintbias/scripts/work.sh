@@ -248,12 +248,23 @@ if [ -n "$TASK_ID" ]; then
   fi
   _name="${_path##*/}"
 
-  # doing/ is in flight — a run owns it. Refuse and leave it untouched; its
-  # crash recovery is the loop's orphan sweep, not work's job.
+  # doing/ means one of two things the file alone can't tell apart: a run has
+  # it in flight right now, OR a previous run left it here (crash, Ctrl-C, or a
+  # bail). We don't fake an ownership check we can't make — we state what we
+  # know and hand the user the reclaim paths. --force resumes it in place.
   if [ "$_stage" = "doing" ]; then
-    echo "✗ $TASK_ID is in doing/ — a run owns it."
-    echo "  Leaving it in place; crash recovery is the loop's orphan sweep."
-    exit 1
+    if [ "$FORCE" -eq 1 ]; then
+      echo "▸ $TASK_ID is in doing/ — resuming it in place (--force)."
+      echo ""
+      TASK_FILES=("$_path")
+    else
+      echo "✗ $TASK_ID is in doing/ — it may be mid-work, or left by an interrupted run."
+      echo "  The file can't say which. If a run has it, leave it be. If it was"
+      echo "  abandoned, reclaim it one of these ways:"
+      echo "    ./sprint.sh loop                 — auto-requeues interrupted doing/ tasks"
+      echo "    ./sprint.sh work $TASK_ID --force  — resume just this one now"
+      exit 1
+    fi
   fi
 
   # Promotion is earned by runnability, not just definition clarity: check

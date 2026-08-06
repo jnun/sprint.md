@@ -14,7 +14,9 @@ most N tasks. `work N` resolves task N wherever it lives and runs just that one:
                           blocked/ and report (NOT worked); COMPLETE → review/
   review/ or done/      — re-run: pull back to doing/, reset the ## Completed
                           audit block, rework, re-route to review/
-  doing/                — refused (a run owns it); crash recovery is the loop
+  doing/                — may be mid-work or left by an interrupted run (the
+                          file can't say which). Refused by default; reclaim it
+                          with `loop` (auto-requeue) or `work N --force` (resume)
   no such task          — error
 
 Runnability is earned, not just definition clarity: if task N has an unmet
